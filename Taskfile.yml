@@ -1,0 +1,64 @@
+version: "3"
+
+tasks:
+  build:
+    desc: "Build the feed-forge binary"
+    deps: [test, lint]
+    cmds:
+      - mkdir -p build
+      - go build -o build/feed-forge cmd/feed-forge/main.go
+
+  test:
+    desc: "Run tests"
+    cmds:
+      - go test -v ./...
+
+  lint:
+    desc: "Run linter and formatter"
+    cmds:
+      - gofmt -w .
+      - go vet ./...
+      - go mod tidy
+
+  clean:
+    desc: "Clean build artifacts"
+    cmds:
+      - rm -rf build/
+      - rm -f *.xml
+      - rm -f *.db
+
+  build-linux:
+    desc: "Build for Linux AMD64"
+    deps: [test, lint]
+    cmds:
+      - mkdir -p build
+      - GOOS=linux GOARCH=amd64 go build -o build/feed-forge-linux cmd/feed-forge/main.go
+
+  build-ci:
+    desc: "Build for CI environment"
+    deps: [test-ci, lint]
+    cmds:
+      - mkdir -p build
+      - go build -o build/feed-forge cmd/feed-forge/main.go
+
+  test-ci:
+    desc: "Run tests with CI tags and coverage"
+    cmds:
+      - go test -tags=ci -cover -v ./...
+
+  run-reddit:
+    desc: "Run Reddit feed generation"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge reddit
+
+  run-hackernews:
+    desc: "Run Hacker News feed generation"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge hacker-news
+
+  help:
+    desc: "Show available tasks"
+    cmds:
+      - task --list

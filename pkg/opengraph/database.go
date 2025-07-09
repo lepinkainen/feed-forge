@@ -1,0 +1,232 @@
+package opengraph
+
+import (
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"sync"
+
+	_ "modernc.org/sqlite"
+)
+
+// Database wraps database operations with thread safety
+type Database struct {
+	db     *sql.DB
+	mu     sync.RWMutex
+	dbPath string
+}
+
+// NewDatabase creates a new OpenGraph database instance
+func NewDatabase(dbPath string) (*Database, error) {
+	if dbPath == "" {
+		// Default to current directory
+		dbPath = DefaultDBFile
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(dbPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create directory: %w", err)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	ogDB := &Database{
+		db:     db,
+		dbPath: dbPath,
+	}
+
+	// Create schema
+	if err := ogDB.createSchema(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	slog.Info("OpenGraph database initialized", "path", dbPath)
+	return ogDB, nil
+}
+
+// createSchema creates the necessary tables
+func (db *Database) createSchema() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS opengraph_cache (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		url TEXT NOT NULL UNIQUE,
+		title TEXT DEFAULT '',
+		description TEXT DEFAULT '',
+		image TEXT DEFAULT '',
+		site_name TEXT DEFAULT '',
+		fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		expires_at TIMESTAMP NOT NULL,
+		fetch_success BOOLEAN DEFAULT 0
+	);
+	
+	CREATE INDEX IF NOT EXISTS idx_opengraph_url ON opengraph_cache(url);
+	CREATE INDEX IF NOT EXISTS idx_opengraph_expires ON opengraph_cache(expires_at);
+	`
+
+	_, err := db.db.Exec(schema)
+	return err
+}
+
+// Close closes the database connection
+func (db *Database) Close() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.db != nil {
+		return db.db.Close()
+	}
+	return nil
+}
+
+// GetCachedData retrieves cached OpenGraph data for a URL
+func (db *Database) GetCachedData(url string) (*Data, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	query := `
+	SELECT url, title, description, image, site_name, fetched_at, expires_at, fetch_success
+	FROM opengraph_cache 
+	WHERE url = ? AND expires_at > CURRENT_TIMESTAMP AND fetch_success = 1
+	`
+
+	var data Data
+	var fetchSuccess bool
+
+	err := db.db.QueryRow(query, url).Scan(
+		&data.URL,
+		&data.Title,
+		&data.Description,
+		&data.Image,
+		&data.SiteName,
+		&data.FetchedAt,
+		&data.ExpiresAt,
+		&fetchSuccess,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil // No cached data found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query cached data: %w", err)
+	}
+
+	if !fetchSuccess {
+		return nil, nil // Don't return failed fetches
+	}
+
+	return &data, nil
+}
+
+// SaveCachedData saves OpenGraph data to the cache
+func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	query := `
+	INSERT OR REPLACE INTO opengraph_cache 
+	(url, title, description, image, site_name, fetched_at, expires_at, fetch_success)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	_, err := db.db.Exec(query,
+		data.URL,
+		data.Title,
+		data.Description,
+		data.Image,
+		data.SiteName,
+		data.FetchedAt,
+		data.ExpiresAt,
+		fetchSuccess,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save cached data: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupExpiredEntries removes expired cache entries
+func (db *Database) CleanupExpiredEntries() error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	query := `DELETE FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP`
+	result, err := db.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to cleanup expired entries: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected > 0 {
+		slog.Debug("Cleaned up expired OpenGraph cache entries", "count", rowsAffected)
+	}
+
+	return nil
+}
+
+// GetCacheStats returns statistics about the cache
+func (db *Database) GetCacheStats() (map[string]interface{}, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	stats := make(map[string]interface{})
+
+	// Total entries
+	var totalEntries int
+	err := db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache").Scan(&totalEntries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total entries: %w", err)
+	}
+	stats["total_entries"] = totalEntries
+
+	// Successful entries
+	var successfulEntries int
+	err = db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache WHERE fetch_success = 1").Scan(&successfulEntries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get successful entries: %w", err)
+	}
+	stats["successful_entries"] = successfulEntries
+
+	// Expired entries
+	var expiredEntries int
+	err = db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get expired entries: %w", err)
+	}
+	stats["expired_entries"] = expiredEntries
+
+	return stats, nil
+}
+
+// HasRecentFailure checks if there was a recent failed fetch attempt
+func (db *Database) HasRecentFailure(url string) (bool, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	query := `
+	SELECT COUNT(*) FROM opengraph_cache 
+	WHERE url = ? AND fetch_success = 0 AND fetched_at > datetime('now', '-1 hour')
+	`
+
+	var count int
+	err := db.db.QueryRow(query, url).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("failed to check recent failure: %w", err)
+	}
+
+	return count > 0, nil
+}
