@@ -27,12 +27,10 @@ dist/
 *.log
 
 # RSS/XML feed files
-*.xml
 *.rss
 
 # Config files with sensitive data
 config.yaml
-*.json
 
 # IDE files
 .vscode/
@@ -48,3 +46,5 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+hackernews.xml
+reddit.xml

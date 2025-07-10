@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -251,14 +253,14 @@ func TestDecodeJSONResponse(t *testing.T) {
 	tests := []struct {
 		name        string
 		statusCode  int
-		body        string
+		goldenFile  string
 		expectError bool
 		expected    TestStruct
 	}{
 		{
 			name:        "valid JSON with 200 OK",
 			statusCode:  http.StatusOK,
-			body:        `{"message": "hello", "status": "ok", "count": 42}`,
+			goldenFile:  "valid_response.json",
 			expectError: false,
 			expected: TestStruct{
 				Message: "hello",
@@ -269,21 +271,21 @@ func TestDecodeJSONResponse(t *testing.T) {
 		{
 			name:        "non-200 status code",
 			statusCode:  http.StatusBadRequest,
-			body:        `{"error": "bad request"}`,
+			goldenFile:  "error_response.json",
 			expectError: true,
 			expected:    TestStruct{},
 		},
 		{
 			name:        "invalid JSON with 200 OK",
 			statusCode:  http.StatusOK,
-			body:        `{"message": "hello", "status": }`, // Invalid JSON
+			goldenFile:  "invalid_json.json",
 			expectError: true,
 			expected:    TestStruct{},
 		},
 		{
 			name:        "empty JSON object",
 			statusCode:  http.StatusOK,
-			body:        `{}`,
+			goldenFile:  "empty_object.json",
 			expectError: false,
 			expected: TestStruct{
 				Message: "",
@@ -294,7 +296,7 @@ func TestDecodeJSONResponse(t *testing.T) {
 		{
 			name:        "non-JSON content",
 			statusCode:  http.StatusOK,
-			body:        "This is not JSON",
+			goldenFile:  "non_json_content.txt",
 			expectError: true,
 			expected:    TestStruct{},
 		},
@@ -302,13 +304,20 @@ func TestDecodeJSONResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Read golden file content
+			goldenPath := filepath.Join("testdata", "json_responses", tt.goldenFile)
+			body, err := os.ReadFile(goldenPath)
+			if err != nil {
+				t.Fatalf("Failed to read golden file %s: %v", goldenPath, err)
+			}
+
 			resp := &http.Response{
 				StatusCode: tt.statusCode,
-				Body:       io.NopCloser(strings.NewReader(tt.body)),
+				Body:       io.NopCloser(strings.NewReader(string(body))),
 			}
 
 			var result TestStruct
-			err := DecodeJSONResponse(resp, &result)
+			err = DecodeJSONResponse(resp, &result)
 
 			if (err != nil) != tt.expectError {
 				t.Errorf("DecodeJSONResponse() error = %v, expectError = %v", err, tt.expectError)

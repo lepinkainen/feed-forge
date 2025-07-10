@@ -58,6 +58,11 @@ tasks:
     cmds:
       - ./build/feed-forge hacker-news
 
+  update-golden:
+    desc: "Update golden files when tests are in stable state"
+    cmds:
+      - go test -v ./... -update
+
   help:
     desc: "Show available tasks"
     cmds:

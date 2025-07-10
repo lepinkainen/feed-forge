@@ -1,9 +1,11 @@
 package hackernews
 
 import (
-	"reflect"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/testutil"
 )
 
 func TestCategorizeContent(t *testing.T) {
@@ -19,124 +21,116 @@ func TestCategorizeContent(t *testing.T) {
 	mapper := NewCategoryMapper(config)
 
 	tests := []struct {
-		name     string
-		title    string
-		domain   string
-		url      string
-		mapper   *CategoryMapper
-		expected []string
+		name       string
+		title      string
+		domain     string
+		url        string
+		mapper     *CategoryMapper
+		goldenFile string
 	}{
 		{
-			name:     "Show HN post",
-			title:    "Show HN: My awesome project",
-			domain:   "example.com",
-			url:      "https://example.com/project",
-			mapper:   mapper,
-			expected: []string{"example.com", "Show HN"},
+			name:       "Show HN post",
+			title:      "Show HN: My awesome project",
+			domain:     "example.com",
+			url:        "https://example.com/project",
+			mapper:     mapper,
+			goldenFile: "show_hn.json",
 		},
 		{
-			name:     "Ask HN post",
-			title:    "Ask HN: How do you handle burnout?",
-			domain:   "news.ycombinator.com",
-			url:      "https://news.ycombinator.com/item?id=123",
-			mapper:   mapper,
-			expected: []string{"news.ycombinator.com", "Ask HN"},
+			name:       "Ask HN post",
+			title:      "Ask HN: How do you handle burnout?",
+			domain:     "news.ycombinator.com",
+			url:        "https://news.ycombinator.com/item?id=123",
+			mapper:     mapper,
+			goldenFile: "ask_hn.json",
 		},
 		{
-			name:     "GitHub project",
-			title:    "New open source tool for developers",
-			domain:   "github.com",
-			url:      "https://github.com/user/repo",
-			mapper:   mapper,
-			expected: []string{"github.com", "Development"},
+			name:       "GitHub project",
+			title:      "New open source tool for developers",
+			domain:     "github.com",
+			url:        "https://github.com/user/repo",
+			mapper:     mapper,
+			goldenFile: "github_project.json",
 		},
 		{
-			name:     "PDF document",
-			title:    "Research paper on AI (PDF)",
-			domain:   "example.com",
-			url:      "https://example.com/paper.pdf",
-			mapper:   mapper,
-			expected: []string{"example.com", "PDF"},
+			name:       "PDF document",
+			title:      "Research paper on AI (PDF)",
+			domain:     "example.com",
+			url:        "https://example.com/paper.pdf",
+			mapper:     mapper,
+			goldenFile: "pdf_document.json",
 		},
 		{
-			name:     "Video content",
-			title:    "Introduction to Machine Learning video",
-			domain:   "youtube.com",
-			url:      "https://youtube.com/watch?v=123",
-			mapper:   mapper,
-			expected: []string{"youtube.com", "Video", "Video"},
+			name:       "Video content",
+			title:      "Introduction to Machine Learning video",
+			domain:     "youtube.com",
+			url:        "https://youtube.com/watch?v=123",
+			mapper:     mapper,
+			goldenFile: "video_content.json",
 		},
 		{
-			name:     "Book mention",
-			title:    "This book changed my perspective on programming",
-			domain:   "example.com",
-			url:      "https://example.com/book-review",
-			mapper:   mapper,
-			expected: []string{"example.com", "Book"},
+			name:       "Book mention",
+			title:      "This book changed my perspective on programming",
+			domain:     "example.com",
+			url:        "https://example.com/book-review",
+			mapper:     mapper,
+			goldenFile: "book_mention.json",
 		},
 		{
-			name:     "Ebook mention",
-			title:    "Free ebook on data structures",
-			domain:   "example.com",
-			url:      "https://example.com/ebook",
-			mapper:   mapper,
-			expected: []string{"example.com", "Book"},
+			name:       "Ebook mention",
+			title:      "Free ebook on data structures",
+			domain:     "example.com",
+			url:        "https://example.com/ebook",
+			mapper:     mapper,
+			goldenFile: "ebook_mention.json",
 		},
 		{
-			name:     "No special categorization",
-			title:    "Regular news article",
-			domain:   "example.com",
-			url:      "https://example.com/news",
-			mapper:   mapper,
-			expected: []string{"example.com"},
+			name:       "No special categorization",
+			title:      "Regular news article",
+			domain:     "example.com",
+			url:        "https://example.com/news",
+			mapper:     mapper,
+			goldenFile: "no_special_categorization.json",
 		},
 		{
-			name:     "Empty domain",
-			title:    "Some title",
-			domain:   "",
-			url:      "https://example.com",
-			mapper:   mapper,
-			expected: []string{},
+			name:       "Empty domain",
+			title:      "Some title",
+			domain:     "",
+			url:        "https://example.com",
+			mapper:     mapper,
+			goldenFile: "empty_domain.json",
 		},
 		{
-			name:     "Nil mapper",
-			title:    "Some title",
-			domain:   "github.com",
-			url:      "https://github.com/user/repo",
-			mapper:   nil,
-			expected: []string{"github.com"},
+			name:       "Nil mapper",
+			title:      "Some title",
+			domain:     "github.com",
+			url:        "https://github.com/user/repo",
+			mapper:     nil,
+			goldenFile: "nil_mapper.json",
 		},
 		{
-			name:     "Case insensitive Show HN",
-			title:    "SHOW HN: My Project",
-			domain:   "example.com",
-			url:      "https://example.com",
-			mapper:   mapper,
-			expected: []string{"example.com", "Show HN"},
+			name:       "Case insensitive Show HN",
+			title:      "SHOW HN: My Project",
+			domain:     "example.com",
+			url:        "https://example.com",
+			mapper:     mapper,
+			goldenFile: "case_insensitive_show_hn.json",
 		},
 		{
-			name:     "Case insensitive Ask HN",
-			title:    "ASK HN: Question here",
-			domain:   "example.com",
-			url:      "https://example.com",
-			mapper:   mapper,
-			expected: []string{"example.com", "Ask HN"},
+			name:       "Case insensitive Ask HN",
+			title:      "ASK HN: Question here",
+			domain:     "example.com",
+			url:        "https://example.com",
+			mapper:     mapper,
+			goldenFile: "case_insensitive_ask_hn.json",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := categorizeContent(tt.title, tt.domain, tt.url, tt.mapper)
-
-			// Handle nil vs empty slice comparison
-			if len(result) == 0 && len(tt.expected) == 0 {
-				return // Both are effectively empty
-			}
-
-			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("categorizeContent(%q, %q, %q, mapper) = %v, expected %v",
-					tt.title, tt.domain, tt.url, result, tt.expected)
-			}
+			goldenPath := filepath.Join("testdata", "categorization", tt.goldenFile)
+			testutil.CompareGoldenSlice(t, goldenPath, result)
 		})
 	}
 }

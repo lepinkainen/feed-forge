@@ -1,0 +1,30 @@
+{
+  "category_domains": {
+    "GitHub": ["github.com"],
+    "ArXiv": ["arxiv.org"],
+    "Medium": ["medium.com"],
+    "YouTube": ["youtube.com", "youtu.be"],
+    "Reddit": ["reddit.com"],
+    "Twitter": ["twitter.com", "x.com"],
+    "The Verge": ["theverge.com"],
+    "Ars Technica": ["arstechnica.com"],
+    "TechCrunch": ["techcrunch.com"],
+    "Stack Overflow": ["stackoverflow.com"],
+    "Harvard Business Review": ["hbr.org"],
+    "Wall Street Journal": ["wsj.com"],
+    "New York Times": ["nytimes.com"],
+    "Washington Post": ["washingtonpost.com"],
+    "Bloomberg": ["bloomberg.com"],
+    "Reuters": ["reuters.com"],
+    "BBC": ["bbc.com", "bbc.co.uk"],
+    "CNN": ["cnn.com"],
+    "NPR": ["npr.org"],
+    "Wired": ["wired.com"],
+    "Engadget": ["engadget.com"],
+    "VentureBeat": ["venturebeat.com"],
+    "Fast Company": ["fastcompany.com"],
+    "Hacker Noon": ["hackernoon.com"],
+    "Dev.to": ["dev.to"],
+    "Substack": ["substack.com"]
+  }
+}
