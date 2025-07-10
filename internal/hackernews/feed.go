@@ -19,17 +19,12 @@ type AtomCategory = feed.AtomCategory
 type CustomAtomEntry = feed.CustomAtomEntry
 type CustomAtomFeed = feed.CustomAtomFeed
 
-// convertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
-func convertToCustomAtom(feedData *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
-	return feed.ConvertToCustomAtom(feedData, itemCategories)
-}
-
 // generateRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data
 func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) string {
 	slog.Debug("Generating RSS feed", "itemCount", len(items))
 	now := time.Now()
 
-	feed := &feeds.Feed{
+	feedObj := &feeds.Feed{
 		Title:       "Hacker News Top Stories",
 		Description: "High-quality Hacker News stories, updated regularly",
 		Link:        &feeds.Link{Href: "https://news.ycombinator.com/", Rel: "self", Type: "text/html"},
@@ -185,11 +180,11 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 		// Store categories for this item (using the same ID as the rssItem)
 		itemCategories[item.CommentsLink] = categories
 
-		feed.Items = append(feed.Items, rssItem)
+		feedObj.Items = append(feedObj.Items, rssItem)
 	}
 
 	// Generate custom Atom feed with proper categories
-	customAtomFeed := convertToCustomAtom(feed, itemCategories)
+	customAtomFeed := feed.ConvertToCustomAtom(feedObj, itemCategories)
 
 	// Convert to XML
 	xmlData, err := xml.MarshalIndent(customAtomFeed, "", "  ")

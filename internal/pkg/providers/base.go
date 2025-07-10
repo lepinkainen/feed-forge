@@ -2,15 +2,14 @@ package providers
 
 import (
 	"github.com/lepinkainen/feed-forge/pkg/database"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
 // BaseProvider provides common functionality for all feed providers
 type BaseProvider struct {
 	// Database connections
-	contentDB *database.Database
-	ogDB      *opengraph.Database
+	ContentDB *database.Database
+	OgDB      *opengraph.Database
 
 	// Common configuration
 	outputDir string
@@ -32,7 +31,7 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 		return nil, err
 	}
 
-	base.ogDB, err = opengraph.NewDatabase(ogDBPath)
+	base.OgDB, err = opengraph.NewDatabase(ogDBPath)
 	if err != nil {
 		return nil, err
 	}
@@ -41,13 +40,13 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	if dbConfig.UseContentDB && dbConfig.ContentDBName != "" {
 		contentDBPath, err := database.GetDefaultPath(dbConfig.ContentDBName)
 		if err != nil {
-			base.ogDB.Close()
+			base.OgDB.Close()
 			return nil, err
 		}
 
-		base.contentDB, err = database.NewDatabase(database.Config{Path: contentDBPath})
+		base.ContentDB, err = database.NewDatabase(database.Config{Path: contentDBPath})
 		if err != nil {
-			base.ogDB.Close()
+			base.OgDB.Close()
 			return nil, err
 		}
 	}
@@ -59,14 +58,14 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 func (b *BaseProvider) Close() error {
 	var lastErr error
 
-	if b.contentDB != nil {
-		if err := b.contentDB.Close(); err != nil {
+	if b.ContentDB != nil {
+		if err := b.ContentDB.Close(); err != nil {
 			lastErr = err
 		}
 	}
 
-	if b.ogDB != nil {
-		if err := b.ogDB.Close(); err != nil {
+	if b.OgDB != nil {
+		if err := b.OgDB.Close(); err != nil {
 			lastErr = err
 		}
 	}
@@ -74,25 +73,10 @@ func (b *BaseProvider) Close() error {
 	return lastErr
 }
 
-// GetOpenGraphDB returns the OpenGraph database connection
-func (b *BaseProvider) GetOpenGraphDB() *opengraph.Database {
-	return b.ogDB
-}
-
-// GetContentDB returns the content database connection
-func (b *BaseProvider) GetContentDB() *database.Database {
-	return b.contentDB
-}
-
-// EnsureOutputDirectory creates the output directory if it doesn't exist
-func (b *BaseProvider) EnsureOutputDirectory(outfile string) error {
-	return filesystem.EnsureDirectoryExists(outfile)
-}
-
 // CleanupExpired removes expired OpenGraph cache entries
 func (b *BaseProvider) CleanupExpired() error {
-	if b.ogDB == nil {
+	if b.OgDB == nil {
 		return nil
 	}
-	return b.ogDB.CleanupExpired()
+	return b.OgDB.CleanupExpired()
 }
