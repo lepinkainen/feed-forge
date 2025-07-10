@@ -31,20 +31,20 @@ type Fetcher struct {
 	urlMutexes   sync.Map
 }
 
-// Reddit JSON response structures
-type RedditListing struct {
-	Data RedditListingData `json:"data"`
+// Reddit OAuth API response structures
+type RedditOAuthResponse struct {
+	Data RedditOAuthListingData `json:"data"`
 }
 
-type RedditListingData struct {
-	Children []RedditPost `json:"children"`
+type RedditOAuthListingData struct {
+	Children []RedditOAuthPost `json:"children"`
 }
 
-type RedditPost struct {
-	Data RedditPostData `json:"data"`
+type RedditOAuthPost struct {
+	Data RedditOAuthPostData `json:"data"`
 }
 
-type RedditPostData struct {
+type RedditOAuthPostData struct {
 	Title        string `json:"title"`
 	Selftext     string `json:"selftext"`
 	SelftextHTML string `json:"selftext_html"`
@@ -190,10 +190,10 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	f.lastFetch[domain] = time.Now()
 	f.domainMutex.Unlock()
 
-	// Check if this is a Reddit post URL and use JSON API instead
+	// Check if this is a Reddit post URL and use Reddit API instead
 	if f.isRedditPostURL(targetURL) {
-		slog.Debug("Detected Reddit post URL, using JSON API", "url", targetURL)
-		return f.fetchRedditJSON(ctx, targetURL)
+		slog.Debug("Detected Reddit post URL, using Reddit API", "url", targetURL)
+		return f.fetchRedditAPI(ctx, targetURL)
 	}
 
 	// Create HTTP request
@@ -272,6 +272,12 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 
 	f.extractOpenGraphTags(doc, data)
 	f.applyFallbacks(data, htmlContent)
+
+	// Check for cookie consent message in description and clear if found
+	if data.Description != "" && f.containsCookieConsent(data.Description) {
+		slog.Warn("Detected cookie consent message in OpenGraph description, excluding description", "url", targetURL)
+		data.Description = ""
+	}
 
 	slog.Debug("Extracted OpenGraph data", "url", targetURL, "title", data.Title, "hasDescription", data.Description != "")
 
@@ -468,32 +474,69 @@ func (f *Fetcher) isRedditPostURL(targetURL string) bool {
 	return false
 }
 
-// fetchRedditJSON fetches Reddit post content via JSON API
-func (f *Fetcher) fetchRedditJSON(ctx context.Context, targetURL string) (*Data, error) {
-	// Convert Reddit URL to JSON API URL
-	jsonURL := targetURL + ".json"
+// extractPostIDFromURL extracts the post ID from a Reddit URL
+func (f *Fetcher) extractPostIDFromURL(targetURL string) string {
+	// Handle gallery URLs: https://www.reddit.com/gallery/1lw7km7
+	if strings.Contains(targetURL, "/gallery/") {
+		parts := strings.Split(targetURL, "/gallery/")
+		if len(parts) >= 2 {
+			postID := strings.Split(parts[1], "/")[0] // Get first part after /gallery/
+			return postID
+		}
+	}
+
+	// Handle regular post URLs: https://www.reddit.com/r/subreddit/comments/1lw7km7/title/
+	if strings.Contains(targetURL, "/comments/") {
+		parts := strings.Split(targetURL, "/comments/")
+		if len(parts) >= 2 {
+			postID := strings.Split(parts[1], "/")[0] // Get first part after /comments/
+			return postID
+		}
+	}
+
+	return ""
+}
+
+// fetchRedditAPI fetches Reddit post content via OAuth API or returns nil for OpenGraph fallback
+func (f *Fetcher) fetchRedditAPI(ctx context.Context, targetURL string) (*Data, error) {
+	// Only use OAuth API if authenticated Reddit client is available
+	if f.redditClient == nil {
+		slog.Debug("No authenticated Reddit client available, falling back to OpenGraph parsing", "url", targetURL)
+		return nil, nil // Return nil to trigger OpenGraph HTML parsing fallback
+	}
+
+	// Use OAuth API for all Reddit URLs when authenticated
+	slog.Debug("Using Reddit OAuth API for all Reddit URLs", "url", targetURL)
+	return f.fetchRedditOAuthAPI(ctx, targetURL)
+}
+
+// fetchRedditOAuthAPI fetches Reddit post content via OAuth API for all Reddit URLs
+func (f *Fetcher) fetchRedditOAuthAPI(ctx context.Context, targetURL string) (*Data, error) {
+	// Extract post ID from Reddit URL
+	// Supports both gallery URLs (https://www.reddit.com/gallery/1lw7km7)
+	// and regular post URLs (https://www.reddit.com/r/subreddit/comments/1lw7km7/title/)
+	postID := f.extractPostIDFromURL(targetURL)
+	if postID == "" {
+		return nil, fmt.Errorf("could not extract post ID from URL: %s", targetURL)
+	}
+
+	// Use Reddit OAuth API to get post info
+	apiURL := fmt.Sprintf("https://oauth.reddit.com/api/info?id=t3_%s", postID)
 
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", jsonURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FeedForge/1.0; OpenGraph fetcher)")
+	// Set headers for Reddit OAuth API
+	req.Header.Set("User-Agent", "FeedForge/1.0 by theshrike79")
 	req.Header.Set("Accept", "application/json")
 
-	slog.Debug("Fetching Reddit JSON data", "url", jsonURL)
+	slog.Debug("Fetching Reddit OAuth API data", "url", apiURL, "post_id", postID)
 
-	// Use authenticated Reddit client if available, otherwise fall back to default client
-	client := f.client
-	if f.redditClient != nil {
-		client = f.redditClient
-		slog.Debug("Using authenticated Reddit client for JSON request")
-	}
-
-	// Make the request
-	resp, err := client.Do(req)
+	// Make the request using authenticated client
+	resp, err := f.redditClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -511,19 +554,19 @@ func (f *Fetcher) fetchRedditJSON(ctx context.Context, targetURL string) (*Data,
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
-	// Parse JSON - Reddit returns an array of listings
-	var listings []RedditListing
-	if err := json.Unmarshal(body, &listings); err != nil {
-		return nil, fmt.Errorf("failed to parse Reddit JSON: %w", err)
+	// Parse Reddit OAuth API response
+	var oauthResponse RedditOAuthResponse
+	if err := json.Unmarshal(body, &oauthResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse Reddit OAuth API response: %w", err)
 	}
 
 	// Validate we have the expected structure
-	if len(listings) == 0 || len(listings[0].Data.Children) == 0 {
-		return nil, fmt.Errorf("no Reddit post data found")
+	if len(oauthResponse.Data.Children) == 0 {
+		return nil, fmt.Errorf("no post data found in OAuth API response")
 	}
 
-	// Get the first child (the actual post, not comments)
-	post := listings[0].Data.Children[0].Data
+	// Get the post data
+	post := oauthResponse.Data.Children[0].Data
 
 	// Create OpenGraph data
 	now := time.Now()
@@ -546,9 +589,17 @@ func (f *Fetcher) fetchRedditJSON(ctx context.Context, targetURL string) (*Data,
 		description = strings.ReplaceAll(description, "&quot;", "\"")
 		description = strings.ReplaceAll(description, "&#39;", "'")
 		description = strings.ReplaceAll(description, "&amp;", "&")
-		data.Description = description
-	} else if post.Selftext != "" {
+
+		// Check for cookie consent message and exclude if found
+		if !f.containsCookieConsent(description) {
+			data.Description = description
+		} else {
+			slog.Warn("Detected cookie consent message in Reddit OAuth API post, excluding description", "url", targetURL)
+		}
+	} else if post.Selftext != "" && !f.containsCookieConsent(post.Selftext) {
 		data.Description = post.Selftext
+	} else if post.Selftext != "" {
+		slog.Warn("Detected cookie consent message in Reddit OAuth API post selftext, excluding description", "url", targetURL)
 	}
 
 	// Extract thumbnail if it's a valid URL (not "self" or empty)
@@ -559,9 +610,14 @@ func (f *Fetcher) fetchRedditJSON(ctx context.Context, targetURL string) (*Data,
 	// Set site name
 	data.SiteName = "Reddit"
 
-	slog.Debug("Extracted Reddit content", "url", targetURL, "has_description", data.Description != "", "has_image", data.Image != "")
+	slog.Debug("Extracted Reddit OAuth API content", "url", targetURL, "title", data.Title, "has_description", data.Description != "", "has_image", data.Image != "")
 
 	return data, nil
+}
+
+// containsCookieConsent checks if text contains Reddit's cookie consent message
+func (f *Fetcher) containsCookieConsent(text string) bool {
+	return strings.Contains(text, "Reddit and its partners use cookies and similar technologies to provide you with a better experience.")
 }
 
 // isBlockedURL checks if a URL is from a domain that blocks external access

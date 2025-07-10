@@ -282,7 +282,7 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 	atom.WriteString(fmt.Sprintf(`<updated>%s</updated>`, now.Format(time.RFC3339)))
 	atom.WriteString(`<author><name>Feed Forge</name></author>`)
 	atom.WriteString(`<subtitle>Filtered Reddit homepage posts with enhanced metadata</subtitle>`)
-	atom.WriteString(`<generator uri="https://github.com/your-username/red-rss">Red RSS Generator</generator>`)
+	atom.WriteString(`<generator uri="https://github.com/lepinkainen/feed-forge">Red RSS Generator</generator>`)
 
 	for _, post := range posts {
 		atom.WriteString(`<entry>`)
