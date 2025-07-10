@@ -45,8 +45,8 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 	// Collect all URLs that need OpenGraph data
 	var urlsToFetch []string
 	for _, item := range items {
-		if item.Link != "" {
-			urlsToFetch = append(urlsToFetch, item.Link)
+		if item.ItemLink != "" {
+			urlsToFetch = append(urlsToFetch, item.ItemLink)
 		}
 	}
 
@@ -55,23 +55,28 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 	ogDataMap := ogFetcher.FetchConcurrent(urlsToFetch)
 	slog.Debug("Completed concurrent OpenGraph fetching")
 
-	for _, item := range items {
+	for i := range items {
+		item := &items[i]
 		// Extract domain from the article link
 		domain := ""
-		if matches := domainRegex.FindStringSubmatch(item.Link); len(matches) > 1 {
+		if matches := domainRegex.FindStringSubmatch(item.ItemLink); len(matches) > 1 {
 			domain = matches[1]
 		}
 
 		// Generate categories
-		categories := categorizeContent(item.Title, domain, item.Link, categoryMapper)
+		categories := categorizeContent(item.ItemTitle, domain, item.ItemLink, categoryMapper)
 		pointCategory := categorizeByPoints(item.Points, minPoints)
 		categories = append(categories, pointCategory)
 
+		// Populate the item's Domain and Categories fields for the FeedItem interface
+		item.Domain = domain
+		item.ItemCategories = categories
+
 		// Calculate post age
-		postAge := calculatePostAge(item.CreatedAt)
+		postAge := calculatePostAge(item.ItemCreatedAt)
 
 		// Calculate engagement ratio
-		engagementRatio := float64(item.CommentCount) / float64(item.Points)
+		engagementRatio := float64(item.ItemCommentCount) / float64(item.Points)
 		engagementText := ""
 		if engagementRatio > 0.5 {
 			engagementText = "🔥 High engagement"
@@ -81,8 +86,8 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 
 		// Get pre-fetched OpenGraph data for the article
 		var ogPreview string
-		if item.Link != "" {
-			ogData := ogDataMap[item.Link]
+		if item.ItemLink != "" {
+			ogData := ogDataMap[item.ItemLink]
 			if ogData != nil && (ogData.Title != "" || ogData.Description != "") {
 				ogPreview = fmt.Sprintf(`<div style="margin-bottom: 16px; padding: 12px; background: #f9f9f9; border-radius: 6px; border-left: 3px solid #007acc;">
 					<h4 style="margin: 0 0 8px 0; color: #007acc; font-size: 14px;">📄 Article Preview</h4>
@@ -91,7 +96,7 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 					%s
 				</div>`,
 					func() string {
-						if ogData.Title != "" && ogData.Title != item.Title {
+						if ogData.Title != "" && ogData.Title != item.ItemTitle {
 							return fmt.Sprintf(`<p style="margin: 0 0 6px 0; font-weight: bold; color: #333;">%s</p>`, ogData.Title)
 						}
 						return ""
@@ -151,7 +156,7 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 			</div>
 		</div>`,
 			item.Points,
-			item.CommentCount,
+			item.ItemCommentCount,
 			postAge,
 			func() string {
 				if engagementText != "" {
@@ -162,23 +167,23 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 			categoryTags,
 			ogPreview,
 			domain,
-			item.Author,
-			item.CommentsLink,
-			item.Link)
+			item.ItemAuthor,
+			item.ItemCommentsLink,
+			item.ItemLink)
 
 		rssItem := &feeds.Item{
-			Title: item.Title,
-			Link:  &feeds.Link{Href: item.CommentsLink, Rel: "alternate", Type: "text/html"},
-			Id:    item.CommentsLink,
+			Title: item.ItemTitle,
+			Link:  &feeds.Link{Href: item.ItemCommentsLink, Rel: "alternate", Type: "text/html"},
+			Id:    item.ItemCommentsLink,
 			Author: &feeds.Author{
-				Name: item.Author,
+				Name: item.ItemAuthor,
 			},
 			Description: description,
-			Created:     item.CreatedAt,
+			Created:     item.ItemCreatedAt,
 		}
 
 		// Store categories for this item (using the same ID as the rssItem)
-		itemCategories[item.CommentsLink] = categories
+		itemCategories[item.ItemCommentsLink] = categories
 
 		feedObj.Items = append(feedObj.Items, rssItem)
 	}

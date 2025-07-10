@@ -4,15 +4,50 @@ import "time"
 
 // HackerNewsItem represents a single Hacker News story with metadata
 type HackerNewsItem struct {
-	ItemID       string
-	Title        string
-	Link         string
-	CommentsLink string
-	Points       int
-	CommentCount int
-	Author       string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ItemID           string
+	ItemTitle        string
+	ItemLink         string
+	ItemCommentsLink string
+	Points           int
+	ItemCommentCount int
+	ItemAuthor       string
+	ItemCreatedAt    time.Time
+	UpdatedAt        time.Time
+	Domain           string   // Domain extracted from Link
+	ItemCategories   []string // Categories determined from title, domain, and points
+}
+
+// FeedItem interface implementation for HackerNewsItem
+func (h *HackerNewsItem) Title() string {
+	return h.ItemTitle
+}
+
+func (h *HackerNewsItem) Link() string {
+	return h.ItemLink
+}
+
+func (h *HackerNewsItem) CommentsLink() string {
+	return h.ItemCommentsLink
+}
+
+func (h *HackerNewsItem) Author() string {
+	return h.ItemAuthor
+}
+
+func (h *HackerNewsItem) Score() int {
+	return h.Points
+}
+
+func (h *HackerNewsItem) CommentCount() int {
+	return h.ItemCommentCount
+}
+
+func (h *HackerNewsItem) CreatedAt() time.Time {
+	return h.ItemCreatedAt
+}
+
+func (h *HackerNewsItem) Categories() []string {
+	return h.ItemCategories
 }
 
 // AlgoliaResponse represents the response structure from Algolia API

@@ -35,6 +35,39 @@ type RedditPost struct {
 	} `json:"data"`
 }
 
+// FeedItem interface implementation for RedditPost
+func (r *RedditPost) Title() string {
+	return r.Data.Title
+}
+
+func (r *RedditPost) Link() string {
+	return r.Data.URL
+}
+
+func (r *RedditPost) CommentsLink() string {
+	return "https://www.reddit.com" + r.Data.Permalink
+}
+
+func (r *RedditPost) Author() string {
+	return r.Data.Author
+}
+
+func (r *RedditPost) Score() int {
+	return r.Data.Score
+}
+
+func (r *RedditPost) CommentCount() int {
+	return r.Data.NumComments
+}
+
+func (r *RedditPost) CreatedAt() time.Time {
+	return time.Unix(int64(r.Data.CreatedUTC), 0)
+}
+
+func (r *RedditPost) Categories() []string {
+	return []string{r.Data.Subreddit}
+}
+
 // RedditListing represents the structure of the Reddit API response for listings
 type RedditListing struct {
 	Data struct {

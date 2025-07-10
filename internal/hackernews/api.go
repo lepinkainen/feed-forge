@@ -65,15 +65,15 @@ func fetchHackerNewsItems() []HackerNewsItem {
 			"createdAt", createdAt)
 
 		items = append(items, HackerNewsItem{
-			ItemID:       hit.ObjectID,
-			Title:        hit.Title,
-			Link:         hit.URL,
-			CommentsLink: commentsLink,
-			Points:       points,
-			CommentCount: commentCount,
-			Author:       hit.Author,
-			CreatedAt:    createdAt,
-			UpdatedAt:    now,
+			ItemID:           hit.ObjectID,
+			ItemTitle:        hit.Title,
+			ItemLink:         hit.URL,
+			ItemCommentsLink: commentsLink,
+			Points:           points,
+			ItemCommentCount: commentCount,
+			ItemAuthor:       hit.Author,
+			ItemCreatedAt:    createdAt,
+			UpdatedAt:        now,
 		})
 	}
 
@@ -91,7 +91,7 @@ func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[str
 	for _, item := range items {
 		// Skip items with empty ItemID
 		if item.ItemID == "" {
-			slog.Warn("Skipping item with empty ItemID", "title", item.Title)
+			slog.Warn("Skipping item with empty ItemID", "title", item.ItemTitle)
 			continue
 		}
 

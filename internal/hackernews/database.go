@@ -56,7 +56,7 @@ func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[str
 				comment_count = excluded.comment_count,
 				author = excluded.author,
 				updated_at = excluded.updated_at`, // Note: created_at is not updated on conflict
-			item.ItemID, item.Title, item.Link, item.CommentsLink, item.Points, item.CommentCount, item.Author, item.CreatedAt, item.UpdatedAt)
+			item.ItemID, item.ItemTitle, item.ItemLink, item.ItemCommentsLink, item.Points, item.ItemCommentCount, item.ItemAuthor, item.ItemCreatedAt, item.UpdatedAt)
 
 		if err != nil {
 			slog.Error("Error updating item", "error", err, "hn_id", item.ItemID)
@@ -65,7 +65,7 @@ func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[str
 
 		rowsAffected, _ := result.RowsAffected()
 		if rowsAffected > 0 {
-			slog.Info("Processed item (added/updated in DB)", "title", item.Title, "hn_id", item.ItemID)
+			slog.Info("Processed item (added/updated in DB)", "title", item.ItemTitle, "hn_id", item.ItemID)
 			updatedItems[item.ItemID] = true
 		}
 	}
@@ -86,7 +86,7 @@ func getAllItems(db *database.Database, limit int, minPoints int) []HackerNewsIt
 	var items []HackerNewsItem
 	for rows.Next() {
 		var item HackerNewsItem
-		err := rows.Scan(&item.ItemID, &item.Title, &item.Link, &item.CommentsLink, &item.Points, &item.CommentCount, &item.Author, &item.CreatedAt, &item.UpdatedAt)
+		err := rows.Scan(&item.ItemID, &item.ItemTitle, &item.ItemLink, &item.ItemCommentsLink, &item.Points, &item.ItemCommentCount, &item.ItemAuthor, &item.ItemCreatedAt, &item.UpdatedAt)
 		if err != nil {
 			slog.Error("Error scanning row", "error", err)
 			continue
