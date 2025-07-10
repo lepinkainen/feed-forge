@@ -108,8 +108,8 @@ func (g *Generator) ValidateFeed(feed *feeds.Feed) error {
 	return nil
 }
 
-// validateFeedItem validates individual feed items
-func (g *Generator) validateFeedItem(item *feeds.Item) error {
+// ValidateFeedItem validates individual feed items (standalone function)
+func ValidateFeedItem(item *feeds.Item) error {
 	if item.Title == "" {
 		return fmt.Errorf("item title is empty")
 	}
@@ -123,6 +123,11 @@ func (g *Generator) validateFeedItem(item *feeds.Item) error {
 	}
 
 	return nil
+}
+
+// validateFeedItem validates individual feed items
+func (g *Generator) validateFeedItem(item *feeds.Item) error {
+	return ValidateFeedItem(item)
 }
 
 // GetMetadata returns metadata about the generated feed

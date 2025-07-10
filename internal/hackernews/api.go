@@ -6,23 +6,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
+
+	httputil "github.com/lepinkainen/feed-forge/pkg/http"
 )
 
 // fetchHackerNewsItems retrieves current front page items from Algolia API
 func fetchHackerNewsItems() []HackerNewsItem {
 	slog.Debug("Fetching Hacker News items from Algolia API")
-	res, err := http.Get("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100")
+
+	// Create HTTP client with shared utilities
+	client := httputil.NewClient(httputil.DefaultConfig())
+	res, err := client.Get("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100")
 	if err != nil {
 		slog.Error("Failed to fetch Hacker News items", "error", err)
 		return nil
 	}
 	defer func() { _ = res.Body.Close() }()
 
-	if res.StatusCode != 200 {
-		slog.Error("HTTP status code error", "code", res.StatusCode, "status", res.Status)
+	if err := httputil.EnsureStatusOK(res); err != nil {
+		slog.Error("HTTP status code error", "error", err)
 		return nil
 	}
 
@@ -185,14 +189,10 @@ func fetchItemStats(itemID string) statsUpdate {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Fetch current stats from Algolia API
+	// Fetch current stats from Algolia API using shared HTTP client
 	url := fmt.Sprintf("https://hn.algolia.com/api/v1/items/%s", itemID)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return statsUpdate{itemID: itemID, err: err}
-	}
-
-	res, err := http.DefaultClient.Do(req)
+	client := httputil.NewClient(httputil.DefaultConfig())
+	res, err := client.GetWithContext(ctx, url)
 	if err != nil {
 		return statsUpdate{itemID: itemID, err: err}
 	}

@@ -19,6 +19,9 @@ type CustomAtomCategory struct {
 	Scheme  string   `xml:"scheme,attr,omitempty"`
 }
 
+// AtomCategory is an alias for CustomAtomCategory for backward compatibility
+type AtomCategory = CustomAtomCategory
+
 // CustomAtomEntry represents an entry in a custom Atom feed
 type CustomAtomEntry struct {
 	XMLName    xml.Name             `xml:"entry"`
@@ -71,8 +74,8 @@ func (g *Generator) GenerateCustomAtom(items []Item, itemCategories map[string][
 	return xml.Header + string(xmlData), nil
 }
 
-// convertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
-func (g *Generator) convertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
+// ConvertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
+func ConvertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
 	atom := &feeds.Atom{Feed: feed}
 	standardAtomFeed := atom.AtomFeed()
 
@@ -116,6 +119,11 @@ func (g *Generator) convertToCustomAtom(feed *feeds.Feed, itemCategories map[str
 	}
 
 	return customFeed
+}
+
+// convertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
+func (g *Generator) convertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
+	return ConvertToCustomAtom(feed, itemCategories)
 }
 
 // SaveCustomAtomToFile saves a custom Atom feed to a file

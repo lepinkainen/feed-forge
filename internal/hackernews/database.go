@@ -1,7 +1,7 @@
 package hackernews
 
 import (
-	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -13,23 +13,8 @@ import (
 // dbMutex protects concurrent access to OpenGraph database operations
 var dbMutex sync.Mutex
 
-// initDB initializes and returns a SQLite database connection
-func initDB() *sql.DB {
-	// Get the default database path
-	dbPath, err := database.GetDefaultPath("hackernews.db")
-	if err != nil {
-		slog.Error("Error getting database path", "error", err)
-		os.Exit(1)
-	}
-	slog.Debug("Initializing database", "path", dbPath)
-
-	// Open database in the executable's directory
-	db, err := sql.Open("sqlite", dbPath) // Use "sqlite" driver name
-	if err != nil {
-		slog.Error("Failed to open database", "error", err)
-		os.Exit(1)
-	}
-
+// initializeSchema initializes the database schema using shared utilities
+func initializeSchema(db *database.Database) error {
 	// Create items table if it doesn't exist
 	createItemsTable := `
 	CREATE TABLE IF NOT EXISTS items (
@@ -44,26 +29,23 @@ func initDB() *sql.DB {
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`
-	_, err = db.Exec(createItemsTable)
-	if err != nil {
-		slog.Error("Failed to create items table", "error", err)
-		os.Exit(1)
+	if err := db.ExecuteSchema(createItemsTable); err != nil {
+		return fmt.Errorf("failed to create items table: %w", err)
 	}
 
-	slog.Debug("Database initialized successfully")
-
-	return db
+	slog.Debug("Database schema initialized successfully")
+	return nil
 }
 
 // updateStoredItems updates the database with new items, returns map of updated item IDs
-func updateStoredItems(db *sql.DB, newItems []HackerNewsItem) map[string]bool {
+func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[string]bool {
 	slog.Debug("Updating stored items", "itemCount", len(newItems))
 	updatedItems := make(map[string]bool)
 
 	for _, item := range newItems {
 		// The 'item.CreatedAt' should be the original submission time of the HN post.
 		// The 'item.UpdatedAt' should be when it was last seen/modified by your scraper.
-		result, err := db.Exec(`
+		result, err := db.DB().Exec(`
 			INSERT INTO items (item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(item_hn_id) DO UPDATE SET
@@ -92,9 +74,9 @@ func updateStoredItems(db *sql.DB, newItems []HackerNewsItem) map[string]bool {
 }
 
 // getAllItems retrieves items from database with minimum points threshold
-func getAllItems(db *sql.DB, limit int, minPoints int) []HackerNewsItem {
+func getAllItems(db *database.Database, limit int, minPoints int) []HackerNewsItem {
 	slog.Debug("Querying database for items", "limit", limit, "minPoints", minPoints)
-	rows, err := db.Query("SELECT item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at FROM items WHERE points > ? ORDER BY created_at DESC LIMIT ?", minPoints, limit)
+	rows, err := db.DB().Query("SELECT item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at FROM items WHERE points > ? ORDER BY created_at DESC LIMIT ?", minPoints, limit)
 	if err != nil {
 		slog.Error("Failed to query database", "error", err)
 		os.Exit(1)

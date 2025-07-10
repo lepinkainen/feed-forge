@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/feeds"
+	feedpkg "github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
@@ -199,26 +200,9 @@ func (fg *FeedGenerator) ValidateFeed(feed *feeds.Feed) error {
 
 	// Validate feed items
 	for i, item := range feed.Items {
-		if err := fg.validateFeedItem(item); err != nil {
+		if err := feedpkg.ValidateFeedItem(item); err != nil {
 			return fmt.Errorf("item %d validation failed: %w", i, err)
 		}
-	}
-
-	return nil
-}
-
-// validateFeedItem validates individual feed items
-func (fg *FeedGenerator) validateFeedItem(item *feeds.Item) error {
-	if item.Title == "" {
-		return fmt.Errorf("item title is empty")
-	}
-
-	if item.Link == nil || item.Link.Href == "" {
-		return fmt.Errorf("item link is empty")
-	}
-
-	if item.Id == "" {
-		return fmt.Errorf("item ID is empty")
 	}
 
 	return nil
@@ -302,40 +286,40 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 
 	for _, post := range posts {
 		atom.WriteString(`<entry>`)
-		atom.WriteString(fmt.Sprintf(`<title>%s</title>`, escapeXML(post.Data.Title)))
+		atom.WriteString(fmt.Sprintf(`<title>%s</title>`, feedpkg.EscapeXML(post.Data.Title)))
 
 		// Multiple links: Reddit permalink and external URL
-		atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, escapeXML(post.Data.URL)))
-		atom.WriteString(fmt.Sprintf(`<link rel="replies" type="text/html" href="https://www.reddit.com%s" title="Reddit Discussion"/>`, escapeXML(post.Data.Permalink)))
+		atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, feedpkg.EscapeXML(post.Data.URL)))
+		atom.WriteString(fmt.Sprintf(`<link rel="replies" type="text/html" href="https://www.reddit.com%s" title="Reddit Discussion"/>`, feedpkg.EscapeXML(post.Data.Permalink)))
 
-		atom.WriteString(fmt.Sprintf(`<id>https://www.reddit.com%s</id>`, escapeXML(post.Data.Permalink)))
+		atom.WriteString(fmt.Sprintf(`<id>https://www.reddit.com%s</id>`, feedpkg.EscapeXML(post.Data.Permalink)))
 		atom.WriteString(fmt.Sprintf(`<updated>%s</updated>`, time.Unix(int64(post.Data.CreatedUTC), 0).Format(time.RFC3339)))
 		atom.WriteString(fmt.Sprintf(`<published>%s</published>`, time.Unix(int64(post.Data.CreatedUTC), 0).Format(time.RFC3339)))
 
 		// Enhanced author information
-		atom.WriteString(fmt.Sprintf(`<author><name>%s</name><uri>https://www.reddit.com/user/%s</uri></author>`, escapeXML(post.Data.Author), escapeXML(post.Data.Author)))
+		atom.WriteString(fmt.Sprintf(`<author><name>%s</name><uri>https://www.reddit.com/user/%s</uri></author>`, feedpkg.EscapeXML(post.Data.Author), feedpkg.EscapeXML(post.Data.Author)))
 
 		// Categories for subreddit
-		atom.WriteString(fmt.Sprintf(`<category term="r/%s" label="r/%s"/>`, escapeXML(post.Data.Subreddit), escapeXML(post.Data.Subreddit)))
+		atom.WriteString(fmt.Sprintf(`<category term="r/%s" label="r/%s"/>`, feedpkg.EscapeXML(post.Data.Subreddit), feedpkg.EscapeXML(post.Data.Subreddit)))
 
 		// Reddit-specific metadata using custom namespace
 		atom.WriteString(fmt.Sprintf(`<reddit:score>%d</reddit:score>`, post.Data.Score))
 		atom.WriteString(fmt.Sprintf(`<reddit:comments>%d</reddit:comments>`, post.Data.NumComments))
-		atom.WriteString(fmt.Sprintf(`<reddit:subreddit>r/%s</reddit:subreddit>`, escapeXML(post.Data.Subreddit)))
+		atom.WriteString(fmt.Sprintf(`<reddit:subreddit>r/%s</reddit:subreddit>`, feedpkg.EscapeXML(post.Data.Subreddit)))
 
 		// Enhanced content with OpenGraph data
 		content := fg.buildEnhancedContent(post, ogData)
-		atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, escapeXML(content)))
+		atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, feedpkg.EscapeXML(content)))
 
 		// Summary
 		summary := fmt.Sprintf("Score: %d, Comments: %d, Subreddit: r/%s",
 			post.Data.Score, post.Data.NumComments, post.Data.Subreddit)
-		atom.WriteString(fmt.Sprintf(`<summary>%s</summary>`, escapeXML(summary)))
+		atom.WriteString(fmt.Sprintf(`<summary>%s</summary>`, feedpkg.EscapeXML(summary)))
 
 		// Add thumbnail as enclosure if available from OpenGraph
 		if ogData != nil {
 			if og, exists := ogData[post.Data.URL]; exists && og != nil && og.Image != "" {
-				atom.WriteString(fmt.Sprintf(`<link rel="enclosure" type="image/jpeg" href="%s"/>`, escapeXML(og.Image)))
+				atom.WriteString(fmt.Sprintf(`<link rel="enclosure" type="image/jpeg" href="%s"/>`, feedpkg.EscapeXML(og.Image)))
 			}
 		}
 
@@ -387,14 +371,4 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 	content.WriteString(`</div>`)
 
 	return content.String()
-}
-
-// escapeXML escapes XML special characters
-func escapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
-	return s
 }

@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	httputil "github.com/lepinkainen/feed-forge/pkg/http"
 )
 
 // DomainConfig represents the configuration structure for domain mappings
@@ -36,18 +38,15 @@ func loadConfigFromURL(url string) (*DomainConfig, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
-	resp, err := client.Do(req)
+	client := httputil.NewClient(httputil.DefaultConfig())
+	resp, err := client.DoRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch config: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	if err := httputil.EnsureStatusOK(resp); err != nil {
+		return nil, fmt.Errorf("config fetch failed: %w", err)
 	}
 
 	body, err := io.ReadAll(resp.Body)

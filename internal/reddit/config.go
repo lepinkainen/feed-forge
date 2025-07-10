@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"os"
-	"time"
+
+	httputil "github.com/lepinkainen/feed-forge/pkg/http"
 )
 
 // LoadConfig loads configuration with fallback priority: URL -> local file -> defaults
@@ -36,18 +36,15 @@ func LoadConfig(configURL string) error {
 
 // loadConfigFromURL loads configuration from a remote URL
 func loadConfigFromURL(url string) error {
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
+	client := httputil.NewClient(httputil.DefaultConfig())
 	resp, err := client.Get(url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch config from URL: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP error fetching config: %s", resp.Status)
+	if err := httputil.EnsureStatusOK(resp); err != nil {
+		return fmt.Errorf("HTTP error fetching config: %w", err)
 	}
 
 	var remoteConfig Config

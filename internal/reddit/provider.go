@@ -86,27 +86,9 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 		return err
 	}
 
-	// Generate feed based on configuration
-	if p.Config.Reddit.FeedType == "atom" && p.Config.Reddit.EnhancedAtom {
-		// Use enhanced Atom feed generation
-		if err := feedGenerator.SaveCustomAtomFeedToFile(filteredPosts, outfile); err != nil {
-			return err
-		}
-	} else {
-		// Use standard feed generation
-		feed, err := feedGenerator.GenerateFeed(filteredPosts, p.Config.Reddit.FeedType)
-		if err != nil {
-			return err
-		}
-
-		// Validate feed
-		if err := feedGenerator.ValidateFeed(feed); err != nil {
-			return err
-		}
-
-		if err := feedGenerator.SaveFeedToFile(feed, p.Config.Reddit.FeedType, outfile); err != nil {
-			return err
-		}
+	// Generate enhanced Atom feed (hardcoded to always use atom with enhanced features)
+	if err := feedGenerator.SaveCustomAtomFeedToFile(filteredPosts, outfile); err != nil {
+		return err
 	}
 
 	slog.Info("RSS feed saved", "count", len(filteredPosts), "filename", outfile)

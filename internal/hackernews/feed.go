@@ -10,91 +10,18 @@ import (
 	"time"
 
 	"github.com/gorilla/feeds"
+	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
-// Custom Atom structures to support multiple categories
-type AtomCategory struct {
-	XMLName xml.Name `xml:"category"`
-	Term    string   `xml:"term,attr"`
-	Label   string   `xml:"label,attr,omitempty"`
-	Scheme  string   `xml:"scheme,attr,omitempty"`
-}
-
-type CustomAtomEntry struct {
-	XMLName    xml.Name           `xml:"entry"`
-	Xmlns      string             `xml:"xmlns,attr,omitempty"`
-	Title      string             `xml:"title"`
-	Updated    string             `xml:"updated"`
-	Id         string             `xml:"id"`
-	Categories []AtomCategory     `xml:"category"`
-	Content    *feeds.AtomContent `xml:"content,omitempty"`
-	Rights     string             `xml:"rights,omitempty"`
-	Source     string             `xml:"source,omitempty"`
-	Published  string             `xml:"published,omitempty"`
-	Links      []feeds.AtomLink   `xml:"link"`
-	Summary    *feeds.AtomSummary `xml:"summary,omitempty"`
-	Author     *feeds.AtomAuthor  `xml:"author,omitempty"`
-}
-
-type CustomAtomFeed struct {
-	XMLName  xml.Name           `xml:"feed"`
-	Xmlns    string             `xml:"xmlns,attr"`
-	Title    string             `xml:"title"`
-	Id       string             `xml:"id"`
-	Updated  string             `xml:"updated"`
-	Link     *feeds.AtomLink    `xml:"link,omitempty"`
-	Author   *feeds.AtomAuthor  `xml:"author,omitempty"`
-	Subtitle string             `xml:"subtitle,omitempty"`
-	Rights   string             `xml:"rights,omitempty"`
-	Entries  []*CustomAtomEntry `xml:"entry"`
-}
+// Use shared Atom types from pkg/feed
+type AtomCategory = feed.AtomCategory
+type CustomAtomEntry = feed.CustomAtomEntry
+type CustomAtomFeed = feed.CustomAtomFeed
 
 // convertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
-func convertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
-	atom := &feeds.Atom{Feed: feed}
-	standardAtomFeed := atom.AtomFeed()
-
-	customFeed := &CustomAtomFeed{
-		Xmlns:    "http://www.w3.org/2005/Atom",
-		Title:    standardAtomFeed.Title,
-		Id:       standardAtomFeed.Id,
-		Updated:  standardAtomFeed.Updated,
-		Link:     standardAtomFeed.Link,
-		Author:   standardAtomFeed.Author,
-		Subtitle: standardAtomFeed.Subtitle,
-		Rights:   standardAtomFeed.Rights,
-	}
-
-	// Convert entries with categories
-	for _, entry := range standardAtomFeed.Entries {
-		customEntry := &CustomAtomEntry{
-			Title:     entry.Title,
-			Updated:   entry.Updated,
-			Id:        entry.Id,
-			Content:   entry.Content,
-			Rights:    entry.Rights,
-			Source:    entry.Source,
-			Published: entry.Published,
-			Links:     entry.Links,
-			Summary:   entry.Summary,
-			Author:    entry.Author,
-		}
-
-		// Add categories for this entry
-		if categories, exists := itemCategories[entry.Id]; exists {
-			for _, cat := range categories {
-				customEntry.Categories = append(customEntry.Categories, AtomCategory{
-					Term:  cat,
-					Label: cat,
-				})
-			}
-		}
-
-		customFeed.Entries = append(customFeed.Entries, customEntry)
-	}
-
-	return customFeed
+func convertToCustomAtom(feedData *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
+	return feed.ConvertToCustomAtom(feedData, itemCategories)
 }
 
 // generateRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data

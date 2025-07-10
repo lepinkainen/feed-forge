@@ -65,17 +65,22 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Fetch current front page items
 	newItems := fetchHackerNewsItems()
 
+	// Initialize database schema
+	if err := initializeSchema(contentDB); err != nil {
+		return err
+	}
+
 	// Update database with new items and get list of updated item IDs
-	recentlyUpdated := updateStoredItems(contentDB.DB(), newItems)
+	recentlyUpdated := updateStoredItems(contentDB, newItems)
 
 	// Get all items from database
-	allItems := getAllItems(contentDB.DB(), p.Limit, p.MinPoints)
+	allItems := getAllItems(contentDB, p.Limit, p.MinPoints)
 
 	// Update item stats with current data from Algolia, skipping recently updated items
 	updateItemStats(contentDB.DB(), allItems, recentlyUpdated)
 
 	// Re-fetch items to get updated stats for RSS generation
-	allItems = getAllItems(contentDB.DB(), p.Limit, p.MinPoints)
+	allItems = getAllItems(contentDB, p.Limit, p.MinPoints)
 
 	// Ensure output directory exists
 	outDir := filepath.Dir(outfile)
