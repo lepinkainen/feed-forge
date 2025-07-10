@@ -50,7 +50,7 @@ func (rl *RateLimiter) Wait() {
 func NewRedditAPI(client *http.Client) *RedditAPI {
 	return &RedditAPI{
 		client:      client,
-		userAgent:   "GoRedditFeedGenerator/1.0 by YourRedditUsername",
+		userAgent:   "FeedForge/1.0 by theshrike79",
 		rateLimiter: NewRateLimiter(1 * time.Second), // 1 second minimum between calls
 	}
 }

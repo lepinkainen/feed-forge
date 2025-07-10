@@ -70,8 +70,8 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Filter posts
 	filteredPosts := FilterPosts(posts, p.MinScore, p.MinComments)
 
-	// Create enhanced feed generator
-	feedHelper := feed.NewEnhancedFeedGenerator(p.OgDB)
+	// Create enhanced feed generator with authenticated Reddit client
+	feedHelper := feed.NewEnhancedFeedGeneratorWithRedditClient(p.OgDB, client)
 	feedGenerator := NewFeedGenerator(feedHelper.OGFetcher)
 
 	// Ensure output directory exists

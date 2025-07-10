@@ -3,6 +3,7 @@ package opengraph
 import (
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,14 +20,35 @@ import (
 
 // Fetcher handles OpenGraph metadata fetching with rate limiting and caching
 type Fetcher struct {
-	client      *http.Client
-	db          *Database
-	cache       map[string]*Data
-	cacheMutex  sync.RWMutex
-	domainMutex sync.Mutex
-	lastFetch   map[string]time.Time
-	semaphore   chan struct{}
-	urlMutexes  sync.Map
+	client       *http.Client
+	redditClient *http.Client // Optional authenticated client for Reddit requests
+	db           *Database
+	cache        map[string]*Data
+	cacheMutex   sync.RWMutex
+	domainMutex  sync.Mutex
+	lastFetch    map[string]time.Time
+	semaphore    chan struct{}
+	urlMutexes   sync.Map
+}
+
+// Reddit JSON response structures
+type RedditListing struct {
+	Data RedditListingData `json:"data"`
+}
+
+type RedditListingData struct {
+	Children []RedditPost `json:"children"`
+}
+
+type RedditPost struct {
+	Data RedditPostData `json:"data"`
+}
+
+type RedditPostData struct {
+	Title        string `json:"title"`
+	Selftext     string `json:"selftext"`
+	SelftextHTML string `json:"selftext_html"`
+	Thumbnail    string `json:"thumbnail"`
 }
 
 // NewFetcher creates a new OpenGraph fetcher
@@ -46,6 +68,13 @@ func NewFetcher(db *Database) *Fetcher {
 		lastFetch: make(map[string]time.Time),
 		semaphore: make(chan struct{}, 5), // Max 5 concurrent fetches
 	}
+}
+
+// NewFetcherWithRedditClient creates a new OpenGraph fetcher with an authenticated Reddit client
+func NewFetcherWithRedditClient(db *Database, redditClient *http.Client) *Fetcher {
+	fetcher := NewFetcher(db)
+	fetcher.redditClient = redditClient
+	return fetcher
 }
 
 // FetchData fetches OpenGraph data from a URL with caching
@@ -160,6 +189,12 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	}
 	f.lastFetch[domain] = time.Now()
 	f.domainMutex.Unlock()
+
+	// Check if this is a Reddit post URL and use JSON API instead
+	if f.isRedditPostURL(targetURL) {
+		slog.Debug("Detected Reddit post URL, using JSON API", "url", targetURL)
+		return f.fetchRedditJSON(ctx, targetURL)
+	}
 
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
@@ -420,11 +455,121 @@ func (f *Fetcher) convertToUTF8(body []byte, contentType string) (string, error)
 	return string(utf8Bytes), nil
 }
 
+// isRedditPostURL checks if a URL is a Reddit post URL
+func (f *Fetcher) isRedditPostURL(targetURL string) bool {
+	// Check for regular Reddit post URLs: /r/subreddit/comments/postid/
+	if strings.Contains(targetURL, "reddit.com/r/") && strings.Contains(targetURL, "/comments/") {
+		return true
+	}
+	// Check for Reddit gallery URLs: /gallery/postid
+	if strings.Contains(targetURL, "reddit.com/gallery/") {
+		return true
+	}
+	return false
+}
+
+// fetchRedditJSON fetches Reddit post content via JSON API
+func (f *Fetcher) fetchRedditJSON(ctx context.Context, targetURL string) (*Data, error) {
+	// Convert Reddit URL to JSON API URL
+	jsonURL := targetURL + ".json"
+
+	// Create HTTP request
+	req, err := http.NewRequestWithContext(ctx, "GET", jsonURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FeedForge/1.0; OpenGraph fetcher)")
+	req.Header.Set("Accept", "application/json")
+
+	slog.Debug("Fetching Reddit JSON data", "url", jsonURL)
+
+	// Use authenticated Reddit client if available, otherwise fall back to default client
+	client := f.client
+	if f.redditClient != nil {
+		client = f.redditClient
+		slog.Debug("Using authenticated Reddit client for JSON request")
+	}
+
+	// Make the request
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP error: %d %s", resp.StatusCode, resp.Status)
+	}
+
+	// Read response body with size limit
+	const maxBodySize = 1024 * 1024 // 1MB limit
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// Parse JSON - Reddit returns an array of listings
+	var listings []RedditListing
+	if err := json.Unmarshal(body, &listings); err != nil {
+		return nil, fmt.Errorf("failed to parse Reddit JSON: %w", err)
+	}
+
+	// Validate we have the expected structure
+	if len(listings) == 0 || len(listings[0].Data.Children) == 0 {
+		return nil, fmt.Errorf("no Reddit post data found")
+	}
+
+	// Get the first child (the actual post, not comments)
+	post := listings[0].Data.Children[0].Data
+
+	// Create OpenGraph data
+	now := time.Now()
+	data := &Data{
+		URL:       targetURL,
+		FetchedAt: now,
+		ExpiresAt: now.Add(time.Duration(DefaultCacheHours) * time.Hour),
+	}
+
+	// Extract title
+	if post.Title != "" {
+		data.Title = post.Title
+	}
+
+	// Extract description from selftext_html (preferred) or selftext
+	if post.SelftextHTML != "" {
+		// Clean up HTML entities and basic formatting
+		description := strings.ReplaceAll(post.SelftextHTML, "&lt;", "<")
+		description = strings.ReplaceAll(description, "&gt;", ">")
+		description = strings.ReplaceAll(description, "&quot;", "\"")
+		description = strings.ReplaceAll(description, "&#39;", "'")
+		description = strings.ReplaceAll(description, "&amp;", "&")
+		data.Description = description
+	} else if post.Selftext != "" {
+		data.Description = post.Selftext
+	}
+
+	// Extract thumbnail if it's a valid URL (not "self" or empty)
+	if post.Thumbnail != "" && post.Thumbnail != "self" && utils.IsValidURL(post.Thumbnail) {
+		data.Image = post.Thumbnail
+	}
+
+	// Set site name
+	data.SiteName = "Reddit"
+
+	slog.Debug("Extracted Reddit content", "url", targetURL, "has_description", data.Description != "", "has_image", data.Image != "")
+
+	return data, nil
+}
+
 // isBlockedURL checks if a URL is from a domain that blocks external access
 func (f *Fetcher) isBlockedURL(targetURL string) bool {
-	// Check if it's a Reddit URL
-	if strings.Contains(targetURL, "reddit.com") || strings.Contains(targetURL, "redd.it") {
-		return true
+	// Allow Reddit post URLs (including gallery posts) but block Reddit media URLs
+	if strings.Contains(targetURL, "reddit.com") {
+		// Allow all Reddit post URLs (these will be handled by Reddit JSON fetcher)
+		return false
 	}
 
 	blockedDomains := []string{
@@ -435,7 +580,7 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 		"linkedin.com",
 		"i.redd.it",
 		"v.redd.it",
-		"reddit.com/gallery",
+		"redd.it", // Keep blocking short reddit URLs
 	}
 
 	for _, domain := range blockedDomains {
