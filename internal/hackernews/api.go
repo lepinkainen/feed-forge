@@ -18,7 +18,7 @@ func fetchHackerNewsItems() []HackerNewsItem {
 
 	// Create HTTP client with shared utilities
 	client := httputil.NewClient(httputil.DefaultConfig())
-	res, err := client.Get("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100")
+	res, err := client.GetWithContext(context.Background(), "https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100")
 	if err != nil {
 		slog.Error("Failed to fetch Hacker News items", "error", err)
 		return nil

@@ -8,19 +8,14 @@ import (
 
 // EnhancedFeedGenerator provides common feed generation utilities for providers
 type EnhancedFeedGenerator struct {
-	ogFetcher *opengraph.Fetcher
+	OGFetcher *opengraph.Fetcher
 }
 
 // NewEnhancedFeedGenerator creates a new enhanced feed generator
 func NewEnhancedFeedGenerator(ogDB *opengraph.Database) *EnhancedFeedGenerator {
 	return &EnhancedFeedGenerator{
-		ogFetcher: opengraph.NewFetcher(ogDB),
+		OGFetcher: opengraph.NewFetcher(ogDB),
 	}
-}
-
-// GetOpenGraphFetcher returns the OpenGraph fetcher for use by providers
-func (efg *EnhancedFeedGenerator) GetOpenGraphFetcher() *opengraph.Fetcher {
-	return efg.ogFetcher
 }
 
 // LogFeedGeneration logs the completion of feed generation

@@ -48,11 +48,6 @@ func NewClient(config *ClientConfig) *Client {
 	}
 }
 
-// Get performs an HTTP GET request with retry logic
-func (c *Client) Get(url string) (*http.Response, error) {
-	return c.GetWithContext(context.Background(), url)
-}
-
 // GetWithContext performs an HTTP GET request with context and retry logic
 func (c *Client) GetWithContext(ctx context.Context, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -61,11 +56,6 @@ func (c *Client) GetWithContext(ctx context.Context, url string) (*http.Response
 	}
 
 	return c.doWithRetry(req)
-}
-
-// Post performs an HTTP POST request with retry logic
-func (c *Client) Post(url string, contentType string, body io.Reader) (*http.Response, error) {
-	return c.PostWithContext(context.Background(), url, contentType, body)
 }
 
 // PostWithContext performs an HTTP POST request with context and retry logic

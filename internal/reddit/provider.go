@@ -72,7 +72,7 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 
 	// Create enhanced feed generator
 	feedHelper := feed.NewEnhancedFeedGenerator(p.GetOpenGraphDB())
-	feedGenerator := NewFeedGenerator(feedHelper.GetOpenGraphFetcher())
+	feedGenerator := NewFeedGenerator(feedHelper.OGFetcher)
 
 	// Ensure output directory exists
 	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {

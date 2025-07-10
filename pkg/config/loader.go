@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -56,7 +57,7 @@ func loadFromURL(url string, timeout time.Duration, target interface{}) error {
 	httpConfig.Timeout = timeout
 
 	client := httputil.NewClient(httpConfig)
-	resp, err := client.Get(url)
+	resp, err := client.GetWithContext(context.Background(), url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch config from URL: %w", err)
 	}

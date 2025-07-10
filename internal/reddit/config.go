@@ -1,6 +1,7 @@
 package reddit
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -37,7 +38,7 @@ func LoadConfig(configURL string) error {
 // loadConfigFromURL loads configuration from a remote URL
 func loadConfigFromURL(url string) error {
 	client := httputil.NewClient(httputil.DefaultConfig())
-	resp, err := client.Get(url)
+	resp, err := client.GetWithContext(context.Background(), url)
 	if err != nil {
 		return fmt.Errorf("failed to fetch config from URL: %w", err)
 	}

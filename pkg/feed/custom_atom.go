@@ -3,12 +3,10 @@ package feed
 import (
 	"encoding/xml"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/gorilla/feeds"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // CustomAtomCategory represents a category in Atom feed
@@ -121,34 +119,6 @@ func ConvertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *
 	return customFeed
 }
 
-// SaveCustomAtomToFile saves a custom Atom feed to a file
-func (g *Generator) SaveCustomAtomToFile(items []Item, itemCategories map[string][]string, outputPath string) error {
-	// Generate custom Atom content
-	atomContent, err := g.GenerateCustomAtom(items, itemCategories)
-	if err != nil {
-		return fmt.Errorf("failed to generate custom atom feed: %w", err)
-	}
-
-	// Ensure output directory exists
-	if err := filesystem.EnsureDirectoryExists(outputPath); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Write to file
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(atomContent)
-	if err != nil {
-		return fmt.Errorf("failed to write custom atom feed: %w", err)
-	}
-
-	return nil
-}
-
 // GenerateEnhancedAtom creates an enhanced Atom feed with custom namespace support
 func (g *Generator) GenerateEnhancedAtom(items []Item, customNamespace string) (string, error) {
 	now := time.Now()
@@ -190,32 +160,4 @@ func (g *Generator) GenerateEnhancedAtom(items []Item, customNamespace string) (
 
 	atom.WriteString(`</feed>`)
 	return atom.String(), nil
-}
-
-// SaveEnhancedAtomToFile saves an enhanced Atom feed to a file
-func (g *Generator) SaveEnhancedAtomToFile(items []Item, customNamespace, outputPath string) error {
-	// Generate enhanced Atom content
-	atomContent, err := g.GenerateEnhancedAtom(items, customNamespace)
-	if err != nil {
-		return fmt.Errorf("failed to generate enhanced atom feed: %w", err)
-	}
-
-	// Ensure output directory exists
-	if err := filesystem.EnsureDirectoryExists(outputPath); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	// Write to file
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(atomContent)
-	if err != nil {
-		return fmt.Errorf("failed to write enhanced atom feed: %w", err)
-	}
-
-	return nil
 }
