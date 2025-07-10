@@ -1,6 +1,6 @@
 # Feed Forge
 
-A unified tool to generate RSS feeds from various sources, combining the functionality of `hntop-rss` and `red-rss`.
+A unified tool to generate RSS feeds from various sources
 
 ## Features
 
@@ -55,7 +55,7 @@ Create a `config.yaml` file to configure the providers:
 ```yaml
 reddit:
   client_id: "your-reddit-client-id"
-  client_secret: ""  # Leave empty for installed apps
+  client_secret: "" # Leave empty for installed apps
   redirect_uri: "http://localhost:8080/callback"
   feed_type: "atom"
   enhanced_atom: true
@@ -152,9 +152,3 @@ feed-forge/
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- Based on the original `hntop-rss` and `red-rss` projects
-- Uses the `llm-shared` development guidelines
-- Built with Go and follows Go best practices
