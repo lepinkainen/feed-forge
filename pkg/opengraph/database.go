@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sync"
 
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/interfaces"
 	_ "modernc.org/sqlite"
 )
 
@@ -18,6 +18,11 @@ type Database struct {
 	dbPath string
 }
 
+// Ensure Database implements interfaces
+var _ interfaces.Database = (*Database)(nil)
+var _ interfaces.StatsProvider = (*Database)(nil)
+var _ interfaces.CleanupProvider = (*Database)(nil)
+
 // NewDatabase creates a new OpenGraph database instance
 func NewDatabase(dbPath string) (*Database, error) {
 	if dbPath == "" {
@@ -26,8 +31,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	// Ensure directory exists
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := filesystem.EnsureDirectoryExists(dbPath); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
 
@@ -159,8 +163,8 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 	return nil
 }
 
-// CleanupExpiredEntries removes expired cache entries
-func (db *Database) CleanupExpiredEntries() error {
+// CleanupExpired removes expired cache entries
+func (db *Database) CleanupExpired() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
@@ -178,8 +182,8 @@ func (db *Database) CleanupExpiredEntries() error {
 	return nil
 }
 
-// GetCacheStats returns statistics about the cache
-func (db *Database) GetCacheStats() (map[string]interface{}, error) {
+// GetStats returns statistics about the cache
+func (db *Database) GetStats() (map[string]interface{}, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 

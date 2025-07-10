@@ -53,7 +53,7 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 // GenerateFeed implements the FeedProvider interface
 func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Clean up expired entries using base provider
-	if err := p.CleanupExpiredEntries(); err != nil {
+	if err := p.CleanupExpired(); err != nil {
 		// Non-fatal error, just warn
 	}
 

@@ -44,7 +44,7 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	}
 
 	// Clean up expired entries using base provider
-	if err := p.CleanupExpiredEntries(); err != nil {
+	if err := p.CleanupExpired(); err != nil {
 		// Non-fatal error, just warn
 	}
 

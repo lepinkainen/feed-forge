@@ -47,7 +47,7 @@ func InitializeProviderDatabases(contentDBName string, useContentDB bool) (*Prov
 	}
 
 	// Clean up expired OpenGraph cache entries
-	if err := pd.OpenGraphDB.CleanupExpiredEntries(); err != nil {
+	if err := pd.OpenGraphDB.CleanupExpired(); err != nil {
 		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", err)
 	}
 

@@ -89,10 +89,10 @@ func (b *BaseProvider) EnsureOutputDirectory(outfile string) error {
 	return filesystem.EnsureDirectoryExists(outfile)
 }
 
-// CleanupExpiredEntries removes expired OpenGraph cache entries
-func (b *BaseProvider) CleanupExpiredEntries() error {
+// CleanupExpired removes expired OpenGraph cache entries
+func (b *BaseProvider) CleanupExpired() error {
 	if b.ogDB == nil {
 		return nil
 	}
-	return b.ogDB.CleanupExpiredEntries()
+	return b.ogDB.CleanupExpired()
 }

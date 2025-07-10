@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"sync"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/interfaces"
 )
 
 // Database represents a thread-safe database connection
@@ -12,6 +14,9 @@ type Database struct {
 	mu     sync.RWMutex
 	dbPath string
 }
+
+// Ensure Database implements interfaces.Database
+var _ interfaces.Database = (*Database)(nil)
 
 // Config holds database configuration
 type Config struct {

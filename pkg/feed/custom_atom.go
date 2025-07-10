@@ -4,11 +4,11 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/feeds"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // CustomAtomCategory represents a category in Atom feed
@@ -62,7 +62,7 @@ func (g *Generator) GenerateCustomAtom(items []Item, itemCategories map[string][
 	}
 
 	// Convert to custom Atom
-	customFeed := g.convertToCustomAtom(feed, itemCategories)
+	customFeed := ConvertToCustomAtom(feed, itemCategories)
 
 	// Convert to XML
 	xmlData, err := xml.MarshalIndent(customFeed, "", "  ")
@@ -121,11 +121,6 @@ func ConvertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *
 	return customFeed
 }
 
-// convertToCustomAtom converts a standard Feed to a CustomAtomFeed with proper categories
-func (g *Generator) convertToCustomAtom(feed *feeds.Feed, itemCategories map[string][]string) *CustomAtomFeed {
-	return ConvertToCustomAtom(feed, itemCategories)
-}
-
 // SaveCustomAtomToFile saves a custom Atom feed to a file
 func (g *Generator) SaveCustomAtomToFile(items []Item, itemCategories map[string][]string, outputPath string) error {
 	// Generate custom Atom content
@@ -135,8 +130,7 @@ func (g *Generator) SaveCustomAtomToFile(items []Item, itemCategories map[string
 	}
 
 	// Ensure output directory exists
-	outDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := filesystem.EnsureDirectoryExists(outputPath); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -207,8 +201,7 @@ func (g *Generator) SaveEnhancedAtomToFile(items []Item, customNamespace, output
 	}
 
 	// Ensure output directory exists
-	outDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := filesystem.EnsureDirectoryExists(outputPath); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 

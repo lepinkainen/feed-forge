@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/gorilla/feeds"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // Generate creates a feed from the provided items
@@ -48,8 +48,7 @@ func (g *Generator) Generate(items []Item, feedType FeedType) (*feeds.Feed, erro
 // SaveToFile saves the generated feed to a specified file
 func (g *Generator) SaveToFile(feed *feeds.Feed, feedType FeedType, outputPath string) error {
 	// Ensure output directory exists
-	outDir := filepath.Dir(outputPath)
-	if err := os.MkdirAll(outDir, 0755); err != nil {
+	if err := filesystem.EnsureDirectoryExists(outputPath); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -100,7 +99,7 @@ func (g *Generator) ValidateFeed(feed *feeds.Feed) error {
 
 	// Validate feed items
 	for i, item := range feed.Items {
-		if err := g.validateFeedItem(item); err != nil {
+		if err := ValidateFeedItem(item); err != nil {
 			return fmt.Errorf("item %d validation failed: %w", i, err)
 		}
 	}
@@ -123,11 +122,6 @@ func ValidateFeedItem(item *feeds.Item) error {
 	}
 
 	return nil
-}
-
-// validateFeedItem validates individual feed items
-func (g *Generator) validateFeedItem(item *feeds.Item) error {
-	return ValidateFeedItem(item)
 }
 
 // GetMetadata returns metadata about the generated feed

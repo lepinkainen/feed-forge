@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/utils"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
@@ -50,7 +51,7 @@ func NewFetcher(db *Database) *Fetcher {
 // FetchData fetches OpenGraph data from a URL with caching
 func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 	// Validate URL format
-	if !isValidURL(targetURL) {
+	if !utils.IsValidURL(targetURL) {
 		return nil, fmt.Errorf("invalid URL format: %s", targetURL)
 	}
 
@@ -382,7 +383,7 @@ func (f *Fetcher) cleanupData(data *Data) {
 	}
 
 	// Validate image URL
-	if data.Image != "" && !isValidURL(data.Image) {
+	if data.Image != "" && !utils.IsValidURL(data.Image) {
 		slog.Warn("Invalid image URL found, clearing", "url", data.Image)
 		data.Image = ""
 	}
@@ -417,12 +418,6 @@ func (f *Fetcher) convertToUTF8(body []byte, contentType string) (string, error)
 	}
 
 	return string(utf8Bytes), nil
-}
-
-// isValidURL checks if a URL is valid
-func isValidURL(urlStr string) bool {
-	u, err := url.Parse(urlStr)
-	return err == nil && u.Scheme != "" && u.Host != ""
 }
 
 // isBlockedURL checks if a URL is from a domain that blocks external access
