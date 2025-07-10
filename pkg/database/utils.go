@@ -8,20 +8,6 @@ import (
 	"time"
 )
 
-// EnsureDirectoryExists creates the directory for the database file if it doesn't exist
-func EnsureDirectoryExists(dbPath string) error {
-	dir := filepath.Dir(dbPath)
-	if dir == "." {
-		return nil // Current directory
-	}
-
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory %s: %w", dir, err)
-	}
-
-	return nil
-}
-
 // GetDefaultPath returns a default database path in the executable directory
 func GetDefaultPath(filename string) (string, error) {
 	// Get the directory of the executable

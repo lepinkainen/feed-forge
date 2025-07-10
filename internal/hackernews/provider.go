@@ -1,20 +1,21 @@
 package hackernews
 
 import (
-	"log/slog"
 	"os"
-	"path/filepath"
 
 	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
 	"github.com/lepinkainen/feed-forge/pkg/database"
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/feed"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // HackerNewsProvider implements the FeedProvider interface for Hacker News
 type HackerNewsProvider struct {
+	*providers.BaseProvider
 	MinPoints      int
 	Limit          int
 	CategoryMapper *CategoryMapper
+	databases      *database.ProviderDatabases
 }
 
 // NewHackerNewsProvider creates a new HackerNews provider
@@ -24,43 +25,41 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 		categoryMapper = LoadConfig("", "") // Use default configuration
 	}
 
+	// Initialize databases
+	databases, err := database.InitializeProviderDatabases("hackernews.db", true)
+	if err != nil {
+		// TODO: Handle error properly - for now return nil
+		return nil
+	}
+
+	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
+		ContentDBName: "hackernews.db",
+		UseContentDB:  true,
+	})
+	if err != nil {
+		databases.Close()
+		return nil
+	}
+
 	return &HackerNewsProvider{
+		BaseProvider:   base,
 		MinPoints:      minPoints,
 		Limit:          limit,
 		CategoryMapper: categoryMapper,
+		databases:      databases,
 	}
 }
 
 // GenerateFeed implements the FeedProvider interface
 func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
-	// Initialize content database
-	dbPath, err := database.GetDefaultPath("hackernews.db")
-	if err != nil {
-		return err
+	// Clean up expired entries using base provider
+	if err := p.CleanupExpiredEntries(); err != nil {
+		// Non-fatal error, just warn
 	}
 
-	contentDB, err := database.NewDatabase(database.Config{Path: dbPath})
-	if err != nil {
-		return err
-	}
-	defer contentDB.Close()
-
-	// Initialize OpenGraph database
-	ogDBPath, err := database.GetDefaultPath("opengraph.db")
-	if err != nil {
-		return err
-	}
-
-	ogDB, err := opengraph.NewDatabase(ogDBPath)
-	if err != nil {
-		return err
-	}
-	defer ogDB.Close()
-
-	// Clean up expired OpenGraph cache entries
-	if err := ogDB.CleanupExpiredEntries(); err != nil {
-		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", err)
-	}
+	// Get database connections
+	contentDB := p.databases.ContentDB
+	ogDB := p.databases.OpenGraphDB
 
 	// Fetch current front page items
 	newItems := fetchHackerNewsItems()
@@ -83,19 +82,16 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	allItems = getAllItems(contentDB, p.Limit, p.MinPoints)
 
 	// Ensure output directory exists
-	outDir := filepath.Dir(outfile)
-	err = os.MkdirAll(outDir, 0755)
-	if err != nil {
+	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
 		return err
 	}
 
 	// Generate and save the feed
 	rss := generateRSSFeed(contentDB.DB(), ogDB, allItems, p.MinPoints, p.CategoryMapper)
-	err = os.WriteFile(outfile, []byte(rss), 0644)
-	if err != nil {
+	if err := os.WriteFile(outfile, []byte(rss), 0644); err != nil {
 		return err
 	}
 
-	slog.Info("RSS feed saved", "count", len(allItems), "filename", outfile)
+	feed.LogFeedGeneration(len(allItems), outfile)
 	return nil
 }

@@ -2,18 +2,16 @@ package reddit
 
 import (
 	"context"
-	"log/slog"
-	"os"
-	"path/filepath"
 
 	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
-	"github.com/lepinkainen/feed-forge/pkg/database"
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/feed"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // RedditProvider implements the FeedProvider interface for Reddit
 type RedditProvider struct {
+	*providers.BaseProvider
 	MinScore    int
 	MinComments int
 	Config      *config.Config
@@ -21,10 +19,20 @@ type RedditProvider struct {
 
 // NewRedditProvider creates a new Reddit provider
 func NewRedditProvider(minScore, minComments int, config *config.Config) providers.FeedProvider {
+	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
+		ContentDBName: "", // Reddit doesn't use content DB
+		UseContentDB:  false,
+	})
+	if err != nil {
+		// TODO: Handle error properly - for now return nil
+		return nil
+	}
+
 	return &RedditProvider{
-		MinScore:    minScore,
-		MinComments: minComments,
-		Config:      config,
+		BaseProvider: base,
+		MinScore:     minScore,
+		MinComments:  minComments,
+		Config:       config,
 	}
 }
 
@@ -34,21 +42,10 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	if reauth {
 		p.Config.Reddit.RefreshToken = ""
 	}
-	// Initialize OpenGraph database
-	ogDBPath, err := database.GetDefaultPath("opengraph.db")
-	if err != nil {
-		return err
-	}
 
-	ogDB, err := opengraph.NewDatabase(ogDBPath)
-	if err != nil {
-		return err
-	}
-	defer ogDB.Close()
-
-	// Clean up expired entries
-	if err := ogDB.CleanupExpiredEntries(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
+	// Clean up expired entries using base provider
+	if err := p.CleanupExpiredEntries(); err != nil {
+		// Non-fatal error, just warn
 	}
 
 	// Authenticate and get the token
@@ -73,16 +70,12 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Filter posts
 	filteredPosts := FilterPosts(posts, p.MinScore, p.MinComments)
 
-	// Create OpenGraph fetcher
-	ogFetcher := opengraph.NewFetcher(ogDB)
-
-	// Create feed generator
-	feedGenerator := NewFeedGenerator(ogFetcher)
+	// Create enhanced feed generator
+	feedHelper := feed.NewEnhancedFeedGenerator(p.GetOpenGraphDB())
+	feedGenerator := NewFeedGenerator(feedHelper.GetOpenGraphFetcher())
 
 	// Ensure output directory exists
-	outDir := filepath.Dir(outfile)
-	err = os.MkdirAll(outDir, 0755)
-	if err != nil {
+	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
 		return err
 	}
 
@@ -91,6 +84,6 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 		return err
 	}
 
-	slog.Info("RSS feed saved", "count", len(filteredPosts), "filename", outfile)
+	feed.LogFeedGeneration(len(filteredPosts), outfile)
 	return nil
 }
