@@ -1,38 +1,25 @@
 package hackernews
 
 import (
-	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
-	httputil "github.com/lepinkainen/feed-forge/pkg/http"
+	"github.com/lepinkainen/feed-forge/pkg/api"
 )
 
 // fetchHackerNewsItems retrieves current front page items from Algolia API
 func fetchHackerNewsItems() []HackerNewsItem {
 	slog.Debug("Fetching Hacker News items from Algolia API")
 
-	// Create HTTP client with shared utilities
-	client := httputil.NewClient(httputil.DefaultConfig())
-	res, err := client.GetWithContext(context.Background(), "https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100")
-	if err != nil {
-		slog.Error("Failed to fetch Hacker News items", "error", err)
-		return nil
-	}
-	defer func() { _ = res.Body.Close() }()
-
-	if err := httputil.EnsureStatusOK(res); err != nil {
-		slog.Error("HTTP status code error", "error", err)
-		return nil
-	}
-
 	var algoliaResp AlgoliaResponse
-	if err := json.NewDecoder(res.Body).Decode(&algoliaResp); err != nil {
-		slog.Error("Failed to decode JSON response", "error", err)
+	client := &http.Client{Timeout: 30 * time.Second} // Use a standard HTTP client
+	err := api.GetAndDecode(client, "https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100", &algoliaResp, nil)
+	if err != nil {
+		slog.Error("Failed to fetch or decode Hacker News items", "error", err)
 		return nil
 	}
 
@@ -185,34 +172,12 @@ func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[str
 
 // fetchItemStats retrieves current statistics for a single item from Algolia API
 func fetchItemStats(itemID string) statsUpdate {
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	// Fetch current stats from Algolia API using shared HTTP client
 	url := fmt.Sprintf("https://hn.algolia.com/api/v1/items/%s", itemID)
-	client := httputil.NewClient(httputil.DefaultConfig())
-	res, err := client.GetWithContext(ctx, url)
-	if err != nil {
-		return statsUpdate{itemID: itemID, err: err}
-	}
-	defer func() { _ = res.Body.Close() }()
-
-	if res.StatusCode == 429 {
-		slog.Error("Rate limit exceeded (429) from Algolia API", "hn_id", itemID)
-		return statsUpdate{itemID: itemID, err: fmt.Errorf("rate limit exceeded (429)")}
-	}
-
-	if res.StatusCode == 404 {
-		return statsUpdate{itemID: itemID, isDeadItem: true, err: fmt.Errorf("item not found (dead/flagged)")}
-	}
-
-	if res.StatusCode != 200 {
-		return statsUpdate{itemID: itemID, err: fmt.Errorf("HTTP error %d", res.StatusCode)}
-	}
-
+	client := &http.Client{Timeout: 30 * time.Second}
 	var algoliaItem AlgoliaHit
-	if err := json.NewDecoder(res.Body).Decode(&algoliaItem); err != nil {
+	err := api.GetAndDecode(client, url, &algoliaItem, nil)
+	if err != nil {
 		return statsUpdate{itemID: itemID, err: fmt.Errorf("failed to decode JSON: %w", err)}
 	}
 

@@ -2,7 +2,6 @@ package reddit
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/internal/config"
+	"github.com/lepinkainen/feed-forge/pkg/api"
 	"golang.org/x/oauth2"
 )
 
@@ -56,7 +56,7 @@ func NewRedditAPI(client *http.Client) *RedditAPI {
 }
 
 // FetchRedditHomepage fetches posts from the authenticated user's homepage with retry logic
-func (api *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
+func (r *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 	const maxRetries = 3
 	var posts []RedditPost
 	var err error
@@ -68,7 +68,7 @@ func (api *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 			time.Sleep(backoff)
 		}
 
-		posts, err = api.fetchHomepageWithRateLimit()
+		posts, err = r.fetchHomepageWithRateLimit()
 		if err == nil {
 			break
 		}
@@ -93,41 +93,23 @@ func (api *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 }
 
 // fetchHomepageWithRateLimit fetches homepage posts with rate limiting
-func (api *RedditAPI) fetchHomepageWithRateLimit() ([]RedditPost, error) {
-	api.rateLimiter.Wait()
+func (r *RedditAPI) fetchHomepageWithRateLimit() ([]RedditPost, error) {
+	r.rateLimiter.Wait()
 
-	// Reddit API endpoint for user's front page. Limit to 100 posts for a good sample.
-	// For a logged-in user, this is usually accessed via /hot or /best without a subreddit prefix.
-	// Let's use /best as it's often the default sorted homepage.
-	apiURL := "https://oauth.reddit.com/best?limit=100" // User's personalized "best" feed
-
-	req, err := http.NewRequest("GET", apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("User-Agent", api.userAgent)
-
-	resp, err := api.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to make API request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Reddit API returned non-OK status: %s", resp.Status)
-	}
-
+	apiURL := "https://oauth.reddit.com/best?limit=100"
 	var listing RedditListing
-	err = json.NewDecoder(resp.Body).Decode(&listing)
+	headers := map[string]string{"User-Agent": r.userAgent}
+
+	err := api.GetAndDecode(r.client, apiURL, &listing, headers)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode Reddit API response: %w", err)
+		return nil, fmt.Errorf("failed to fetch or decode Reddit homepage: %w", err)
 	}
 
 	return listing.Data.Children, nil
 }
 
 // FetchConcurrentHomepage fetches multiple pages of homepage posts concurrently
-func (api *RedditAPI) FetchConcurrentHomepage(pageCount int) ([]RedditPost, error) {
+func (r *RedditAPI) FetchConcurrentHomepage(pageCount int) ([]RedditPost, error) {
 	if pageCount <= 0 {
 		pageCount = 1
 	}
@@ -144,7 +126,7 @@ func (api *RedditAPI) FetchConcurrentHomepage(pageCount int) ([]RedditPost, erro
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		posts, err := api.fetchHomepageWithRateLimit()
+		posts, err := r.fetchHomepageWithRateLimit()
 		results <- result{posts: posts, err: err}
 	}()
 
@@ -240,5 +222,9 @@ func CreateAuthenticatedClient(ctx context.Context, config *config.Config) *http
 		Scopes: []string{"read"},
 	}
 
-	return oauthConfig.Client(ctx, token)
+	oauthClient := oauthConfig.Client(ctx, token)
+	return &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: oauthClient.Transport,
+	}
 }
