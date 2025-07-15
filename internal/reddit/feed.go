@@ -52,9 +52,9 @@ func (fg *FeedGenerator) GenerateFeed(posts []RedditPost, feedType string) (*fee
 	// Fetch OpenGraph data concurrently
 	var ogData map[string]*opengraph.Data
 	if fg.ogFetcher != nil {
-		slog.Info("Fetching OpenGraph data", "url_count", len(urls))
+		slog.Debug("Fetching OpenGraph data", "url_count", len(urls))
 		ogData = fg.ogFetcher.FetchConcurrent(urls)
-		slog.Info("OpenGraph fetch completed", "results_count", len(ogData))
+		slog.Debug("OpenGraph fetch completed", "results_count", len(ogData))
 		for url, og := range ogData {
 			if og != nil {
 				slog.Debug("OpenGraph data fetched", "url", url, "title", og.Title, "has_description", og.Description != "")
@@ -68,7 +68,7 @@ func (fg *FeedGenerator) GenerateFeed(posts []RedditPost, feedType string) (*fee
 		feed.Items = append(feed.Items, item)
 	}
 
-	slog.Info("Generated feed", "type", feedType, "items", len(feed.Items))
+	slog.Debug("Generated feed", "type", feedType, "items", len(feed.Items))
 	return feed, nil
 }
 
@@ -269,7 +269,7 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 	// Fetch OpenGraph data concurrently
 	var ogData map[string]*opengraph.Data
 	if fg.ogFetcher != nil {
-		slog.Info("Fetching OpenGraph data for custom Atom feed", "url_count", len(urls))
+		slog.Debug("Fetching OpenGraph data for custom Atom feed", "url_count", len(urls))
 		ogData = fg.ogFetcher.FetchConcurrent(urls)
 	}
 

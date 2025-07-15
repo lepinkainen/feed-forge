@@ -153,7 +153,7 @@ func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[str
 				if err != nil {
 					slog.Warn("Failed to delete dead item from database", "error", err, "hn_id", update.itemID)
 				} else {
-					slog.Info("Deleted dead item from database", "hn_id", update.itemID)
+					slog.Debug("Deleted dead item from database", "hn_id", update.itemID)
 					deletedCount++
 				}
 			} else {

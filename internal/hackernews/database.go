@@ -65,7 +65,7 @@ func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[str
 
 		rowsAffected, _ := result.RowsAffected()
 		if rowsAffected > 0 {
-			slog.Info("Processed item (added/updated in DB)", "title", item.ItemTitle, "hn_id", item.ItemID)
+			slog.Debug("Processed item (added/updated in DB)", "title", item.ItemTitle, "hn_id", item.ItemID)
 			updatedItems[item.ItemID] = true
 		}
 	}

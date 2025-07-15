@@ -665,7 +665,7 @@ func (f *Fetcher) FetchConcurrent(urls []string) map[string]*Data {
 	const maxConcurrent = 5
 	semaphore := make(chan struct{}, maxConcurrent)
 
-	slog.Info("Starting concurrent OpenGraph fetch", "total_urls", len(urls))
+	slog.Debug("Starting concurrent OpenGraph fetch", "total_urls", len(urls))
 
 	for _, targetURL := range urls {
 		if targetURL == "" {
@@ -710,6 +710,6 @@ func (f *Fetcher) FetchConcurrent(urls []string) map[string]*Data {
 		}
 	}
 
-	slog.Info("Completed concurrent OpenGraph fetch", "successful_fetches", len(dataMap))
+	slog.Debug("Completed concurrent OpenGraph fetch", "successful_fetches", len(dataMap))
 	return dataMap
 }

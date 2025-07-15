@@ -28,5 +28,5 @@ func NewEnhancedFeedGeneratorWithRedditClient(ogDB *opengraph.Database, redditCl
 
 // LogFeedGeneration logs the completion of feed generation
 func LogFeedGeneration(itemCount int, filename string) {
-	slog.Info("RSS feed saved", "count", itemCount, "filename", filename)
+	slog.Debug("RSS feed saved", "count", itemCount, "filename", filename)
 }

@@ -14,6 +14,7 @@ import (
 // CLI structure
 var CLI struct {
 	Config string `help:"Configuration file path" default:"config.yaml"`
+	Debug  bool   `help:"Enable debug logging" default:"false"`
 
 	Reddit struct {
 		Outfile     string `help:"Output file path" short:"o" default:"reddit.xml"`
@@ -32,6 +33,13 @@ var CLI struct {
 func main() {
 	ctx := kong.Parse(&CLI)
 
+	// Configure logging level based on debug flag
+	if CLI.Debug {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	} else {
+		slog.SetLogLoggerLevel(slog.LevelWarn)
+	}
+
 	// Load configuration
 	cfg, err := config.LoadConfig(CLI.Config)
 	if err != nil {
@@ -43,7 +51,7 @@ func main() {
 
 	switch ctx.Command() {
 	case "reddit":
-		slog.Info("Generating Reddit feed...")
+		slog.Debug("Generating Reddit feed...")
 
 		// Override config with CLI flags if provided
 		minScore := CLI.Reddit.MinScore
@@ -58,7 +66,7 @@ func main() {
 		}
 
 	case "hacker-news":
-		slog.Info("Generating Hacker News feed...")
+		slog.Debug("Generating Hacker News feed...")
 
 		// Override config with CLI flags if provided
 		minPoints := CLI.HackerNews.MinPoints

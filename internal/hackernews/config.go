@@ -92,7 +92,7 @@ func LoadConfig(configPath, configURL string) *CategoryMapper {
 		if err != nil {
 			slog.Warn("Failed to load local config, trying remote", "error", err)
 		} else {
-			slog.Info("Successfully loaded config from local file", "path", configPath)
+			slog.Debug("Successfully loaded config from local file", "path", configPath)
 		}
 	}
 
@@ -108,13 +108,13 @@ func LoadConfig(configPath, configURL string) *CategoryMapper {
 		if err != nil {
 			slog.Warn("Failed to load remote config, domain mapping will be disabled", "error", err)
 		} else {
-			slog.Info("Successfully loaded config from remote URL", "url", url)
+			slog.Debug("Successfully loaded config from remote URL", "url", url)
 		}
 	}
 
 	// Return nil if no configuration could be loaded
 	if config == nil {
-		slog.Info("No domain configuration available, domain mapping disabled")
+		slog.Debug("No domain configuration available, domain mapping disabled")
 		return nil
 	}
 

@@ -88,7 +88,7 @@ func (api *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 		return nil, fmt.Errorf("failed to fetch Reddit homepage after %d attempts: %w", maxRetries, err)
 	}
 
-	slog.Info("Successfully fetched Reddit homepage posts", "count", len(posts))
+	slog.Debug("Successfully fetched Reddit homepage posts", "count", len(posts))
 	return posts, nil
 }
 
@@ -174,7 +174,7 @@ func FilterPosts(posts []RedditPost, minScore, minComments int) []RedditPost {
 		}
 	}
 
-	slog.Info("Filtered posts", "original", len(posts), "filtered", len(filtered), "minScore", minScore, "minComments", minComments)
+	slog.Debug("Filtered posts", "original", len(posts), "filtered", len(filtered), "minScore", minScore, "minComments", minComments)
 	return filtered
 }
 
@@ -198,7 +198,7 @@ func UpdateStats(endpoint string, duration time.Duration, success bool) {
 		status = "failure"
 	}
 
-	slog.Info("API call completed",
+	slog.Debug("API call completed",
 		"endpoint", endpoint,
 		"duration", duration,
 		"status", status,

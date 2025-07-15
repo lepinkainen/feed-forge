@@ -43,7 +43,7 @@ func (g *Generator) Generate(items []Item, feedType FeedType) (*feeds.Feed, erro
 		feed.Items = append(feed.Items, feedItem)
 	}
 
-	slog.Info("Generated feed", "type", feedType, "items", len(feed.Items))
+	slog.Debug("Generated feed", "type", feedType, "items", len(feed.Items))
 	return feed, nil
 }
 
@@ -77,7 +77,7 @@ func (g *Generator) GenerateFromFeedItems(items []providers.FeedItem, feedType F
 		feed.Items = append(feed.Items, feedItem)
 	}
 
-	slog.Info("Generated feed from FeedItems", "type", feedType, "items", len(feed.Items))
+	slog.Debug("Generated feed from FeedItems", "type", feedType, "items", len(feed.Items))
 	return feed, nil
 }
 
@@ -117,7 +117,7 @@ func (g *Generator) GenerateEnhancedFromFeedItems(items []providers.FeedItem, fe
 		feed.Items = append(feed.Items, feedItem)
 	}
 
-	slog.Info("Generated enhanced feed from FeedItems", "type", feedType, "items", len(feed.Items))
+	slog.Debug("Generated enhanced feed from FeedItems", "type", feedType, "items", len(feed.Items))
 	return feed, itemCategories, nil
 }
 
@@ -175,7 +175,7 @@ func (g *Generator) GenerateWithOpenGraph(items []providers.FeedItem, feedType F
 		feed.Items = append(feed.Items, feedItem)
 	}
 
-	slog.Info("Generated OpenGraph-enhanced feed from FeedItems", "type", feedType, "items", len(feed.Items))
+	slog.Debug("Generated OpenGraph-enhanced feed from FeedItems", "type", feedType, "items", len(feed.Items))
 	return feed, itemCategories, nil
 }
 

@@ -14,12 +14,12 @@ import (
 func LoadConfig(configURL string) error {
 	// Try remote configuration first if URL is provided
 	if configURL != "" {
-		slog.Info("Attempting to load config from URL", "url", configURL)
+		slog.Debug("Attempting to load config from URL", "url", configURL)
 		err := loadConfigFromURL(configURL)
 		if err != nil {
 			slog.Warn("Failed to load config from URL, falling back to local file", "error", err)
 		} else {
-			slog.Info("Successfully loaded config from URL")
+			slog.Debug("Successfully loaded config from URL")
 			return nil
 		}
 	}
@@ -31,7 +31,7 @@ func LoadConfig(configURL string) error {
 		return err
 	}
 
-	slog.Info("Successfully loaded config from file")
+	slog.Debug("Successfully loaded config from file")
 	return nil
 }
 
