@@ -44,6 +44,24 @@ func NewDatabase(config Config) (*Database, error) {
 		return nil, err
 	}
 
+	// Configure SQLite for better concurrency and performance (if using SQLite)
+	if config.Driver == "sqlite" {
+		pragmas := []string{
+			"PRAGMA journal_mode=WAL",    // Enable WAL mode for concurrent readers/writers
+			"PRAGMA busy_timeout=5000",   // 5 second timeout for lock contention
+			"PRAGMA synchronous=NORMAL",  // Balance between performance and safety
+			"PRAGMA temp_store=memory",   // Store temp tables in memory
+			"PRAGMA mmap_size=268435456", // 256MB memory mapped I/O
+		}
+
+		for _, pragma := range pragmas {
+			if _, err := db.Exec(pragma); err != nil {
+				db.Close()
+				return nil, err
+			}
+		}
+	}
+
 	// Configure connection pool
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)

@@ -40,6 +40,26 @@ func NewDatabase(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
+	// Configure SQLite for better concurrency and performance
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",    // Enable WAL mode for concurrent readers/writers
+		"PRAGMA busy_timeout=5000",   // 5 second timeout for lock contention
+		"PRAGMA synchronous=NORMAL",  // Balance between performance and safety
+		"PRAGMA temp_store=memory",   // Store temp tables in memory
+		"PRAGMA mmap_size=268435456", // 256MB memory mapped I/O
+	}
+
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
+		}
+	}
+
+	// Configure connection pool
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
+
 	// Test the connection
 	if err := db.Ping(); err != nil {
 		db.Close()

@@ -59,6 +59,10 @@ func main() {
 
 		// Create Reddit provider
 		provider = reddit.NewRedditProvider(minScore, minComments, cfg)
+		if provider == nil {
+			slog.Error("Failed to create Reddit provider")
+			os.Exit(1)
+		}
 
 		if err := provider.GenerateFeed(CLI.Reddit.Outfile, CLI.Reddit.Reauth); err != nil {
 			slog.Error("Failed to generate Reddit feed", "error", err)
@@ -74,6 +78,10 @@ func main() {
 
 		// Load category mapper (for now, pass nil - will be improved later)
 		provider = hackernews.NewHackerNewsProvider(minPoints, limit, nil)
+		if provider == nil {
+			slog.Error("Failed to create Hacker News provider")
+			os.Exit(1)
+		}
 
 		if err := provider.GenerateFeed(CLI.HackerNews.Outfile, false); err != nil {
 			slog.Error("Failed to generate Hacker News feed", "error", err)

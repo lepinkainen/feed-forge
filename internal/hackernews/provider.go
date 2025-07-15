@@ -1,6 +1,7 @@
 package hackernews
 
 import (
+	"log/slog"
 	"os"
 
 	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
@@ -28,7 +29,7 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 	// Initialize databases
 	databases, err := database.InitializeProviderDatabases("hackernews.db", true)
 	if err != nil {
-		// TODO: Handle error properly - for now return nil
+		slog.Error("Failed to initialize Hacker News databases", "error", err)
 		return nil
 	}
 
@@ -37,6 +38,7 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 		UseContentDB:  true,
 	})
 	if err != nil {
+		slog.Error("Failed to initialize Hacker News base provider", "error", err)
 		databases.Close()
 		return nil
 	}
