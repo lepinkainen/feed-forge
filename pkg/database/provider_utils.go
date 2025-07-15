@@ -3,6 +3,7 @@ package database
 import (
 	"log/slog"
 
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
@@ -36,7 +37,7 @@ func InitializeProviderDatabases(contentDBName string, useContentDB bool) (*Prov
 	pd := &ProviderDatabases{}
 
 	// Initialize OpenGraph database (all providers use this)
-	ogDBPath, err := GetDefaultPath("opengraph.db")
+	ogDBPath, err := filesystem.GetDefaultPath("opengraph.db")
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +54,7 @@ func InitializeProviderDatabases(contentDBName string, useContentDB bool) (*Prov
 
 	// Initialize content database if needed
 	if useContentDB && contentDBName != "" {
-		contentDBPath, err := GetDefaultPath(contentDBName)
+		contentDBPath, err := filesystem.GetDefaultPath(contentDBName)
 		if err != nil {
 			pd.OpenGraphDB.Close()
 			return nil, err

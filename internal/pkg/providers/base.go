@@ -2,6 +2,7 @@ package providers
 
 import (
 	"github.com/lepinkainen/feed-forge/pkg/database"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
@@ -26,7 +27,7 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	base := &BaseProvider{}
 
 	// Initialize OpenGraph database (all providers use this)
-	ogDBPath, err := database.GetDefaultPath("opengraph.db")
+	ogDBPath, err := filesystem.GetDefaultPath("opengraph.db")
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +39,7 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 
 	// Initialize content database if needed
 	if dbConfig.UseContentDB && dbConfig.ContentDBName != "" {
-		contentDBPath, err := database.GetDefaultPath(dbConfig.ContentDBName)
+		contentDBPath, err := filesystem.GetDefaultPath(dbConfig.ContentDBName)
 		if err != nil {
 			base.OgDB.Close()
 			return nil, err

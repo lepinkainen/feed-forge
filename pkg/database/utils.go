@@ -6,18 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 )
 
 // GetDefaultPath returns a default database path in the executable directory
 func GetDefaultPath(filename string) (string, error) {
-	// Get the directory of the executable
-	exePath, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("failed to get executable path: %w", err)
-	}
-
-	exeDir := filepath.Dir(exePath)
-	return filepath.Join(exeDir, filename), nil
+	return filesystem.GetDefaultPath(filename)
 }
 
 // BackupDatabase creates a backup of the database file

@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/spf13/viper"
 )
 
@@ -42,6 +44,14 @@ func LoadConfig(path string) (*Config, error) {
 		path = "config.yaml"
 	}
 
+	// If path is relative, resolve it relative to executable directory
+	if !filepath.IsAbs(path) {
+		if execPath, err := filesystem.GetDefaultPath(path); err == nil {
+			path = execPath
+		}
+		// If executable path detection fails, use original path (current directory)
+	}
+
 	viper.SetConfigFile(path)
 	viper.SetConfigType("yaml")
 
@@ -76,6 +86,14 @@ func LoadConfig(path string) (*Config, error) {
 func SaveConfig(config *Config, path string) error {
 	if path == "" {
 		path = "config.yaml"
+	}
+
+	// If path is relative, resolve it relative to executable directory
+	if !filepath.IsAbs(path) {
+		if execPath, err := filesystem.GetDefaultPath(path); err == nil {
+			path = execPath
+		}
+		// If executable path detection fails, use original path (current directory)
 	}
 
 	viper.SetConfigFile(path)
