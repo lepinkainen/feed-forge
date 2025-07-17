@@ -34,7 +34,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 ### Core Components
 
-**Provider Interface** (`internal/pkg/providers/provider.go`):
+**Provider Interface** (`pkg/providers/provider.go`):
 
 - Core method: `GenerateFeed(outfile string, reauth bool) error`
 - Implemented by Reddit and Hacker News providers
@@ -60,11 +60,14 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Shared Package Libraries**:
 
+- `pkg/api/` - Enhanced HTTP client with rate limiting, retries, and standardized error handling
+- `pkg/config/` - Configuration loading utilities with URL/file fallback support
 - `pkg/database/` - SQLite caching, provider utilities, and database interfaces
-- `pkg/feed/` - Atom feed generation, custom XML formatting, and feed helpers
+- `pkg/feed/` - Atom feed generation, enhanced templates, custom XML formatting, and feed helpers
 - `pkg/http/` - HTTP client utilities and response handling
 - `pkg/opengraph/` - OpenGraph metadata fetching and caching
 - `pkg/filesystem/` - File system utilities and path management
+- `pkg/providers/` - Provider interfaces and base implementations
 - `pkg/utils/` - URL utilities and common helper functions
 - `pkg/testutil/` - Golden file testing utilities
 - `pkg/interfaces/` - Shared interface definitions
@@ -83,17 +86,30 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - OpenGraph metadata caching (`pkg/opengraph/`)
 - Persistent storage for feed optimization
 
-**Feed Generation**:
+**Enhanced Feed Generation**:
 
-- Custom Atom feed format with enhanced metadata
-- OpenGraph integration for rich content
+- Configurable enhanced Atom templates with provider-specific customization
+- Multiple feed formats: standard Atom, enhanced Atom with custom namespaces
+- OpenGraph integration for rich content with concurrent fetching
+- Provider-specific metadata in custom XML namespaces (reddit:, hn:)
 - Configurable filtering (score, comments, points)
+- Support for multiple link types, enclosures, and extended author information
 
 ## Common Development Patterns
 
-**Error Handling**: Use `log/slog` for structured logging throughout the codebase
+**Error Handling**: Use `log/slog` for structured logging throughout the codebase. Enhanced HTTP client provides standardized error handling with retry logic and structured error types.
 
-**Configuration**: All providers read from unified `config.yaml` structure with Viper
+**HTTP Client Usage**: Always use `pkg/api` enhanced clients for API calls. Provider-specific clients available:
+- `api.NewRedditClient(baseClient)` - Reddit-optimized with 1-second rate limiting
+- `api.NewHackerNewsClient()` - HackerNews-optimized with conservative rate limiting
+- `api.NewGenericClient()` - General purpose with minimal configuration
+
+**Feed Generation**: Use enhanced Atom templates for rich feeds:
+- `feed.RedditEnhancedAtomConfig()` - Reddit-specific configuration
+- `feed.HackerNewsEnhancedAtomConfig()` - HackerNews-specific configuration
+- `feed.DefaultEnhancedAtomConfig()` - Base configuration for new providers
+
+**Configuration**: All providers use shared configuration utilities (`pkg/config`) with URL/file fallback, format detection (JSON/YAML), and unified config structure
 
 **Testing**: Use `//go:build !ci` to skip tests in CI environments when needed
 
@@ -107,7 +123,11 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Provider Instantiation**: Each provider is created with CLI flags that override config file values.
 
-**OpenGraph Integration**: Feed items are enhanced with OpenGraph metadata for better client compatibility.
+**Enhanced HTTP Client**: All API calls use `pkg/api` enhanced client with configurable rate limiting, exponential backoff retries, and provider-specific policies
+
+**Enhanced Feed Templates**: Providers use configurable Atom templates (`pkg/feed/enhanced_atom.go`) supporting custom namespaces, multiple links, rich content, and provider-specific metadata
+
+**OpenGraph Integration**: Feed items are enhanced with OpenGraph metadata for better client compatibility, with concurrent fetching and caching.
 
 ## Project Structure
 
@@ -117,16 +137,17 @@ feed-forge/
 ├── internal/
 │   ├── config/                  # Configuration management
 │   ├── hackernews/              # Hacker News provider implementation
-│   ├── reddit/                  # Reddit provider implementation
-│   └── pkg/providers/           # Provider interface and registry
+│   └── reddit/                  # Reddit provider implementation
 ├── pkg/                         # Shared packages
-│   ├── config/                  # Configuration utilities
+│   ├── api/                     # Enhanced HTTP client with rate limiting and retries
+│   ├── config/                  # Configuration loading utilities with fallback support
 │   ├── database/                # SQLite caching and database interfaces
-│   ├── feed/                    # Atom feed generation and custom XML
+│   ├── feed/                    # Enhanced Atom generation, templates, and custom XML
 │   ├── filesystem/              # File system utilities
-│   ├── http/                    # HTTP client and response handling
+│   ├── http/                    # HTTP client utilities and response handling
 │   ├── interfaces/              # Shared interface definitions
-│   ├── opengraph/               # OpenGraph metadata fetching
+│   ├── opengraph/               # OpenGraph metadata fetching and caching
+│   ├── providers/               # Provider interfaces and base implementations
 │   ├── testutil/                # Golden file testing utilities
 │   └── utils/                   # URL and common utilities
 ├── testdata/                    # Test fixtures and golden files
