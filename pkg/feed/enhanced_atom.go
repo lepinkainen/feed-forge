@@ -178,9 +178,6 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 
 		// Summary
 		summary := fmt.Sprintf("Score: %d | Comments: %d", item.Score(), item.CommentCount())
-		if len(item.Categories()) > 0 {
-			summary += fmt.Sprintf(" | Categories: %s", strings.Join(item.Categories(), ", "))
-		}
 		atom.WriteString(fmt.Sprintf(`<summary>%s</summary>`, EscapeXML(summary)))
 
 		// Enclosures if enabled
@@ -299,13 +296,6 @@ func (g *Generator) buildProviderEnhancedContent(item providers.FeedItem, ogData
 	content.WriteString(fmt.Sprintf(`<div class="metadata">
 <p><strong>Score:</strong> %d | <strong>Comments:</strong> %d</p>
 </div>`, item.Score(), item.CommentCount()))
-
-	// Categories
-	if categories := item.Categories(); len(categories) > 0 {
-		content.WriteString(fmt.Sprintf(`<div class="categories">
-<p><strong>Categories:</strong> %s</p>
-</div>`, strings.Join(categories, ", ")))
-	}
 
 	// OpenGraph preview if available
 	if ogDataMap != nil && item.Link() != "" {

@@ -511,11 +511,6 @@ func TestBuildProviderEnhancedContent(t *testing.T) {
 		t.Errorf("buildProviderEnhancedContent() missing comments")
 	}
 
-	// Test categories
-	if !strings.Contains(content, "<strong>Categories:</strong> tech, news") {
-		t.Errorf("buildProviderEnhancedContent() missing categories")
-	}
-
 	// Test OpenGraph preview
 	if !strings.Contains(content, "🔗 Link Preview") {
 		t.Errorf("buildProviderEnhancedContent() missing OpenGraph preview header")

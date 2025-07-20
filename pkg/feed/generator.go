@@ -184,11 +184,6 @@ func (g *Generator) buildEnhancedDescription(item providers.FeedItem, ogDataMap 
 	// Build base description
 	description := fmt.Sprintf("Score: %d | Comments: %d", item.Score(), item.CommentCount())
 
-	// Add categories
-	if categories := item.Categories(); len(categories) > 0 {
-		description += fmt.Sprintf(" | Categories: %s", strings.Join(categories, ", "))
-	}
-
 	// Add OpenGraph preview if available
 	if ogDataMap != nil && item.Link() != "" {
 		if ogData, exists := ogDataMap[item.Link()]; exists && ogData != nil {

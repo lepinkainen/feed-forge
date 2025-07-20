@@ -178,8 +178,8 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 		atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, feedpkg.EscapeXML(content)))
 
 		// Summary
-		summary := fmt.Sprintf("Score: %d, Comments: %d, Subreddit: r/%s",
-			post.Data.Score, post.Data.NumComments, post.Data.Subreddit)
+		summary := fmt.Sprintf("Score: %d, Comments: %d",
+			post.Data.Score, post.Data.NumComments)
 		atom.WriteString(fmt.Sprintf(`<summary>%s</summary>`, feedpkg.EscapeXML(summary)))
 
 		// Add thumbnail as enclosure if available from OpenGraph
