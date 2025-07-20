@@ -7,8 +7,8 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
-	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
 	"github.com/lepinkainen/feed-forge/internal/reddit"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // CLI structure

@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/lepinkainen/feed-forge/internal/config"
-	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // RedditProvider implements the FeedProvider interface for Reddit

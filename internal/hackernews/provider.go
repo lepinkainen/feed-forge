@@ -4,10 +4,10 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // HackerNewsProvider implements the FeedProvider interface for Hacker News

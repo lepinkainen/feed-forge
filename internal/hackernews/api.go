@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
@@ -16,8 +15,8 @@ func fetchHackerNewsItems() []HackerNewsItem {
 	slog.Debug("Fetching Hacker News items from Algolia API")
 
 	var algoliaResp AlgoliaResponse
-	client := &http.Client{Timeout: 30 * time.Second} // Use a standard HTTP client
-	err := api.GetAndDecode(client, "https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100", &algoliaResp, nil)
+	client := api.NewHackerNewsClient() // Use enhanced client with rate limiting
+	err := client.GetAndDecode("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100", &algoliaResp, nil)
 	if err != nil {
 		slog.Error("Failed to fetch or decode Hacker News items", "error", err)
 		return nil
@@ -172,11 +171,11 @@ func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[str
 
 // fetchItemStats retrieves current statistics for a single item from Algolia API
 func fetchItemStats(itemID string) statsUpdate {
-	// Fetch current stats from Algolia API using shared HTTP client
+	// Fetch current stats from Algolia API using enhanced client
 	url := fmt.Sprintf("https://hn.algolia.com/api/v1/items/%s", itemID)
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := api.NewHackerNewsClient() // Use enhanced client with rate limiting and retries
 	var algoliaItem AlgoliaHit
-	err := api.GetAndDecode(client, url, &algoliaItem, nil)
+	err := client.GetAndDecode(url, &algoliaItem, nil)
 	if err != nil {
 		return statsUpdate{itemID: itemID, err: fmt.Errorf("failed to decode JSON: %w", err)}
 	}

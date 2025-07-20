@@ -47,7 +47,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - Supports `reddit` and `hacker-news` subcommands
 - Handles configuration loading and provider instantiation
 
-**Configuration System** (`internal/config/config.go`):
+**Configuration System** (`internal/config/config.go` and `pkg/config/loader.go`):
 
 - Viper-based YAML configuration
 - Unified config structure for all providers
@@ -162,4 +162,4 @@ This project follows `llm-shared` conventions:
 - Use `task build` instead of `go build` to ensure tests and linting
 - Requires Go 1.24+ for compilation and development
 - Tech stack guidelines: `llm-shared/project_tech_stack.md`
-- Function analysis: `go run llm-shared/utils/gofuncs.go -dir .`
+- Function analysis: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`

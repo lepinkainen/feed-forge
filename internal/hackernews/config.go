@@ -1,17 +1,10 @@
 package hackernews
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"os"
 	"strings"
-	"time"
 
-	httputil "github.com/lepinkainen/feed-forge/pkg/http"
+	configloader "github.com/lepinkainen/feed-forge/pkg/config"
 )
 
 // DomainConfig represents the configuration structure for domain mappings
@@ -28,97 +21,30 @@ type CategoryMapper struct {
 // Default configuration URL
 const DefaultConfigURL = "https://raw.githubusercontent.com/lepinkainen/hntop-rss/refs/heads/main/configs/domains.json"
 
-// loadConfigFromURL loads configuration from a remote URL with timeout
-func loadConfigFromURL(url string) (*DomainConfig, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	client := httputil.NewClient(httputil.DefaultConfig())
-	resp, err := client.DoRequest(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch config: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if err := httputil.EnsureStatusOK(resp); err != nil {
-		return nil, fmt.Errorf("config fetch failed: %w", err)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %w", err)
-	}
-
-	var config DomainConfig
-	if err := json.Unmarshal(body, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	return &config, nil
-}
-
-// loadConfigFromFile loads configuration from a local file
-func loadConfigFromFile(filepath string) (*DomainConfig, error) {
-	data, err := os.ReadFile(filepath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	var config DomainConfig
-	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
-	}
-
-	return &config, nil
-}
-
 // LoadConfig loads configuration with fallback priority:
 // 1. Local file (if specified)
 // 2. Remote URL (default or custom)
 // If no configuration can be loaded, returns nil to disable domain mapping
 func LoadConfig(configPath, configURL string) *CategoryMapper {
-	var config *DomainConfig
-	var err error
+	var config DomainConfig
 
-	// Try loading from local file first (if specified)
-	if configPath != "" {
-		slog.Debug("Loading config from local file", "path", configPath)
-		config, err = loadConfigFromFile(configPath)
-		if err != nil {
-			slog.Warn("Failed to load local config, trying remote", "error", err)
-		} else {
-			slog.Debug("Successfully loaded config from local file", "path", configPath)
-		}
+	// Use default URL if none provided
+	url := configURL
+	if url == "" {
+		url = DefaultConfigURL
 	}
 
-	// Try loading from remote URL if local file failed or wasn't specified
-	if config == nil {
-		url := configURL
-		if url == "" {
-			url = DefaultConfigURL
-		}
+	slog.Debug("Loading HackerNews domain config", "path", configPath, "url", url)
 
-		slog.Debug("Loading config from remote URL", "url", url)
-		config, err = loadConfigFromURL(url)
-		if err != nil {
-			slog.Warn("Failed to load remote config, domain mapping will be disabled", "error", err)
-		} else {
-			slog.Debug("Successfully loaded config from remote URL", "url", url)
-		}
-	}
-
-	// Return nil if no configuration could be loaded
-	if config == nil {
-		slog.Debug("No domain configuration available, domain mapping disabled")
+	// Use shared configuration loading utility
+	err := configloader.LoadOrFetch(configPath, url, &config)
+	if err != nil {
+		slog.Warn("Failed to load domain config, domain mapping will be disabled", "error", err)
 		return nil
 	}
 
-	return NewCategoryMapper(config)
+	slog.Debug("Successfully loaded domain configuration")
+	return NewCategoryMapper(&config)
 }
 
 // NewCategoryMapper creates a new CategoryMapper with reverse lookup optimization

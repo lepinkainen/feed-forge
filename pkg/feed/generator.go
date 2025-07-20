@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/gorilla/feeds"
-	"github.com/lepinkainen/feed-forge/internal/pkg/providers"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // Generate creates a feed from the provided items

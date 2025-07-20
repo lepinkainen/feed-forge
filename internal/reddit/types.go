@@ -1,25 +1,11 @@
 package reddit
 
 import (
+	"fmt"
 	"time"
 
 	"golang.org/x/oauth2"
 )
-
-// Config struct to hold application settings and tokens
-type Config struct {
-	ClientID      string    `json:"client_id"`
-	ClientSecret  string    `json:"client_secret"` // This will be empty for "installed app" type
-	RedirectURI   string    `json:"redirect_uri"`
-	AccessToken   string    `json:"access_token"`
-	RefreshToken  string    `json:"refresh_token"`
-	ExpiresAt     time.Time `json:"expires_at"`
-	ScoreFilter   int       `json:"score_filter"`
-	CommentFilter int       `json:"comment_filter"`
-	FeedType      string    `json:"feed_type"`     // "rss" or "atom"
-	EnhancedAtom  bool      `json:"enhanced_atom"` // Use enhanced Atom features
-	OutputPath    string    `json:"output_path"`
-}
 
 // RedditPost represents a simplified Reddit post structure for our needs
 type RedditPost struct {
@@ -65,7 +51,11 @@ func (r *RedditPost) CreatedAt() time.Time {
 }
 
 func (r *RedditPost) Categories() []string {
-	return []string{r.Data.Subreddit}
+	// Return subreddit in r/ format for enhanced Atom generation
+	if r.Data.Subreddit != "" {
+		return []string{fmt.Sprintf("r/%s", r.Data.Subreddit)}
+	}
+	return []string{}
 }
 
 // RedditListing represents the structure of the Reddit API response for listings
@@ -76,14 +66,8 @@ type RedditListing struct {
 	} `json:"data"`
 }
 
-// Global constants
-const (
-	ConfigFileName = "reddit_config.json"
-)
-
 // Global variables
 var (
 	OAuth2Config *oauth2.Config
 	Token        *oauth2.Token
-	GlobalConfig Config
 )

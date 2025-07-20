@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -44,12 +45,18 @@ func LoadConfig(path string) (*Config, error) {
 		path = "config.yaml"
 	}
 
-	// If path is relative, resolve it relative to executable directory
+	// If path is relative, try current directory first, then executable directory
 	if !filepath.IsAbs(path) {
-		if execPath, err := filesystem.GetDefaultPath(path); err == nil {
-			path = execPath
+		// First try the current working directory
+		if _, err := os.Stat(path); err != nil {
+			// If not found in current directory, try executable directory
+			if execPath, err := filesystem.GetDefaultPath(path); err == nil {
+				if _, err := os.Stat(execPath); err == nil {
+					path = execPath
+				}
+			}
+			// If both fail, use original path (current directory) and let Viper handle the error
 		}
-		// If executable path detection fails, use original path (current directory)
 	}
 
 	viper.SetConfigFile(path)
@@ -88,12 +95,18 @@ func SaveConfig(config *Config, path string) error {
 		path = "config.yaml"
 	}
 
-	// If path is relative, resolve it relative to executable directory
+	// If path is relative, try current directory first, then executable directory
 	if !filepath.IsAbs(path) {
-		if execPath, err := filesystem.GetDefaultPath(path); err == nil {
-			path = execPath
+		// First try the current working directory
+		if _, err := os.Stat(path); err != nil {
+			// If not found in current directory, try executable directory
+			if execPath, err := filesystem.GetDefaultPath(path); err == nil {
+				if _, err := os.Stat(execPath); err == nil {
+					path = execPath
+				}
+			}
+			// If both fail, use original path (current directory) and let Viper handle the error
 		}
-		// If executable path detection fails, use original path (current directory)
 	}
 
 	viper.SetConfigFile(path)
