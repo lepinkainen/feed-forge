@@ -36,10 +36,10 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Provider Interface** (`pkg/providers/provider.go`):
 
-- Core method: `GenerateFeed(outfile string, reauth bool) error`
-- Implemented by Reddit and Hacker News providers
-- Includes `FeedItem` interface for standardized feed entry handling
-- Provider registry system for dynamic provider management and factory pattern
+- Core interface: `FeedProvider` with method `GenerateFeed(outfile string, reauth bool) error`
+- `FeedItem` interface for standardized feed entry handling with common fields (Title, Link, Score, etc.)
+- `BaseProvider` struct (`pkg/providers/base.go`) provides common functionality for all providers
+- Provider registry system with factory pattern for dynamic provider management and discovery
 
 **CLI Entry Point** (`cmd/feed-forge/main.go`):
 
@@ -49,9 +49,9 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Configuration System** (`internal/config/config.go` and `pkg/config/loader.go`):
 
-- Viper-based YAML configuration
-- Unified config structure for all providers
-- Automatic config file creation and token persistence
+- Viper-based YAML configuration with fallback to defaults
+- Unified config structure for all providers with CLI flag overrides
+- Automatic config file creation and OAuth2 token persistence
 
 **Provider Implementations**:
 
@@ -74,6 +74,14 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 ### Key Architecture Patterns
 
+**BaseProvider Pattern**:
+
+- All providers inherit from `providers.BaseProvider` with shared database connections
+- `DatabaseConfig` pattern for configuring provider-specific database needs
+- Reddit provider: `UseContentDB: false` (stateless API calls)
+- HackerNews provider: `UseContentDB: true` with "hackernews.db" (story caching)
+- All providers share OpenGraph database for metadata caching
+
 **OAuth2 Authentication Flow** (Reddit):
 
 - Local HTTP server on port 8080 for OAuth callback
@@ -83,8 +91,8 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 **Database Integration**:
 
 - SQLite for caching (`modernc.org/sqlite`)
-- OpenGraph metadata caching (`pkg/opengraph/`)
-- Persistent storage for feed optimization
+- OpenGraph metadata caching (`pkg/opengraph/`) shared across all providers
+- Provider-specific content databases (optional, configurable per provider)
 
 **Enhanced Feed Generation**:
 
@@ -100,16 +108,20 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 **Error Handling**: Use `log/slog` for structured logging throughout the codebase. Enhanced HTTP client provides standardized error handling with retry logic and structured error types.
 
 **HTTP Client Usage**: Always use `pkg/api` enhanced clients for API calls. Provider-specific clients available:
+
 - `api.NewRedditClient(baseClient)` - Reddit-optimized with 1-second rate limiting
 - `api.NewHackerNewsClient()` - HackerNews-optimized with conservative rate limiting
 - `api.NewGenericClient()` - General purpose with minimal configuration
 
 **Feed Generation**: Use enhanced Atom templates for rich feeds:
+
 - `feed.RedditEnhancedAtomConfig()` - Reddit-specific configuration
 - `feed.HackerNewsEnhancedAtomConfig()` - HackerNews-specific configuration
 - `feed.DefaultEnhancedAtomConfig()` - Base configuration for new providers
 
 **Configuration**: All providers use shared configuration utilities (`pkg/config`) with URL/file fallback, format detection (JSON/YAML), and unified config structure
+
+**Provider Factory Pattern**: Use provider registry (`providers.DefaultRegistry`) for dynamic provider discovery and instantiation. New providers register themselves with metadata and factory functions.
 
 **Testing**: Use `//go:build !ci` to skip tests in CI environments when needed
 
@@ -121,7 +133,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Reddit Authentication Gotcha**: The OAuth2 server must be properly shut down after token exchange. The `serverCancel()` call is critical to prevent hanging.
 
-**Provider Instantiation**: Each provider is created with CLI flags that override config file values.
+**Provider Instantiation**: Providers are created using factory functions (e.g., `reddit.NewRedditProvider()`, `hackernews.NewHackerNewsProvider()`) with CLI flags overriding config file values. Each provider inherits from `BaseProvider` with database configuration.
 
 **Enhanced HTTP Client**: All API calls use `pkg/api` enhanced client with configurable rate limiting, exponential backoff retries, and provider-specific policies
 
@@ -158,7 +170,7 @@ feed-forge/
 
 This project follows `llm-shared` conventions:
 
-- Always run `gofmt -w .` after Go code changes
+- Always run `gofmt -w .` after Go code changes (preferred: use `goimports -w .` for automatic import management)
 - Use `task build` instead of `go build` to ensure tests and linting
 - Requires Go 1.24+ for compilation and development
 - Tech stack guidelines: `llm-shared/project_tech_stack.md`
