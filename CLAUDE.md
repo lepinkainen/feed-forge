@@ -19,15 +19,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Run commands**:
 
-- `task run-reddit` - Run Reddit OAuth feed generation
+- `task run-reddit` - Run Reddit OAuth feed generation (uses reddit-oauth)
 - `task run-hackernews` - Run Hacker News feed generation
 
 **Direct execution**:
 
 - `./build/feed-forge reddit-oauth --reauth` - Force Reddit OAuth re-authentication
-- `./build/feed-forge reddit-oauth -o output.xml --min-score 100`
-- `./build/feed-forge reddit-json  -o output.xml --min-score 100`
-- `./build/feed-forge hacker-news -o output.xml --min-points 50`
+- `./build/feed-forge reddit-oauth -o output.xml --min-score 100` - Reddit with OAuth
+- `./build/feed-forge reddit-json -o output.xml --min-score 100` - Reddit public JSON feed
+- `./build/feed-forge hacker-news -o output.xml --min-points 50` - Hacker News feed
 
 ## Architecture Overview
 
@@ -45,7 +45,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 **CLI Entry Point** (`cmd/feed-forge/main.go`):
 
 - Uses Kong for command-line parsing
-- Supports `reddit` and `hacker-news` subcommands
+- Supports `reddit-oauth`, `reddit-json`, and `hacker-news` subcommands
 - Handles configuration loading and provider instantiation
 
 **Configuration System** (`internal/config/config.go` and `pkg/config/loader.go`):
@@ -56,9 +56,9 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Provider Implementations**:
 
-- `internal/reddit-oauth/` - Reddit OAuth2 authentication, API calls, feed generation
-- `internal/reddit-json/` - Reddit JSON feed access, simplified authentication-free approach
-- `internal/hackernews/` - Hacker News API integration, categorization
+- `internal/reddit-oauth/` - Reddit OAuth2 authentication, API calls, feed generation (requires Reddit app credentials)
+- `internal/reddit-json/` - Reddit JSON feed access, simplified authentication-free approach (public feeds only)
+- `internal/hackernews/` - Hacker News API integration, categorization, story caching
 
 **Shared Package Libraries**:
 
@@ -80,7 +80,8 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 - All providers inherit from `providers.BaseProvider` with shared database connections
 - `DatabaseConfig` pattern for configuring provider-specific database needs
-- Reddit provider: `UseContentDB: false` (stateless API calls)
+- Reddit OAuth provider: `UseContentDB: false` (stateless API calls)
+- Reddit JSON provider: `UseContentDB: false` (stateless JSON parsing)
 - HackerNews provider: `UseContentDB: true` with "hackernews.db" (story caching)
 - All providers share OpenGraph database for metadata caching
 
@@ -109,11 +110,13 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Error Handling**: Use `log/slog` for structured logging throughout the codebase. Enhanced HTTP client provides standardized error handling with retry logic and structured error types.
 
-**HTTP Client Usage**: Always use `pkg/api` enhanced clients for API calls. Provider-specific clients available:
+**HTTP Client Usage**: **CRITICAL** - Always use `pkg/api` enhanced clients for API calls. Provider-specific clients with built-in rate limiting and retry policies:
 
 - `api.NewRedditClient(baseClient)` - Reddit-optimized with 1-second rate limiting
 - `api.NewHackerNewsClient()` - HackerNews-optimized with conservative rate limiting
 - `api.NewGenericClient()` - General purpose with minimal configuration
+
+Never make direct HTTP calls - use these enhanced clients to avoid rate limiting and API failures.
 
 **Feed Generation**: Use enhanced Atom templates for rich feeds:
 
@@ -127,7 +130,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Testing**: Use `//go:build !ci` to skip tests in CI environments when needed
 
-**Golden File Testing**: Use `task update-golden` to update test fixtures when implementation changes. Golden files are stored in testdata directories for consistent test results.
+**Golden File Testing**: Use `task update-golden` to update test fixtures when implementation changes are stable and verified. Golden files are stored in testdata directories for consistent test results. Always review golden file diffs before committing - they represent expected output changes.
 
 **Authentication State Management**: Reddit provider manages OAuth2 tokens automatically with graceful fallbacks
 
@@ -135,7 +138,12 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Reddit Authentication Gotcha**: The OAuth2 server must be properly shut down after token exchange. The `serverCancel()` call is critical to prevent hanging.
 
-**Provider Instantiation**: Providers are created using factory functions (e.g., `reddit.NewRedditProvider()`, `hackernews.NewHackerNewsProvider()`) with CLI flags overriding config file values. Each provider inherits from `BaseProvider` with database configuration.
+**Provider Instantiation**: Providers are created using factory functions:
+- Reddit OAuth: `redditoauth.NewRedditProvider()`
+- Reddit JSON: `redditjson.NewRedditProvider()`
+- Hacker News: `hackernews.NewHackerNewsProvider()`
+
+CLI flags override config file values. Each provider inherits from `BaseProvider` with database configuration.
 
 **Enhanced HTTP Client**: All API calls use `pkg/api` enhanced client with configurable rate limiting, exponential backoff retries, and provider-specific policies
 
