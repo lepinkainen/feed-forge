@@ -194,6 +194,12 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string]*opengraph.Data) string {
 	var content strings.Builder
 
+	// Add image if available
+	if imageURL := post.ImageURL(); imageURL != "" {
+		content.WriteString(fmt.Sprintf(`<div><img src="%s" alt="%s" style="max-width: 100%%; height: auto;"/></div><br/>`,
+			html.EscapeString(imageURL), html.EscapeString(post.Data.Title)))
+	}
+
 	// Add selftext HTML content if available (prioritize this over OpenGraph)
 	if post.Data.SelfTextHTML != "" && post.Data.SelfTextHTML != "null" {
 		cleanHTML := fg.cleanRedditHTML(post.Data.SelfTextHTML)
@@ -222,6 +228,9 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 
 // cleanRedditHTML removes Reddit-specific HTML comments and decodes HTML entities
 func (fg *FeedGenerator) cleanRedditHTML(htmlContent string) string {
+	// Fix double-encoded ampersands that come from Reddit's API
+	htmlContent = strings.ReplaceAll(htmlContent, "&amp;amp;", "&amp;")
+
 	// First, decode HTML entities (Reddit sends HTML-encoded content)
 	htmlContent = html.UnescapeString(htmlContent)
 
