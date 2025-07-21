@@ -1,7 +1,7 @@
-package reddit
+package redditjson
 
 import (
-	"context"
+	"fmt"
 
 	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -9,18 +9,25 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-// RedditProvider implements the FeedProvider interface for Reddit
+// constructFeedURL builds the Reddit JSON feed URL from feed ID and username
+func constructFeedURL(feedID, username string) string {
+	return fmt.Sprintf("https://www.reddit.com/.json?feed=%s&user=%s", feedID, username)
+}
+
+// RedditProvider implements the FeedProvider interface for Reddit JSON feeds
 type RedditProvider struct {
 	*providers.BaseProvider
 	MinScore    int
 	MinComments int
+	FeedID      string
+	Username    string
 	Config      *config.Config
 }
 
-// NewRedditProvider creates a new Reddit provider
-func NewRedditProvider(minScore, minComments int, config *config.Config) providers.FeedProvider {
+// NewRedditProvider creates a new Reddit JSON provider
+func NewRedditProvider(minScore, minComments int, feedID, username string, config *config.Config) providers.FeedProvider {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
-		ContentDBName: "", // Reddit doesn't use content DB
+		ContentDBName: "", // Reddit JSON doesn't use content DB
 		UseContentDB:  false,
 	})
 	if err != nil {
@@ -32,36 +39,28 @@ func NewRedditProvider(minScore, minComments int, config *config.Config) provide
 		BaseProvider: base,
 		MinScore:     minScore,
 		MinComments:  minComments,
+		FeedID:       feedID,
+		Username:     username,
 		Config:       config,
 	}
 }
 
 // GenerateFeed implements the FeedProvider interface
 func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
-	// If reauth is requested, clear the refresh token
-	if reauth {
-		p.Config.Reddit.RefreshToken = ""
-	}
+	// reauth parameter is ignored for JSON feeds (no authentication needed)
 
 	// Clean up expired entries using base provider
 	if err := p.CleanupExpired(); err != nil {
 		// Non-fatal error, just warn
 	}
 
-	// Authenticate and get the token
-	token, err := handleAuthentication(p.Config)
-	if err != nil {
-		return err
-	}
+	// Construct feed URL from config parameters
+	feedURL := constructFeedURL(p.FeedID, p.Username)
 
-	// Create authenticated HTTP client
-	ctx := context.Background()
-	client := getOAuthConfig(p.Config).Client(ctx, token)
+	// Create Reddit API client with constructed URL
+	redditAPI := NewRedditAPI(feedURL)
 
-	// Create Reddit API client
-	redditAPI := NewRedditAPI(client)
-
-	// Fetch Reddit homepage posts
+	// Fetch Reddit posts from JSON feed
 	posts, err := redditAPI.FetchRedditHomepage()
 	if err != nil {
 		return err
@@ -70,8 +69,8 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Filter posts
 	filteredPosts := FilterPosts(posts, p.MinScore, p.MinComments)
 
-	// Create enhanced feed generator with authenticated Reddit client
-	feedHelper := feed.NewEnhancedFeedGeneratorWithRedditClient(p.OgDB, client)
+	// Create enhanced feed generator (no authentication needed for JSON feed)
+	feedHelper := feed.NewEnhancedFeedGenerator(p.OgDB)
 	feedGenerator := NewFeedGenerator(feedHelper.OGFetcher)
 
 	// Ensure output directory exists

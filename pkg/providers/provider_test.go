@@ -29,6 +29,7 @@ type mockFeedItem struct {
 	commentCount int
 	createdAt    time.Time
 	categories   []string
+	imageURL     string
 }
 
 func (m *mockFeedItem) Title() string        { return m.title }
@@ -39,6 +40,7 @@ func (m *mockFeedItem) Score() int           { return m.score }
 func (m *mockFeedItem) CommentCount() int    { return m.commentCount }
 func (m *mockFeedItem) CreatedAt() time.Time { return m.createdAt }
 func (m *mockFeedItem) Categories() []string { return m.categories }
+func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
 
 func TestNewProviderRegistry(t *testing.T) {
 	registry := NewProviderRegistry()

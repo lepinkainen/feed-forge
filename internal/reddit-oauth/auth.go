@@ -25,16 +25,16 @@ var (
 
 // handleAuthentication manages OAuth2 authentication flow
 func handleAuthentication(cfg *config.Config) (*oauth2.Token, error) {
-	if cfg.Reddit.RefreshToken == "" {
+	if cfg.RedditOAuth.RefreshToken == "" {
 		slog.Info("No refresh token found, starting browser authentication")
 		return AuthenticateUser(cfg)
 	}
 
 	slog.Info("Refresh token found, attempting to refresh access token")
 	token := &oauth2.Token{
-		RefreshToken: cfg.Reddit.RefreshToken,
-		AccessToken:  cfg.Reddit.AccessToken,
-		Expiry:       cfg.Reddit.ExpiresAt,
+		RefreshToken: cfg.RedditOAuth.RefreshToken,
+		AccessToken:  cfg.RedditOAuth.AccessToken,
+		Expiry:       cfg.RedditOAuth.ExpiresAt,
 	}
 
 	if !token.Valid() {
@@ -96,9 +96,9 @@ func AuthenticateUser(cfg *config.Config) (*oauth2.Token, error) {
 		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
 	}
 
-	cfg.Reddit.AccessToken = token.AccessToken
-	cfg.Reddit.RefreshToken = token.RefreshToken
-	cfg.Reddit.ExpiresAt = token.Expiry
+	cfg.RedditOAuth.AccessToken = token.AccessToken
+	cfg.RedditOAuth.RefreshToken = token.RefreshToken
+	cfg.RedditOAuth.ExpiresAt = token.Expiry
 	if err := config.SaveConfig(cfg, ""); err != nil {
 		return nil, fmt.Errorf("failed to save config: %w", err)
 	}
@@ -205,9 +205,9 @@ func RefreshAccessToken(cfg *config.Config, token *oauth2.Token) (*oauth2.Token,
 		return nil, fmt.Errorf("failed to get new token from refresh token: %w", err)
 	}
 
-	cfg.Reddit.AccessToken = newToken.AccessToken
-	cfg.Reddit.RefreshToken = newToken.RefreshToken
-	cfg.Reddit.ExpiresAt = newToken.Expiry
+	cfg.RedditOAuth.AccessToken = newToken.AccessToken
+	cfg.RedditOAuth.RefreshToken = newToken.RefreshToken
+	cfg.RedditOAuth.ExpiresAt = newToken.Expiry
 
 	if err := config.SaveConfig(cfg, ""); err != nil {
 		return nil, fmt.Errorf("failed to save updated config: %w", err)
@@ -219,9 +219,9 @@ func RefreshAccessToken(cfg *config.Config, token *oauth2.Token) (*oauth2.Token,
 
 func getOAuthConfig(cfg *config.Config) *oauth2.Config {
 	return &oauth2.Config{
-		ClientID:     cfg.Reddit.ClientID,
-		ClientSecret: cfg.Reddit.ClientSecret,
-		RedirectURL:  cfg.Reddit.RedirectURI,
+		ClientID:     cfg.RedditOAuth.ClientID,
+		ClientSecret: cfg.RedditOAuth.ClientSecret,
+		RedirectURL:  cfg.RedditOAuth.RedirectURI,
 		Scopes:       []string{"identity", "read", "history"},
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.reddit.com/api/v1/authorize",

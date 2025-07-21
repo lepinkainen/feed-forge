@@ -96,16 +96,16 @@ func UpdateStats(endpoint string, duration time.Duration, success bool) {
 func CreateAuthenticatedClient(ctx context.Context, config *config.Config) *http.Client {
 	// Create OAuth2 token from config
 	token := &oauth2.Token{
-		AccessToken:  config.Reddit.AccessToken,
-		RefreshToken: config.Reddit.RefreshToken,
-		Expiry:       config.Reddit.ExpiresAt,
+		AccessToken:  config.RedditOAuth.AccessToken,
+		RefreshToken: config.RedditOAuth.RefreshToken,
+		Expiry:       config.RedditOAuth.ExpiresAt,
 	}
 
 	// Create OAuth2 config
 	oauthConfig := &oauth2.Config{
-		ClientID:     config.Reddit.ClientID,
-		ClientSecret: config.Reddit.ClientSecret,
-		RedirectURL:  config.Reddit.RedirectURI,
+		ClientID:     config.RedditOAuth.ClientID,
+		ClientSecret: config.RedditOAuth.ClientSecret,
+		RedirectURL:  config.RedditOAuth.RedirectURI,
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.reddit.com/api/v1/authorize",
 			TokenURL: "https://www.reddit.com/api/v1/access_token",

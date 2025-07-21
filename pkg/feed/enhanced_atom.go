@@ -111,10 +111,10 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 
 	// Build feed opening tag with namespace
 	if config.CustomNamespace != "" && config.CustomNamespaceURI != "" {
-		atom.WriteString(fmt.Sprintf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:%s="%s">`,
+		atom.WriteString(fmt.Sprintf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:%s="%s" xmlns:media="http://search.yahoo.com/mrss/">`,
 			config.CustomNamespace, config.CustomNamespaceURI))
 	} else {
-		atom.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom">`)
+		atom.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">`)
 	}
 
 	// Feed metadata
@@ -184,6 +184,9 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 		if config.Enclosures && ogDataMap != nil {
 			g.generateEnclosures(&atom, item, ogDataMap)
 		}
+
+		// Media thumbnails for Reddit posts with images
+		g.generateMediaThumbnail(&atom, item)
 
 		atom.WriteString(`</entry>`)
 	}
@@ -333,4 +336,14 @@ func (g *Generator) buildProviderEnhancedContent(item providers.FeedItem, ogData
 	content.WriteString(`</div>`)
 
 	return content.String()
+}
+
+// generateMediaThumbnail adds media:thumbnail element for posts with images
+func (g *Generator) generateMediaThumbnail(atom *strings.Builder, item providers.FeedItem) {
+	imageURL := item.ImageURL()
+	if imageURL == "" {
+		return
+	}
+
+	atom.WriteString(fmt.Sprintf(`<media:thumbnail url="%s"/>`, EscapeXML(imageURL)))
 }

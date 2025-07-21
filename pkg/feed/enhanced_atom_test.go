@@ -20,6 +20,7 @@ type mockFeedItem struct {
 	commentCount int
 	createdAt    time.Time
 	categories   []string
+	imageURL     string
 }
 
 func (m *mockFeedItem) Title() string        { return m.title }
@@ -30,6 +31,112 @@ func (m *mockFeedItem) Score() int           { return m.score }
 func (m *mockFeedItem) CommentCount() int    { return m.commentCount }
 func (m *mockFeedItem) CreatedAt() time.Time { return m.createdAt }
 func (m *mockFeedItem) Categories() []string { return m.categories }
+func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
+
+// Test media thumbnail in full feed generation
+func TestGenerateEnhancedAtomWithConfig_MediaThumbnail(t *testing.T) {
+	g := NewGenerator("Test Feed", "https://example.com", "test@example.com", "Test Author")
+	config := DefaultEnhancedAtomConfig()
+	config.Title = "Test Enhanced Feed"
+
+	items := []providers.FeedItem{
+		&mockFeedItem{
+			title:        "Post with Image",
+			link:         "https://example.com/post",
+			commentsLink: "https://example.com/post/comments",
+			author:       "testuser",
+			score:        100,
+			commentCount: 20,
+			createdAt:    time.Date(2023, 1, 15, 10, 30, 0, 0, time.UTC),
+			categories:   []string{"test"},
+			imageURL:     "https://i.redd.it/test123.jpg",
+		},
+		&mockFeedItem{
+			title:        "Post without Image",
+			link:         "https://example.com/post2",
+			commentsLink: "https://example.com/post2/comments",
+			author:       "testuser2",
+			score:        50,
+			commentCount: 10,
+			createdAt:    time.Date(2023, 1, 16, 10, 30, 0, 0, time.UTC),
+			categories:   []string{"test"},
+			imageURL:     "", // No image
+		},
+	}
+
+	feed, err := g.GenerateEnhancedAtomWithConfig(items, config, nil)
+	if err != nil {
+		t.Errorf("GenerateEnhancedAtomWithConfig() error = %v", err)
+		return
+	}
+
+	// Test that media namespace is included
+	if !strings.Contains(feed, `xmlns:media="http://search.yahoo.com/mrss/"`) {
+		t.Errorf("Generated feed missing media namespace")
+	}
+
+	// Test that media thumbnail is generated for post with image
+	if !strings.Contains(feed, `<media:thumbnail url="https://i.redd.it/test123.jpg"/>`) {
+		t.Errorf("Generated feed missing media thumbnail for post with image")
+	}
+
+	// Verify the post without image doesn't have a media thumbnail
+	// We can't easily test negative cases in the full feed, but we can count occurrences
+	thumbnailCount := strings.Count(feed, `<media:thumbnail`)
+	if thumbnailCount != 1 {
+		t.Errorf("Expected 1 media thumbnail, found %d", thumbnailCount)
+	}
+}
+
+// Test media thumbnail generation
+func TestGenerateMediaThumbnail(t *testing.T) {
+	g := NewGenerator("Test Feed", "https://example.com", "test@example.com", "Test Author")
+
+	tests := []struct {
+		name     string
+		item     *mockFeedItem
+		expected string
+	}{
+		{
+			name: "With image URL",
+			item: &mockFeedItem{
+				title:    "Test Post",
+				link:     "https://example.com",
+				imageURL: "https://example.com/image.jpg",
+			},
+			expected: `<media:thumbnail url="https://example.com/image.jpg"/>`,
+		},
+		{
+			name: "Without image URL",
+			item: &mockFeedItem{
+				title:    "Test Post",
+				link:     "https://example.com",
+				imageURL: "",
+			},
+			expected: "",
+		},
+		{
+			name: "With special characters in URL",
+			item: &mockFeedItem{
+				title:    "Test Post",
+				link:     "https://example.com",
+				imageURL: "https://example.com/image with spaces & special chars.jpg",
+			},
+			expected: `<media:thumbnail url="https://example.com/image with spaces &amp; special chars.jpg"/>`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result strings.Builder
+			g.generateMediaThumbnail(&result, tt.item)
+
+			if result.String() != tt.expected {
+				t.Errorf("generateMediaThumbnail() = %v, want %v", result.String(), tt.expected)
+			}
+		})
+	}
+}
 
 // For testing OpenGraph data without a real fetcher
 func createMockOpenGraphData() map[string]*opengraph.Data {
@@ -171,7 +278,7 @@ func TestGenerateEnhancedAtomWithConfig_Basic(t *testing.T) {
 		t.Errorf("Generated feed missing XML declaration")
 	}
 
-	if !strings.Contains(feed, `<feed xmlns="http://www.w3.org/2005/Atom">`) {
+	if !strings.Contains(feed, `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">`) {
 		t.Errorf("Generated feed missing Atom namespace")
 	}
 
@@ -219,7 +326,7 @@ func TestGenerateEnhancedAtomWithConfig_CustomNamespace(t *testing.T) {
 	}
 
 	// Test custom namespace
-	expectedNamespace := `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:reddit="http://reddit.com/atom/ns">`
+	expectedNamespace := `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:reddit="http://reddit.com/atom/ns" xmlns:media="http://search.yahoo.com/mrss/">`
 	if !strings.Contains(feed, expectedNamespace) {
 		t.Errorf("Generated feed missing custom namespace declaration")
 	}

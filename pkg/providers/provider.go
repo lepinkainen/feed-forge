@@ -21,6 +21,7 @@ type FeedItem interface {
 	CommentCount() int
 	CreatedAt() time.Time
 	Categories() []string
+	ImageURL() string
 }
 
 // ProviderFactory creates a new instance of a provider.

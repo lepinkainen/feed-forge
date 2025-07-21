@@ -50,6 +50,11 @@ func (h *HackerNewsItem) Categories() []string {
 	return h.ItemCategories
 }
 
+func (h *HackerNewsItem) ImageURL() string {
+	// HackerNews items typically don't have images
+	return ""
+}
+
 // AlgoliaResponse represents the response structure from Algolia API
 type AlgoliaResponse struct {
 	Hits []AlgoliaHit `json:"hits"`

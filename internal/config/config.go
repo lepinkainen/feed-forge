@@ -14,8 +14,8 @@ import (
 // This manages both provider settings and authentication state in a unified YAML file
 // Note: This combines configuration and state for simplicity, following the existing pattern
 type Config struct {
-	// Reddit provider configuration and OAuth2 state
-	Reddit struct {
+	// Reddit OAuth provider configuration and OAuth2 state
+	RedditOAuth struct {
 		// OAuth2 Configuration
 		ClientID     string `mapstructure:"client_id"`
 		ClientSecret string `mapstructure:"client_secret"`
@@ -30,13 +30,25 @@ type Config struct {
 		OutputPath    string `mapstructure:"output_path"`    // Output file path
 		ScoreFilter   int    `mapstructure:"score_filter"`   // Minimum score filter
 		CommentFilter int    `mapstructure:"comment_filter"` // Minimum comment filter
-	} `mapstructure:"reddit"`
+	} `mapstructure:"reddit_oauth"`
 
 	// HackerNews provider configuration
 	HackerNews struct {
 		MinPoints int `mapstructure:"min_points"` // Minimum points threshold
 		Limit     int `mapstructure:"limit"`      // Maximum number of items
 	} `mapstructure:"hackernews"`
+
+	// Reddit JSON provider configuration
+	RedditJSON struct {
+		// JSON Feed Configuration
+		FeedID   string `mapstructure:"feed_id"`  // Reddit feed ID (e.g., "12341234asdfdsf234")
+		Username string `mapstructure:"username"` // Reddit username (e.g., "spez")
+
+		// Feed Generation Settings
+		OutputPath    string `mapstructure:"output_path"`    // Output file path
+		ScoreFilter   int    `mapstructure:"score_filter"`   // Minimum score filter
+		CommentFilter int    `mapstructure:"comment_filter"` // Minimum comment filter
+	} `mapstructure:"reddit_json"`
 }
 
 // LoadConfig loads the configuration from a file
@@ -63,12 +75,18 @@ func LoadConfig(path string) (*Config, error) {
 	viper.SetConfigType("yaml")
 
 	// Set default values
-	viper.SetDefault("reddit.client_id", "")
-	viper.SetDefault("reddit.client_secret", "")
-	viper.SetDefault("reddit.redirect_uri", "http://localhost:8080/callback")
-	viper.SetDefault("reddit.output_path", "reddit.xml")
-	viper.SetDefault("reddit.score_filter", 50)
-	viper.SetDefault("reddit.comment_filter", 10)
+	viper.SetDefault("reddit_oauth.client_id", "")
+	viper.SetDefault("reddit_oauth.client_secret", "")
+	viper.SetDefault("reddit_oauth.redirect_uri", "http://localhost:8080/callback")
+	viper.SetDefault("reddit_oauth.output_path", "reddit.xml")
+	viper.SetDefault("reddit_oauth.score_filter", 50)
+	viper.SetDefault("reddit_oauth.comment_filter", 10)
+
+	viper.SetDefault("reddit_json.feed_id", "")
+	viper.SetDefault("reddit_json.username", "")
+	viper.SetDefault("reddit_json.output_path", "reddit.xml")
+	viper.SetDefault("reddit_json.score_filter", 50)
+	viper.SetDefault("reddit_json.comment_filter", 10)
 
 	viper.SetDefault("hackernews.min_points", 50)
 	viper.SetDefault("hackernews.limit", 30)
@@ -113,15 +131,21 @@ func SaveConfig(config *Config, path string) error {
 	viper.SetConfigType("yaml")
 
 	// Set values from config struct
-	viper.Set("reddit.client_id", config.Reddit.ClientID)
-	viper.Set("reddit.client_secret", config.Reddit.ClientSecret)
-	viper.Set("reddit.redirect_uri", config.Reddit.RedirectURI)
-	viper.Set("reddit.refresh_token", config.Reddit.RefreshToken)
-	viper.Set("reddit.access_token", config.Reddit.AccessToken)
-	viper.Set("reddit.expires_at", config.Reddit.ExpiresAt)
-	viper.Set("reddit.output_path", config.Reddit.OutputPath)
-	viper.Set("reddit.score_filter", config.Reddit.ScoreFilter)
-	viper.Set("reddit.comment_filter", config.Reddit.CommentFilter)
+	viper.Set("reddit_oauth.client_id", config.RedditOAuth.ClientID)
+	viper.Set("reddit_oauth.client_secret", config.RedditOAuth.ClientSecret)
+	viper.Set("reddit_oauth.redirect_uri", config.RedditOAuth.RedirectURI)
+	viper.Set("reddit_oauth.refresh_token", config.RedditOAuth.RefreshToken)
+	viper.Set("reddit_oauth.access_token", config.RedditOAuth.AccessToken)
+	viper.Set("reddit_oauth.expires_at", config.RedditOAuth.ExpiresAt)
+	viper.Set("reddit_oauth.output_path", config.RedditOAuth.OutputPath)
+	viper.Set("reddit_oauth.score_filter", config.RedditOAuth.ScoreFilter)
+	viper.Set("reddit_oauth.comment_filter", config.RedditOAuth.CommentFilter)
+
+	viper.Set("reddit_json.feed_id", config.RedditJSON.FeedID)
+	viper.Set("reddit_json.username", config.RedditJSON.Username)
+	viper.Set("reddit_json.output_path", config.RedditJSON.OutputPath)
+	viper.Set("reddit_json.score_filter", config.RedditJSON.ScoreFilter)
+	viper.Set("reddit_json.comment_filter", config.RedditJSON.CommentFilter)
 
 	viper.Set("hackernews.min_points", config.HackerNews.MinPoints)
 	viper.Set("hackernews.limit", config.HackerNews.Limit)

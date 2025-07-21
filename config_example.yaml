@@ -1,0 +1,23 @@
+# Feed-Forge Configuration Example
+
+# Reddit OAuth provider configuration
+reddit_oauth:
+  client_id: ""
+  client_secret: ""
+  redirect_uri: "http://localhost:8080/callback"
+  output_path: "reddit_oauth.xml"
+  score_filter: 50
+  comment_filter: 10
+
+# Reddit JSON provider configuration
+reddit_json:
+  feed_id: ""
+  username: ""
+  output_path: "reddit_json.xml"
+  score_filter: 50
+  comment_filter: 10
+
+# Hacker News provider configuration
+hackernews:
+  min_points: 50
+  limit: 30

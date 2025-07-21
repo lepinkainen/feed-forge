@@ -19,13 +19,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Run commands**:
 
-- `task run-reddit` - Run Reddit feed generation
+- `task run-reddit` - Run Reddit OAuth feed generation
 - `task run-hackernews` - Run Hacker News feed generation
 
 **Direct execution**:
 
-- `./build/feed-forge reddit --reauth` - Force Reddit re-authentication
-- `./build/feed-forge reddit -o output.xml --min-score 100`
+- `./build/feed-forge reddit-oauth --reauth` - Force Reddit OAuth re-authentication
+- `./build/feed-forge reddit-oauth -o output.xml --min-score 100`
+- `./build/feed-forge reddit-json  -o output.xml --min-score 100`
 - `./build/feed-forge hacker-news -o output.xml --min-points 50`
 
 ## Architecture Overview
@@ -55,7 +56,8 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Provider Implementations**:
 
-- `internal/reddit/` - Reddit OAuth2 authentication, API calls, feed generation
+- `internal/reddit-oauth/` - Reddit OAuth2 authentication, API calls, feed generation
+- `internal/reddit-json/` - Reddit JSON feed access, simplified authentication-free approach
 - `internal/hackernews/` - Hacker News API integration, categorization
 
 **Shared Package Libraries**:
