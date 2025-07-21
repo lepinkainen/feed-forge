@@ -2,173 +2,41 @@
 
 This document provides essential context for the Gemini CLI agent operating within the `feed-forge` project.
 
-## Current Environment
-- **Operating System:** darwin
-- **Current Working Directory:** /Users/shrike/projects/feed-forge
-- **Date:** Wednesday, July 16, 2025
+## Project Overview
 
-## Project Structure
-```
-/Users/shrike/projects/feed-forge/
-├───.gitignore
-├───.gitmodules
-├───CLAUDE.md
-├───go.mod
-├───go.sum
-├───LICENSE
-├───README.md
-├───refactoring_plan.md
-├───Taskfile.yml
-├───.claude/
-│   └───settings.local.json
-├───.git/...
-├───.github/
-│   └───workflows/
-│       └───ci.yml
-├───.kiro/
-│   ├───hooks/
-│   ├───settings/
-│   ├───specs/
-│   │   └───project-documentation/
-│   └───steering/
-├───build/
-├───cmd/
-│   └───feed-forge/
-│       └───main.go
-├───internal/
-│   ├───config/
-│   │   └───config.go
-│   ├───hackernews/
-│   │   ├───api.go
-│   │   ├───categorization_test.go
-│   │   ├───categorization.go
-│   │   ├───config.go
-│   │   ├───database.go
-│   │   ├───feed.go
-│   │   ├───provider.go
-│   │   ├───types.go
-│   │   ├───configs/
-│   │   │   └───domains.json
-│   │   └───testdata/
-│   │       └───categorization/
-│   │           ├───ask_hn.json
-│   │           ├───book_mention.json
-│   │           ├───case_insensitive_ask_hn.json
-│   │           ├───case_insensitive_show_hn.json
-│   │           ├───ebook_mention.json
-│   │           ├───empty_domain.json
-│   │           ├───github_project.json
-│   │           ├───nil_mapper.json
-│   │           ├───no_special_categorization.json
-│   │           ├───pdf_document.json
-│   │           ├───show_hn.json
-│   │           └───video_content.json
-│   ├───pkg/
-│   └───reddit/
-│       ├───api.go
-│       ├───auth.go
-│       ├───config.go
-│       ├───feed.go
-│       ├───provider.go
-│       └───types.go
-├───llm-shared/
-│   ├───LICENSE
-│   ├───project_tech_stack.md
-│   ├───README.md
-│   ├───USAGE.md
-│   ├───examples/
-│   │   ├───go-project.doc-validator.yml
-│   │   ├───node-project.doc-validator.yml
-│   │   ├───python-project.doc-validator.yml
-│   │   └───rust-project.doc-validator.yml
-│   └───utils/
-│       ├───jsfuncs.js
-│       ├───pyfuncs.py
-│       ├───README.md
-│       ├───gofuncs/
-│       │   └───gofuncs.go
-│       └───validate-docs/
-│           └───validate-docs.go
-├───pkg/
-│   ├───api/
-│   │   └───client.go
-│   ├───config/
-│   │   ├───loader.go
-│   │   └───README.md
-│   ├───database/
-│   │   ├───cache.go
-│   │   ├───provider_utils.go
-│   │   ├───types.go
-│   │   ├───utils_test.go
-│   │   └───utils.go
-│   ├───feed/
-│   │   ├───custom_atom.go
-│   │   ├───generator.go
-│   │   ├───provider_helpers.go
-│   │   ├───types_test.go
-│   │   ├───types.go
-│   │   └───testdata/
-│   │       └───escape_xml/
-│   │           ├───all_special_chars.xml
-│   │           ├───ampersand.xml
-│   │           ├───double_quotes.xml
-│   │           ├───empty_string.xml
-│   │           ├───greater_than.xml
-│   │           ├───less_than.xml
-│   │           ├───multiple_ampersands.xml
-│   │           ├───no_special_chars.xml
-│   │           └───single_quotes.xml
-│   ├───filesystem/
-│   │   ├───utils_test.go
-│   │   ├───utils.go
-│   │   └───very/
-│   │       └───long/
-│   │           └───path/
-│   │               └───with/
-│   │                   └───many/
-│   │                       └───segments/
-│   │                           └───that/
-│   │                               └───goes/
-│   │                                   └───quite/
-│   │                                       └───deep/
-│   │                                           └───into/
-│   │                                               └───the/
-│   │                                                   └───filesystem/
-│   ├───http/
-│   │   ├───client_test.go
-│   │   ├───client.go
-│   │   ├───response_test.go
-│   │   ├───response.go
-│   │   └───testdata/
-│   │       └───json_responses/
-│   │           ├───empty_object.json
-│   │           ├───error_response.json
-│   │           ├───invalid_json.json
-│   │           ├───non_json_content.txt
-│   │           └───valid_response.json
-│   ├───interfaces/
-│   │   └───database.go
-│   ├───opengraph/
-│   │   ├───database.go
-│   │   ├───fetcher.go
-│   │   └───types.go
-│   ├───providers/
-│   │   ├───base.go
-│   │   ├───provider.go
-│   │   └───registry.go
-│   ├───testutil/
-│   │   └───golden.go
-│   └───utils/
-│       ├───url_test.go
-│       └───url.go
-├───plan/
-├───scripts/
-├───templates/
-└───testdata/
-    ├───README.md
-    ├───fixtures/
-    └───golden/
-```
+`feed-forge` is a unified RSS feed generator with a provider-based architecture. The main providers are Hacker News and Reddit. The application is designed to be extensible, allowing new feed sources to be added by implementing the provider interface.
+
+- **CLI Entrypoint**: `cmd/feed-forge/main.go`
+- **Provider Interface**: `pkg/providers/provider.go`
+- **Configuration**: `internal/config/config.go` (loads `config.yaml`)
+- **Hacker News Provider**: `internal/hackernews/`
+- **Reddit Providers**: `internal/reddit-json/` and `internal/reddit-oauth/`
+
+## Developer Workflows
+
+The project uses **Taskfile.dev** for managing development tasks. Do not use raw `go` commands for building, testing, or linting.
+
+- **Build, Test, and Lint**: `task build`
+- **Run Tests**: `task test`
+- **Run Linter**: `task lint`
+- **Update Golden Test Files**: `task update-golden`
+
+To run the application, use the binary in the `build/` directory:
+
+- `./build/feed-forge reddit-oauth -o reddit.xml --min-score 100`
+- `./build/feed-forge hacker-news -o hackernews.xml --min-points 50`
+
+## Architecture
+
+- **Provider-Based Architecture**: Each feed source (e.g., Hacker News, Reddit) implements the `FeedProvider` interface defined in `pkg/providers/provider.go`. This allows for a consistent way to generate feeds from different sources.
+- **Provider Registry**: A factory pattern is used to manage and discover providers dynamically. See `pkg/providers/registry.go`.
+- **Configuration**: The application uses a centralized YAML configuration file (`config.yaml`) that is loaded using Viper. Provider-specific configurations can be defined within this file.
+- **HTTP Clients**: Always use the enhanced HTTP clients from `pkg/api` for making API calls. These clients include built-in rate limiting and retry logic.
+  - `api.NewRedditClient()`
+  - `api.NewHackerNewsClient()`
+- **Database**: SQLite is used for caching. The OpenGraph database (`pkg/opengraph/`) is shared across all providers for metadata caching. Some providers may also have their own content-specific databases.
+- **Testing**: The project relies heavily on golden file testing. Use `task update-golden` to update the golden files after making changes.
 
 ## Gemini Added Memories
 - Always use "task build" to test and lint the project instead of running "go test" or "go build"
+- If @llm-shared/ exists in the project, use it for up to date technology preferences and generic project guidance
