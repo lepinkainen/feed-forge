@@ -2,9 +2,9 @@ package feed
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/gorilla/feeds"
@@ -334,14 +334,12 @@ func (g *Generator) GetMetadata(feed *feeds.Feed) *Metadata {
 	return metadata
 }
 
-// EscapeXML escapes XML special characters
+// EscapeXML escapes XML special characters while avoiding double-encoding of existing HTML entities
 func EscapeXML(s string) string {
-	s = strings.ReplaceAll(s, "&", "&amp;")
-	s = strings.ReplaceAll(s, "<", "&lt;")
-	s = strings.ReplaceAll(s, ">", "&gt;")
-	s = strings.ReplaceAll(s, "\"", "&quot;")
-	s = strings.ReplaceAll(s, "'", "&apos;")
-	return s
+	// First unescape any existing HTML entities to avoid double-encoding
+	s = html.UnescapeString(s)
+	// Then apply proper HTML escaping
+	return html.EscapeString(s)
 }
 
 // TruncateString truncates a string to a maximum length

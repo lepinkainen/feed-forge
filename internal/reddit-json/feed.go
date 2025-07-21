@@ -197,7 +197,7 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 	// Add image if available
 	if imageURL := post.ImageURL(); imageURL != "" {
 		content.WriteString(fmt.Sprintf(`<div><img src="%s" alt="%s" style="max-width: 100%%; height: auto;"/></div><br/>`,
-			html.EscapeString(imageURL), html.EscapeString(post.Data.Title)))
+			imageURL, post.Data.Title))
 	}
 
 	// Add selftext HTML content if available (prioritize this over OpenGraph)
