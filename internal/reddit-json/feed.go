@@ -2,6 +2,7 @@ package redditjson
 
 import (
 	"fmt"
+	"html"
 	"log/slog"
 	"os"
 	"strings"
@@ -168,7 +169,7 @@ func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error
 
 		// Enhanced content with OpenGraph data
 		content := fg.buildEnhancedContent(post, ogData)
-		atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, content))
+		atom.WriteString(fmt.Sprintf(`<content type="html"><![CDATA[%s]]></content>`, content))
 
 		// Summary
 		summary := fmt.Sprintf("Score: %d, Comments: %d",
@@ -201,32 +202,35 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 	}
 
 	// Add submission metadata in Reddit RSS format
-	content.WriteString(fmt.Sprintf(` submitted by  <a href="https://www.reddit.com/user/%s"> /u/%s </a>  to  <a href="https://www.reddit.com/r/%s/"> r/%s </a>`,
-		feedpkg.EscapeXML(post.Data.Author), feedpkg.EscapeXML(post.Data.Author), feedpkg.EscapeXML(post.Data.Subreddit), feedpkg.EscapeXML(post.Data.Subreddit)))
+	content.WriteString(fmt.Sprintf(`submitted by <a href="https://www.reddit.com/user/%s">/u/%s</a> to <a href="https://www.reddit.com/r/%s/">r/%s</a>`,
+		post.Data.Author, post.Data.Author, post.Data.Subreddit, post.Data.Subreddit))
 	content.WriteString(`<br/>`)
 
 	// Add links in Reddit RSS format
 	if post.Data.URL != "" && post.Data.URL != "https://www.reddit.com"+post.Data.Permalink {
 		// External link exists and is different from permalink
-		content.WriteString(fmt.Sprintf(` <span><a href="%s">[link]</a></span>  <span><a href="https://www.reddit.com%s">[comments]</a></span>`,
-			feedpkg.EscapeXML(post.Data.URL), feedpkg.EscapeXML(post.Data.Permalink)))
+		content.WriteString(fmt.Sprintf(` <span><a href="%s">[link]</a></span> <span><a href="https://www.reddit.com%s">[comments]</a></span>`,
+			post.Data.URL, post.Data.Permalink))
 	} else {
 		// Self-post or permalink only
-		content.WriteString(fmt.Sprintf(` <span><a href="https://www.reddit.com%s">[link]</a></span>  <span><a href="https://www.reddit.com%s">[comments]</a></span>`,
-			feedpkg.EscapeXML(post.Data.Permalink), feedpkg.EscapeXML(post.Data.Permalink)))
+		content.WriteString(fmt.Sprintf(` <span><a href="https://www.reddit.com%s">[link]</a></span> <span><a href="https://www.reddit.com%s">[comments]</a></span>`,
+			post.Data.Permalink, post.Data.Permalink))
 	}
 
 	return content.String()
 }
 
-// cleanRedditHTML removes Reddit-specific HTML comments and other unwanted elements
-func (fg *FeedGenerator) cleanRedditHTML(html string) string {
+// cleanRedditHTML removes Reddit-specific HTML comments and decodes HTML entities
+func (fg *FeedGenerator) cleanRedditHTML(htmlContent string) string {
+	// First, decode HTML entities (Reddit sends HTML-encoded content)
+	htmlContent = html.UnescapeString(htmlContent)
+
 	// Remove Reddit-specific HTML comments
-	html = strings.ReplaceAll(html, "<!-- SC_OFF -->", "")
-	html = strings.ReplaceAll(html, "<!-- SC_ON -->", "")
+	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_OFF -->", "")
+	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_ON -->", "")
 
 	// Remove any extra whitespace that might result from comment removal
-	html = strings.TrimSpace(html)
+	htmlContent = strings.TrimSpace(htmlContent)
 
-	return html
+	return htmlContent
 }

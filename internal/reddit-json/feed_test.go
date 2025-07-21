@@ -88,9 +88,12 @@ func TestBuildEnhancedContentNoDoubleEscaping(t *testing.T) {
 		t.Errorf("buildEnhancedContent() should not contain <!-- SC_ON -->")
 	}
 
-	// Verify that HTML entities are preserved (not double-escaped)
-	if contains := containsString(content, "&quot;"); !contains {
-		t.Errorf("buildEnhancedContent() should preserve &quot; entities")
+	// Verify that HTML entities are properly decoded (since we're using CDATA now)
+	if contains := containsString(content, `"quotes"`); !contains {
+		t.Errorf("buildEnhancedContent() should decode &quot; entities to actual quotes")
+	}
+	if contains := containsString(content, "& entities"); !contains {
+		t.Errorf("buildEnhancedContent() should decode &amp; entities to actual ampersands")
 	}
 	if contains := containsString(content, "&amp;quot;"); contains {
 		t.Errorf("buildEnhancedContent() should not double-escape to &amp;quot;")
