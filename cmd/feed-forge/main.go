@@ -22,7 +22,7 @@ var CLI struct {
 		MinScore    int    `help:"Minimum post score" default:"50"`
 		MinComments int    `help:"Minimum comment count" default:"10"`
 		Reauth      bool   `help:"Force re-authentication with Reddit." default:"false"`
-	} `cmd:"reddit-oauth" help:"Generate RSS feed from Reddit using OAuth."`
+	} `cmd:"" name:"reddit-oauth" help:"Generate RSS feed from Reddit using OAuth."`
 
 	RedditJSON struct {
 		Outfile     string `help:"Output file path" short:"o" default:"reddit.xml"`
