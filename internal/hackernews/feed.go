@@ -2,7 +2,6 @@ package hackernews
 
 import (
 	"database/sql"
-	"encoding/xml"
 	"log/slog"
 	"os"
 	"regexp"
@@ -12,14 +11,9 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-// Use shared Atom types from pkg/feed
-type AtomCategory = feed.AtomCategory
-type CustomAtomEntry = feed.CustomAtomEntry
-type CustomAtomFeed = feed.CustomAtomFeed
-
 // generateRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data
 func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) string {
-	slog.Debug("Generating RSS feed using shared infrastructure", "itemCount", len(items))
+	slog.Debug("Generating RSS feed using enhanced Atom infrastructure", "itemCount", len(items))
 
 	// Create shared feed generator
 	generator := feed.NewGenerator(
@@ -38,29 +32,17 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 		feedItems[i] = &item
 	}
 
-	// Initialize OpenGraph fetcher and use shared generation with OpenGraph
+	// Use enhanced Atom generation with HackerNews-specific configuration
+	config := feed.HackerNewsEnhancedAtomConfig()
 	ogFetcher := opengraph.NewFetcher(ogDB)
-	feedObj, itemCategories, err := generator.GenerateWithOpenGraph(feedItems, feed.Atom, ogFetcher)
+	atomContent, err := generator.GenerateEnhancedAtomWithConfig(feedItems, config, ogFetcher)
 	if err != nil {
-		slog.Error("Failed to generate RSS feed", "error", err)
+		slog.Error("Failed to generate enhanced Atom feed", "error", err)
 		os.Exit(1)
 	}
 
-	// Generate custom Atom feed with HackerNews-specific categories
-	customAtomFeed := feed.ConvertToCustomAtom(feedObj, itemCategories)
-
-	// Convert to XML
-	xmlData, err := xml.MarshalIndent(customAtomFeed, "", "  ")
-	if err != nil {
-		slog.Error("Failed to generate RSS feed", "error", err)
-		os.Exit(1)
-	}
-
-	// Add XML header
-	rss := xml.Header + string(xmlData)
-
-	slog.Debug("RSS feed generated successfully using shared infrastructure", "feedSize", len(rss))
-	return rss
+	slog.Debug("Enhanced Atom feed generated successfully", "feedSize", len(atomContent))
+	return atomContent
 }
 
 // preprocessHackerNewsItems applies HackerNews-specific categorization and metadata

@@ -26,11 +26,12 @@ type EnhancedAtomConfig struct {
 	GeneratorURI string
 
 	// Entry customization
-	MultipleLinks   bool // Support for multiple link types per entry
-	EnhancedContent bool // Rich HTML content with OpenGraph
-	CustomMetadata  bool // Provider-specific metadata in custom namespace
-	Enclosures      bool // Support for media enclosures
-	ExtendedAuthor  bool // Author with URI information
+	MultipleLinks       bool // Support for multiple link types per entry
+	EnhancedContent     bool // Rich HTML content with OpenGraph
+	CustomMetadata      bool // Provider-specific metadata in custom namespace
+	Enclosures          bool // Support for media enclosures
+	ExtendedAuthor      bool // Author with URI information
+	CommentsLinkDefault bool // Use comments link as the default link instead of article link
 
 	// Content enhancement
 	OpenGraphIntegration bool
@@ -51,6 +52,7 @@ func DefaultEnhancedAtomConfig() *EnhancedAtomConfig {
 		CustomMetadata:       false,
 		Enclosures:           true,
 		ExtendedAuthor:       true,
+		CommentsLinkDefault:  false, // Default behavior: article link is primary
 		OpenGraphIntegration: true,
 	}
 }
@@ -79,6 +81,7 @@ func HackerNewsEnhancedAtomConfig() *EnhancedAtomConfig {
 	config.ID = "https://news.ycombinator.com/"
 	config.Subtitle = "High-quality Hacker News stories, updated regularly"
 	config.CustomMetadata = true
+	config.CommentsLinkDefault = true // For HN, default link should be comments
 	return config
 }
 
@@ -141,9 +144,14 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 
 		// Handle multiple links if enabled
 		if config.MultipleLinks {
-			g.generateMultipleLinks(&atom, item)
+			g.generateMultipleLinks(&atom, item, config.CommentsLinkDefault)
 		} else {
-			atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.Link())))
+			// For single link mode, respect CommentsLinkDefault setting
+			if config.CommentsLinkDefault && item.CommentsLink() != "" {
+				atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.CommentsLink())))
+			} else {
+				atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.Link())))
+			}
 		}
 
 		atom.WriteString(fmt.Sprintf(`<id>%s</id>`, EscapeXML(item.CommentsLink())))
@@ -170,10 +178,10 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 		// Enhanced content
 		if config.EnhancedContent {
 			content := g.buildProviderEnhancedContent(item, ogDataMap)
-			atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, EscapeXML(content)))
+			atom.WriteString(fmt.Sprintf(`<content type="html"><![CDATA[%s]]></content>`, content))
 		} else {
 			description := fmt.Sprintf("Score: %d | Comments: %d", item.Score(), item.CommentCount())
-			atom.WriteString(fmt.Sprintf(`<content type="html">%s</content>`, EscapeXML(description)))
+			atom.WriteString(fmt.Sprintf(`<content type="html"><![CDATA[%s]]></content>`, description))
 		}
 
 		// Summary
@@ -196,15 +204,27 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 }
 
 // generateMultipleLinks handles multiple link types for an entry
-func (g *Generator) generateMultipleLinks(atom *strings.Builder, item providers.FeedItem) {
-	// Main link
-	if item.Link() != "" {
-		atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.Link())))
-	}
+func (g *Generator) generateMultipleLinks(atom *strings.Builder, item providers.FeedItem, commentsLinkDefault bool) {
+	if commentsLinkDefault {
+		// For platforms like HN, prioritize comments link as main link
+		if item.CommentsLink() != "" {
+			atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.CommentsLink())))
+		}
 
-	// Comments link
-	if item.CommentsLink() != "" && item.CommentsLink() != item.Link() {
-		atom.WriteString(fmt.Sprintf(`<link rel="replies" type="text/html" href="%s" title="Comments"/>`, EscapeXML(item.CommentsLink())))
+		// Article link as secondary
+		if item.Link() != "" && item.Link() != item.CommentsLink() {
+			atom.WriteString(fmt.Sprintf(`<link rel="related" type="text/html" href="%s" title="Article"/>`, EscapeXML(item.Link())))
+		}
+	} else {
+		// Default behavior: article link as main link
+		if item.Link() != "" {
+			atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, EscapeXML(item.Link())))
+		}
+
+		// Comments link as secondary
+		if item.CommentsLink() != "" && item.CommentsLink() != item.Link() {
+			atom.WriteString(fmt.Sprintf(`<link rel="replies" type="text/html" href="%s" title="Comments"/>`, EscapeXML(item.CommentsLink())))
+		}
 	}
 }
 

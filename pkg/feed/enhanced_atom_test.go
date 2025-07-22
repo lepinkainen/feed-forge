@@ -391,7 +391,7 @@ func TestGenerateMultipleLinks(t *testing.T) {
 		commentsLink: "https://example.com/comments",
 	}
 
-	generator.generateMultipleLinks(&atom, item)
+	generator.generateMultipleLinks(&atom, item, false)
 	result := atom.String()
 
 	// Should have both main link and comments link
@@ -413,7 +413,7 @@ func TestGenerateMultipleLinks_SameLinks(t *testing.T) {
 		commentsLink: "https://example.com", // Same as main link
 	}
 
-	generator.generateMultipleLinks(&atom, item)
+	generator.generateMultipleLinks(&atom, item, false)
 	result := atom.String()
 
 	// Should only have main link when they're the same
