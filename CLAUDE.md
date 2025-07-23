@@ -159,7 +159,8 @@ feed-forge/
 ├── internal/
 │   ├── config/                  # Configuration management
 │   ├── hackernews/              # Hacker News provider implementation
-│   └── reddit/                  # Reddit provider implementation
+│   ├── reddit-oauth/            # Reddit OAuth provider implementation
+│   └── reddit-json/             # Reddit JSON provider implementation
 ├── pkg/                         # Shared packages
 │   ├── api/                     # Enhanced HTTP client with rate limiting and retries
 │   ├── config/                  # Configuration loading utilities with fallback support
@@ -180,8 +181,14 @@ feed-forge/
 
 This project follows `llm-shared` conventions:
 
-- Always run `gofmt -w .` after Go code changes (preferred: use `goimports -w .` for automatic import management)
+- Always run `goimports -w .` after Go code changes (preferred over `gofmt` for automatic import management)
 - Use `task build` instead of `go build` to ensure tests and linting
 - Requires Go 1.24+ for compilation and development
 - Tech stack guidelines: `llm-shared/project_tech_stack.md`
 - Function analysis: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
