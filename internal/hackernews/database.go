@@ -3,7 +3,6 @@ package hackernews
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
@@ -74,12 +73,12 @@ func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[str
 }
 
 // getAllItems retrieves items from database with minimum points threshold
-func getAllItems(db *database.Database, limit int, minPoints int) []HackerNewsItem {
+func getAllItems(db *database.Database, limit int, minPoints int) ([]HackerNewsItem, error) {
 	slog.Debug("Querying database for items", "limit", limit, "minPoints", minPoints)
 	rows, err := db.DB().Query("SELECT item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at FROM items WHERE points > ? ORDER BY created_at DESC LIMIT ?", minPoints, limit)
 	if err != nil {
 		slog.Error("Failed to query database", "error", err)
-		os.Exit(1)
+		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -95,5 +94,5 @@ func getAllItems(db *database.Database, limit int, minPoints int) []HackerNewsIt
 	}
 
 	slog.Debug("Retrieved items from database", "count", len(items))
-	return items
+	return items, nil
 }

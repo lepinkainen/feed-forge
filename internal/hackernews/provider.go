@@ -75,13 +75,19 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	recentlyUpdated := updateStoredItems(contentDB, newItems)
 
 	// Get all items from database
-	allItems := getAllItems(contentDB, p.Limit, p.MinPoints)
+	allItems, err := getAllItems(contentDB, p.Limit, p.MinPoints)
+	if err != nil {
+		return err
+	}
 
 	// Update item stats with current data from Algolia, skipping recently updated items
 	updateItemStats(contentDB.DB(), allItems, recentlyUpdated)
 
 	// Re-fetch items to get updated stats for RSS generation
-	allItems = getAllItems(contentDB, p.Limit, p.MinPoints)
+	allItems, err = getAllItems(contentDB, p.Limit, p.MinPoints)
+	if err != nil {
+		return err
+	}
 
 	// Ensure output directory exists
 	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
@@ -89,7 +95,10 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	}
 
 	// Generate and save the feed
-	rss := generateRSSFeed(contentDB.DB(), ogDB, allItems, p.MinPoints, p.CategoryMapper)
+	rss, err := generateRSSFeed(contentDB.DB(), ogDB, allItems, p.MinPoints, p.CategoryMapper)
+	if err != nil {
+		return err
+	}
 	if err := os.WriteFile(outfile, []byte(rss), 0644); err != nil {
 		return err
 	}

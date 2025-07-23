@@ -3,7 +3,6 @@ package hackernews
 import (
 	"database/sql"
 	"log/slog"
-	"os"
 	"regexp"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -12,7 +11,7 @@ import (
 )
 
 // generateRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data
-func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) string {
+func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) (string, error) {
 	slog.Debug("Generating RSS feed using enhanced Atom infrastructure", "itemCount", len(items))
 
 	// Create shared feed generator
@@ -38,11 +37,11 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 	atomContent, err := generator.GenerateEnhancedAtomWithConfig(feedItems, config, ogFetcher)
 	if err != nil {
 		slog.Error("Failed to generate enhanced Atom feed", "error", err)
-		os.Exit(1)
+		return "", err
 	}
 
 	slog.Debug("Enhanced Atom feed generated successfully", "feedSize", len(atomContent))
-	return atomContent
+	return atomContent, nil
 }
 
 // preprocessHackerNewsItems applies HackerNews-specific categorization and metadata
