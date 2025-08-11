@@ -8,6 +8,13 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/interfaces"
 )
 
+var (
+	// dbCache stores active database connections, keyed by path
+	dbCache = make(map[string]*Database)
+	// cacheMutex protects the dbCache
+	cacheMutex = &sync.Mutex{}
+)
+
 // Database represents a thread-safe database connection
 type Database struct {
 	db     *sql.DB
@@ -35,6 +42,14 @@ func DefaultConfig() Config {
 
 // NewDatabase creates a new database connection
 func NewDatabase(config Config) (*Database, error) {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+
+	// If a connection for this path already exists, return it
+	if db, ok := dbCache[config.Path]; ok {
+		return db, nil
+	}
+
 	if config.Driver == "" {
 		config.Driver = "sqlite"
 	}
@@ -73,14 +88,25 @@ func NewDatabase(config Config) (*Database, error) {
 		return nil, err
 	}
 
-	return &Database{
+	database := &Database{
 		db:     db,
 		dbPath: config.Path,
-	}, nil
+	}
+
+	// Store the new connection in the cache
+	dbCache[config.Path] = database
+
+	return database, nil
 }
 
 // Close closes the database connection
 func (db *Database) Close() error {
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
+
+	// Remove the connection from the cache
+	delete(dbCache, db.dbPath)
+
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
