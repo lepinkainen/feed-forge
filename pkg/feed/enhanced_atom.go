@@ -68,6 +68,7 @@ func RedditEnhancedAtomConfig() *EnhancedAtomConfig {
 	config.Subtitle = "Filtered Reddit homepage posts with enhanced metadata"
 	config.Generator = "Red RSS Generator"
 	config.CustomMetadata = true
+	config.CommentsLinkDefault = true // For Reddit, default link should be comments
 	return config
 }
 
