@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom" xmlns:reddit="http://reddit.com/atom/ns" xmlns:media="http://search.yahoo.com/mrss/">
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <title>{{.FeedTitle}}</title>
   <link href="{{.FeedLink}}"/>
   <id>{{.FeedID}}</id>
@@ -10,7 +10,7 @@
 
 {{range .Items}}
   <entry>
-    <title>{{.Title | xmlEscape}}</title>
+    <title>[r/{{.Subreddit}}] {{.Title | xmlEscape}}</title>
     <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
     {{if ne .Link .CommentsLink}}<link rel="related" type="text/html" href="{{.Link | xmlEscape}}" title="Article"/>{{end}}
     <id>{{.ID | xmlEscape}}</id>
@@ -21,11 +21,9 @@
       <uri>{{.AuthorURI | xmlEscape}}</uri>
     </author>
     {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
-
-    <!-- Reddit-specific metadata -->
-    <reddit:score>{{.Score}}</reddit:score>
-    <reddit:comments>{{.Comments}}</reddit:comments>
-    {{if .Subreddit}}<reddit:subreddit>r/{{.Subreddit | xmlEscape}}</reddit:subreddit>{{end}}
+    <category term="score:{{.Score}}" label="Score: {{.Score}}" scheme="reddit-metadata"/>
+    <category term="comments:{{.Comments}}" label="Comments: {{.Comments}}" scheme="reddit-metadata"/>
+    {{if .Subreddit}}<category term="subreddit:{{.Subreddit | xmlEscape}}" label="Subreddit: r/{{.Subreddit | xmlEscape}}" scheme="reddit-metadata"/>{{end}}
 
     <content type="html"><![CDATA[
       <div class="metadata">

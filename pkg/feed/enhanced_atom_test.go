@@ -325,22 +325,22 @@ func TestGenerateEnhancedAtomWithConfig_CustomNamespace(t *testing.T) {
 		return
 	}
 
-	// Test custom namespace
-	expectedNamespace := `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:reddit="http://reddit.com/atom/ns" xmlns:media="http://search.yahoo.com/mrss/">`
+	// Test standard namespace (no custom namespaces)
+	expectedNamespace := `<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">`
 	if !strings.Contains(feed, expectedNamespace) {
-		t.Errorf("Generated feed missing custom namespace declaration")
+		t.Errorf("Generated feed missing standard namespace declaration")
 	}
 
-	// Test custom metadata
-	if !strings.Contains(feed, "<reddit:score>150</reddit:score>") {
-		t.Errorf("Generated feed missing Reddit custom metadata")
+	// Test metadata as standard categories
+	if !strings.Contains(feed, `<category term="score:150" label="Score: 150" scheme="reddit-metadata"/>`) {
+		t.Errorf("Generated feed missing Reddit score metadata")
 	}
 
-	if !strings.Contains(feed, "<reddit:comments>42</reddit:comments>") {
+	if !strings.Contains(feed, `<category term="comments:42" label="Comments: 42" scheme="reddit-metadata"/>`) {
 		t.Errorf("Generated feed missing Reddit comments metadata")
 	}
 
-	if !strings.Contains(feed, "<reddit:subreddit>r/test</reddit:subreddit>") {
+	if !strings.Contains(feed, `<category term="subreddit:test" label="Subreddit: r/test" scheme="reddit-metadata"/>`) {
 		t.Errorf("Generated feed missing Reddit subreddit metadata")
 	}
 }
@@ -513,16 +513,16 @@ func TestGenerateCustomMetadata_Reddit(t *testing.T) {
 	generator.generateCustomMetadata(&atom, item, "reddit")
 	result := atom.String()
 
-	// Test Reddit-specific metadata
-	if !strings.Contains(result, "<reddit:score>150</reddit:score>") {
+	// Test Reddit metadata as standard categories
+	if !strings.Contains(result, `<category term="score:150" label="Score: 150" scheme="reddit-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing Reddit score")
 	}
 
-	if !strings.Contains(result, "<reddit:comments>42</reddit:comments>") {
+	if !strings.Contains(result, `<category term="comments:42" label="Comments: 42" scheme="reddit-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing Reddit comments")
 	}
 
-	if !strings.Contains(result, "<reddit:subreddit>r/golang</reddit:subreddit>") {
+	if !strings.Contains(result, `<category term="subreddit:golang" label="Subreddit: r/golang" scheme="reddit-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing Reddit subreddit")
 	}
 }
@@ -540,16 +540,16 @@ func TestGenerateCustomMetadata_HackerNews(t *testing.T) {
 	generator.generateCustomMetadata(&atom, item, "hn")
 	result := atom.String()
 
-	// Test Hacker News-specific metadata
-	if !strings.Contains(result, "<hn:points>200</hn:points>") {
+	// Test Hacker News metadata as standard categories
+	if !strings.Contains(result, `<category term="points:200" label="Points: 200" scheme="hackernews-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing HN points")
 	}
 
-	if !strings.Contains(result, "<hn:comments>85</hn:comments>") {
+	if !strings.Contains(result, `<category term="comments:85" label="Comments: 85" scheme="hackernews-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing HN comments")
 	}
 
-	if !strings.Contains(result, "<hn:domain>github.com</hn:domain>") {
+	if !strings.Contains(result, `<category term="domain:github.com" label="Domain: github.com" scheme="hackernews-metadata"/>`) {
 		t.Errorf("generateCustomMetadata() missing HN domain")
 	}
 }

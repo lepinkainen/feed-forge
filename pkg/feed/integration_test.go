@@ -84,8 +84,8 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 	}
 
 	// Basic checks that both outputs are valid XML
-	// Template output will have HTML-encoded XML declaration
-	if !strings.Contains(templateResult, "&lt;?xml version=\"1.0\" encoding=\"UTF-8\"?>") {
+	// Template output should now have proper XML declaration after switching to text/template
+	if !strings.Contains(templateResult, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>") {
 		t.Error("Template output missing XML declaration")
 	}
 
@@ -98,8 +98,8 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 		"<feed",
 		"<title>Hacker News Top Stories</title>",
 		"<entry>",
-		"<hn:points>150</hn:points>",
-		"<hn:comments>42</hn:comments>",
+		`<category term="points:150" label="Points: 150" scheme="hackernews-metadata"/>`,
+		`<category term="comments:42" label="Comments: 42" scheme="hackernews-metadata"/>`,
 		"Template-based feed generation for HN",
 		"testuser",
 	}
@@ -114,13 +114,13 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 	}
 
 	// Check that template output includes domain information
-	if !strings.Contains(templateResult, "<hn:domain>example.com</hn:domain>") {
+	if !strings.Contains(templateResult, `<category term="domain:example.com" label="Domain: example.com" scheme="hackernews-metadata"/>`) {
 		t.Error("Template output missing domain metadata")
 	}
 
-	// Check template-specific formatting
-	if !strings.Contains(templateResult, "xmlns:hn=\"http://news.ycombinator.com/atom/ns\"") {
-		t.Error("Template output missing HN namespace")
+	// Check that template output uses standard namespaces only
+	if !strings.Contains(templateResult, `xmlns="http://www.w3.org/2005/Atom"`) {
+		t.Error("Template output missing standard Atom namespace")
 	}
 
 	// Basic validation that both generate reasonable feed lengths

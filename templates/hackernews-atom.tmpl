@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<feed xmlns="http://www.w3.org/2005/Atom" xmlns:hn="http://news.ycombinator.com/atom/ns" xmlns:media="http://search.yahoo.com/mrss/">
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <title>{{.FeedTitle}}</title>
   <link href="{{.FeedLink}}"/>
   <id>{{.FeedID}}</id>
@@ -21,11 +21,9 @@
       <uri>https://news.ycombinator.com/user?id={{.Author | xmlEscape}}</uri>
     </author>
     {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
-
-    <!-- Hacker News-specific metadata -->
-    <hn:points>{{.Score}}</hn:points>
-    <hn:comments>{{.Comments}}</hn:comments>
-    {{if .Domain}}<hn:domain>{{.Domain | xmlEscape}}</hn:domain>{{end}}
+    <category term="points:{{.Score}}" label="Points: {{.Score}}" scheme="hackernews-metadata"/>
+    <category term="comments:{{.Comments}}" label="Comments: {{.Comments}}" scheme="hackernews-metadata"/>
+    {{if .Domain}}<category term="domain:{{.Domain | xmlEscape}}" label="Domain: {{.Domain | xmlEscape}}" scheme="hackernews-metadata"/>{{end}}
 
     <content type="html"><![CDATA[
       <div class="metadata">

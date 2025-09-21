@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/gorilla/feeds"
 	feedpkg "github.com/lepinkainen/feed-forge/pkg/feed"
@@ -81,29 +80,6 @@ func (fg *FeedGenerator) SaveFeedToFile(feed *feeds.Feed, feedType, outputPath s
 	return fg.generator.SaveToFile(feed, ft, outputPath)
 }
 
-// SaveCustomAtomFeedToFile saves a custom enhanced Atom feed using our custom content generation
-func (fg *FeedGenerator) SaveCustomAtomFeedToFile(posts []RedditPost, outputPath string) error {
-	// Use our custom Atom feed generation that includes selftext_html content
-	atomContent, err := fg.CreateCustomAtomFeed(posts)
-	if err != nil {
-		return fmt.Errorf("failed to generate custom atom feed: %w", err)
-	}
-
-	file, err := os.Create(outputPath)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = file.WriteString(atomContent)
-	if err != nil {
-		return fmt.Errorf("failed to write custom atom feed: %w", err)
-	}
-
-	slog.Info("Custom Atom feed saved successfully", "path", outputPath)
-	return nil
-}
-
 // ValidateFeed validates the generated feed structure
 func (fg *FeedGenerator) ValidateFeed(feed *feeds.Feed) error {
 	return fg.generator.ValidateFeed(feed)
@@ -112,82 +88,6 @@ func (fg *FeedGenerator) ValidateFeed(feed *feeds.Feed) error {
 // GetFeedMetadata returns metadata about the generated feed
 func (fg *FeedGenerator) GetFeedMetadata(feed *feeds.Feed) *feedpkg.Metadata {
 	return fg.generator.GetMetadata(feed)
-}
-
-// CreateCustomAtomFeed creates a custom Atom feed structure with enhanced features
-func (fg *FeedGenerator) CreateCustomAtomFeed(posts []RedditPost) (string, error) {
-	now := time.Now()
-
-	// Collect URLs for concurrent OpenGraph fetching
-	urls := make([]string, 0, len(posts))
-	for _, post := range posts {
-		if post.Data.URL != "" {
-			urls = append(urls, post.Data.URL)
-		}
-	}
-
-	// Fetch OpenGraph data concurrently
-	var ogData map[string]*opengraph.Data
-	if fg.ogFetcher != nil {
-		slog.Debug("Fetching OpenGraph data for custom Atom feed", "url_count", len(urls))
-		ogData = fg.ogFetcher.FetchConcurrent(urls)
-	}
-
-	var atom strings.Builder
-	atom.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
-	atom.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:reddit="http://reddit.com/atom/ns">`)
-	atom.WriteString(`<title>Reddit Homepage</title>`)
-	atom.WriteString(`<link href="https://www.reddit.com/"/>`)
-	atom.WriteString(`<id>https://www.reddit.com/</id>`)
-	atom.WriteString(fmt.Sprintf(`<updated>%s</updated>`, now.Format(time.RFC3339)))
-	atom.WriteString(`<author><name>Feed Forge</name></author>`)
-	atom.WriteString(`<subtitle>Filtered Reddit homepage posts with enhanced metadata</subtitle>`)
-	atom.WriteString(`<generator uri="https://github.com/lepinkainen/feed-forge">Red RSS Generator</generator>`)
-
-	for _, post := range posts {
-		atom.WriteString(`<entry>`)
-		atom.WriteString(fmt.Sprintf(`<title>%s</title>`, feedpkg.EscapeXML(post.Data.Title)))
-
-		// Multiple links: Reddit permalink and external URL
-		atom.WriteString(fmt.Sprintf(`<link rel="alternate" type="text/html" href="%s"/>`, feedpkg.EscapeXML(post.Data.URL)))
-		atom.WriteString(fmt.Sprintf(`<link rel="replies" type="text/html" href="https://www.reddit.com%s" title="Reddit Discussion"/>`, feedpkg.EscapeXML(post.Data.Permalink)))
-
-		atom.WriteString(fmt.Sprintf(`<id>https://www.reddit.com%s</id>`, feedpkg.EscapeXML(post.Data.Permalink)))
-		atom.WriteString(fmt.Sprintf(`<updated>%s</updated>`, time.Unix(int64(post.Data.CreatedUTC), 0).Format(time.RFC3339)))
-		atom.WriteString(fmt.Sprintf(`<published>%s</published>`, time.Unix(int64(post.Data.CreatedUTC), 0).Format(time.RFC3339)))
-
-		// Enhanced author information
-		atom.WriteString(fmt.Sprintf(`<author><name>%s</name><uri>https://www.reddit.com/user/%s</uri></author>`, feedpkg.EscapeXML(post.Data.Author), feedpkg.EscapeXML(post.Data.Author)))
-
-		// Categories for subreddit
-		atom.WriteString(fmt.Sprintf(`<category term="r/%s" label="r/%s"/>`, feedpkg.EscapeXML(post.Data.Subreddit), feedpkg.EscapeXML(post.Data.Subreddit)))
-
-		// Reddit-specific metadata using custom namespace
-		atom.WriteString(fmt.Sprintf(`<reddit:score>%d</reddit:score>`, post.Data.Score))
-		atom.WriteString(fmt.Sprintf(`<reddit:comments>%d</reddit:comments>`, post.Data.NumComments))
-		atom.WriteString(fmt.Sprintf(`<reddit:subreddit>r/%s</reddit:subreddit>`, feedpkg.EscapeXML(post.Data.Subreddit)))
-
-		// Enhanced content with OpenGraph data
-		content := fg.buildEnhancedContent(post, ogData)
-		atom.WriteString(fmt.Sprintf(`<content type="html"><![CDATA[%s]]></content>`, content))
-
-		// Summary
-		summary := fmt.Sprintf("Score: %d, Comments: %d",
-			post.Data.Score, post.Data.NumComments)
-		atom.WriteString(fmt.Sprintf(`<summary>%s</summary>`, feedpkg.EscapeXML(summary)))
-
-		// Add thumbnail as enclosure if available from OpenGraph
-		if ogData != nil {
-			if og, exists := ogData[post.Data.URL]; exists && og != nil && og.Image != "" {
-				atom.WriteString(fmt.Sprintf(`<link rel="enclosure" type="image/jpeg" href="%s"/>`, feedpkg.EscapeXML(og.Image)))
-			}
-		}
-
-		atom.WriteString(`</entry>`)
-	}
-
-	atom.WriteString(`</feed>`)
-	return atom.String(), nil
 }
 
 // buildEnhancedContent creates rich HTML content for Atom feeds
@@ -242,4 +142,105 @@ func (fg *FeedGenerator) cleanRedditHTML(htmlContent string) string {
 	htmlContent = strings.TrimSpace(htmlContent)
 
 	return htmlContent
+}
+
+// generateRedditRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data
+func generateRedditRSSFeed(posts []RedditPost, ogFetcher *opengraph.Fetcher) (string, error) {
+	slog.Debug("Generating RSS feed using enhanced Atom infrastructure", "itemCount", len(posts))
+
+	// Create shared feed generator
+	generator := feedpkg.NewGenerator(
+		"Reddit Homepage",
+		"Filtered Reddit homepage posts with enhanced metadata",
+		"https://www.reddit.com/",
+		"Feed Forge",
+	)
+
+	// Convert to FeedItem interface
+	feedItems := make([]providers.FeedItem, len(posts))
+	for i, post := range posts {
+		feedItems[i] = &post
+	}
+
+	// Use enhanced Atom generation with Reddit-specific configuration
+	config := feedpkg.RedditEnhancedAtomConfig()
+	atomContent, err := generator.GenerateEnhancedAtomWithConfig(feedItems, config, ogFetcher)
+	if err != nil {
+		slog.Error("Failed to generate enhanced Atom feed", "error", err)
+		return "", err
+	}
+
+	slog.Debug("Enhanced Atom feed generated successfully", "feedSize", len(atomContent))
+	return atomContent, nil
+}
+
+// generateRedditTemplateFeed creates an Atom RSS feed using template-based generation
+func generateRedditTemplateFeed(posts []RedditPost, ogFetcher *opengraph.Fetcher) (string, error) {
+	slog.Debug("Generating RSS feed using template-based generation", "itemCount", len(posts))
+
+	// Create template generator
+	templateGenerator := feedpkg.NewTemplateGenerator()
+
+	// Load Reddit template
+	err := templateGenerator.LoadTemplate("reddit-atom", "templates/reddit-atom.tmpl")
+	if err != nil {
+		slog.Warn("Failed to load Reddit Atom template, falling back to enhanced generation", "error", err)
+		return generateRedditRSSFeed(posts, ogFetcher)
+	}
+
+	// Convert to FeedItem interface
+	feedItems := make([]providers.FeedItem, len(posts))
+	for i, post := range posts {
+		feedItems[i] = &post
+	}
+
+	// Collect URLs for OpenGraph fetching
+	urls := make([]string, 0, len(feedItems))
+	for _, item := range feedItems {
+		if item.Link() != "" && item.Link() != item.CommentsLink() {
+			urls = append(urls, item.Link())
+		}
+	}
+
+	// Fetch OpenGraph data concurrently
+	var ogData map[string]*opengraph.Data
+	if ogFetcher != nil {
+		slog.Debug("Fetching OpenGraph data for template feed", "url_count", len(urls))
+		ogData = ogFetcher.FetchConcurrent(urls)
+	}
+
+	// Create template data
+	templateData := templateGenerator.CreateRedditFeedData(feedItems, ogData)
+
+	// Generate using template
+	var atomContent strings.Builder
+	err = templateGenerator.GenerateFromTemplate("reddit-atom", templateData, &atomContent)
+	if err != nil {
+		slog.Error("Failed to generate template feed", "error", err)
+		return "", err
+	}
+
+	slog.Debug("Template-based Atom feed generated successfully", "feedSize", len(atomContent.String()))
+	return atomContent.String(), nil
+}
+
+// SaveRedditFeedToFile saves a Reddit Atom feed using the enhanced generation system
+func SaveRedditFeedToFile(posts []RedditPost, outputPath string, ogFetcher *opengraph.Fetcher, useTemplate bool) error {
+	slog.Debug("Generating Reddit Atom feed", "outputPath", outputPath, "postCount", len(posts), "useTemplate", useTemplate)
+
+	var atomContent string
+	var err error
+
+	if useTemplate {
+		atomContent, err = generateRedditTemplateFeed(posts, ogFetcher)
+	} else {
+		atomContent, err = generateRedditRSSFeed(posts, ogFetcher)
+	}
+
+	if err != nil {
+		slog.Error("Failed to generate Atom feed", "error", err)
+		return err
+	}
+
+	return os.WriteFile(outputPath, []byte(atomContent), 0644)
 }

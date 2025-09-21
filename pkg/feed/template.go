@@ -2,12 +2,12 @@ package feed
 
 import (
 	"fmt"
-	"html/template"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"

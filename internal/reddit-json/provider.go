@@ -6,6 +6,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -69,17 +70,16 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	// Filter posts
 	filteredPosts := FilterPosts(posts, p.MinScore, p.MinComments)
 
-	// Create enhanced feed generator (no authentication needed for JSON feed)
-	feedHelper := feed.NewEnhancedFeedGenerator(p.OgDB)
-	feedGenerator := NewFeedGenerator(feedHelper.OGFetcher)
-
 	// Ensure output directory exists
 	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
 		return err
 	}
 
-	// Generate enhanced Atom feed (hardcoded to always use atom with enhanced features)
-	if err := feedGenerator.SaveCustomAtomFeedToFile(filteredPosts, outfile); err != nil {
+	// Create OpenGraph fetcher for enhanced content
+	ogFetcher := opengraph.NewFetcher(p.OgDB)
+
+	// Generate Atom feed using template-based generation
+	if err := SaveRedditFeedToFile(filteredPosts, outfile, ogFetcher, true); err != nil {
 		return err
 	}
 

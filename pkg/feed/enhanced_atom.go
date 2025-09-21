@@ -113,13 +113,8 @@ func (g *Generator) GenerateEnhancedAtomWithConfig(
 	var atom strings.Builder
 	atom.WriteString(`<?xml version="1.0" encoding="UTF-8"?>`)
 
-	// Build feed opening tag with namespace
-	if config.CustomNamespace != "" && config.CustomNamespaceURI != "" {
-		atom.WriteString(fmt.Sprintf(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:%s="%s" xmlns:media="http://search.yahoo.com/mrss/">`,
-			config.CustomNamespace, config.CustomNamespaceURI))
-	} else {
-		atom.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">`)
-	}
+	// Build feed opening tag - always use standard namespaces only
+	atom.WriteString(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">`)
 
 	// Feed metadata
 	atom.WriteString(fmt.Sprintf(`<title>%s</title>`, EscapeXML(config.Title)))
@@ -273,29 +268,30 @@ func (g *Generator) generateCustomMetadata(atom *strings.Builder, item providers
 	}
 }
 
-// generateRedditMetadata adds Reddit-specific metadata
+// generateRedditMetadata adds Reddit-specific metadata as standard categories
 func (g *Generator) generateRedditMetadata(atom *strings.Builder, item providers.FeedItem) {
-	atom.WriteString(fmt.Sprintf(`<reddit:score>%d</reddit:score>`, item.Score()))
-	atom.WriteString(fmt.Sprintf(`<reddit:comments>%d</reddit:comments>`, item.CommentCount()))
+	atom.WriteString(fmt.Sprintf(`<category term="score:%d" label="Score: %d" scheme="reddit-metadata"/>`, item.Score(), item.Score()))
+	atom.WriteString(fmt.Sprintf(`<category term="comments:%d" label="Comments: %d" scheme="reddit-metadata"/>`, item.CommentCount(), item.CommentCount()))
 
 	// Extract subreddit from categories if available
 	for _, category := range item.Categories() {
 		if strings.HasPrefix(category, "r/") {
-			atom.WriteString(fmt.Sprintf(`<reddit:subreddit>%s</reddit:subreddit>`, EscapeXML(category)))
+			subreddit := strings.TrimPrefix(category, "r/")
+			atom.WriteString(fmt.Sprintf(`<category term="subreddit:%s" label="Subreddit: r/%s" scheme="reddit-metadata"/>`, EscapeXML(subreddit), EscapeXML(subreddit)))
 			break
 		}
 	}
 }
 
-// generateHackerNewsMetadata adds Hacker News-specific metadata
+// generateHackerNewsMetadata adds Hacker News-specific metadata as standard categories
 func (g *Generator) generateHackerNewsMetadata(atom *strings.Builder, item providers.FeedItem) {
-	atom.WriteString(fmt.Sprintf(`<hn:points>%d</hn:points>`, item.Score()))
-	atom.WriteString(fmt.Sprintf(`<hn:comments>%d</hn:comments>`, item.CommentCount()))
+	atom.WriteString(fmt.Sprintf(`<category term="points:%d" label="Points: %d" scheme="hackernews-metadata"/>`, item.Score(), item.Score()))
+	atom.WriteString(fmt.Sprintf(`<category term="comments:%d" label="Comments: %d" scheme="hackernews-metadata"/>`, item.CommentCount(), item.CommentCount()))
 
 	// Add domain if available from categories
 	for _, category := range item.Categories() {
 		if !strings.Contains(category, " ") && strings.Contains(category, ".") {
-			atom.WriteString(fmt.Sprintf(`<hn:domain>%s</hn:domain>`, EscapeXML(category)))
+			atom.WriteString(fmt.Sprintf(`<category term="domain:%s" label="Domain: %s" scheme="hackernews-metadata"/>`, EscapeXML(category), EscapeXML(category)))
 			break
 		}
 	}

@@ -3,8 +3,8 @@ package feed
 import (
 	"fmt"
 	"html"
-	"html/template"
 	"strings"
+	"text/template"
 	"time"
 )
 

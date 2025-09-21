@@ -162,7 +162,7 @@ func TestTemplateGenerator_LoadTemplate(t *testing.T) {
 		t.Errorf("Expected output to contain 'Test Feed', got: %s", result)
 	}
 
-	if !strings.Contains(result, "Test &amp;amp; Item") {
+	if !strings.Contains(result, "Test &amp; Item") {
 		t.Errorf("Expected XML-escaped title, got: %s", result)
 	}
 

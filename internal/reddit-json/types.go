@@ -45,9 +45,6 @@ type ImageSource struct {
 
 // FeedItem interface implementation for RedditPost
 func (r *RedditPost) Title() string {
-	if r.Data.Subreddit != "" {
-		return fmt.Sprintf("[r/%s] %s", r.Data.Subreddit, r.Data.Title)
-	}
 	return r.Data.Title
 }
 
