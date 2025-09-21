@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:hn="http://news.ycombinator.com/atom/ns" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>{{.FeedTitle}}</title>
+  <link href="{{.FeedLink}}"/>
+  <id>{{.FeedID}}</id>
+  <updated>{{.Updated}}</updated>
+  <author><name>{{.FeedAuthor}}</name></author>
+  <subtitle>{{.FeedDescription}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator}}</generator>
+
+{{range .Items}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.CommentsLink | xmlEscape}}"/>
+    {{if ne .Link .CommentsLink}}<link rel="related" type="text/html" href="{{.Link | xmlEscape}}" title="Article"/>{{end}}
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <author>
+      <name>{{.Author | xmlEscape}}</name>
+      <uri>https://news.ycombinator.com/user?id={{.Author | xmlEscape}}</uri>
+    </author>
+    {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
+
+    <!-- Hacker News-specific metadata -->
+    <hn:points>{{.Score}}</hn:points>
+    <hn:comments>{{.Comments}}</hn:comments>
+    {{if .Domain}}<hn:domain>{{.Domain | xmlEscape}}</hn:domain>{{end}}
+
+    <content type="html"><![CDATA[
+      <div class="metadata">
+        <p><strong>Score:</strong> {{.Score}} | <strong>Comments:</strong> {{.Comments}}</p>
+      </div>
+      {{if index $.OpenGraphData .Link}}
+        {{$og := index $.OpenGraphData .Link}}
+        <div class="link-preview">
+          <h3>🔗 Link Preview</h3>
+          {{if $og.Image}}<img src="{{$og.Image | xmlEscape}}" alt="Preview image" style="max-width: 200px; height: auto;"/>{{end}}
+          {{if $og.Title}}<h4>{{$og.Title | xmlEscape}}</h4>{{end}}
+          {{if $og.Description}}<p>{{$og.Description | xmlEscape}}</p>{{end}}
+          {{if $og.SiteName}}<p><em>Source: {{$og.SiteName | xmlEscape}}</em></p>{{end}}
+        </div>
+      {{end}}
+      <div class="links">
+        {{if ne .Link .CommentsLink}}
+          <p><a href="{{.Link | xmlEscape}}">View External Link</a> | <a href="{{.CommentsLink | xmlEscape}}">View Comments</a></p>
+        {{else}}
+          <p><a href="{{.CommentsLink | xmlEscape}}">View Comments</a></p>
+        {{end}}
+      </div>
+    ]]></content>
+
+    <summary>{{.Summary | xmlEscape}}</summary>
+
+    {{if index $.OpenGraphData .Link}}
+      {{$og := index $.OpenGraphData .Link}}
+      {{if $og.Image}}<link rel="enclosure" type="image/jpeg" href="{{$og.Image | xmlEscape}}"/>{{end}}
+      {{if $og.Image}}<media:thumbnail url="{{$og.Image | xmlEscape}}"/>{{end}}
+    {{end}}
+  </entry>
+{{end}}
+</feed>
