@@ -38,5 +38,6 @@ To run the application, use the binary in the `build/` directory:
 - **Testing**: The project relies heavily on golden file testing. Use `task update-golden` to update the golden files after making changes.
 
 ## Gemini Added Memories
+
 - Always use "task build" to test and lint the project instead of running "go test" or "go build"
-- If @llm-shared/ exists in the project, use it for up to date technology preferences and generic project guidance
+- If llm-shared/ exists in the project, use it for up to date technology preferences and generic project guidance
