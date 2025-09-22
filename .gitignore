@@ -46,5 +46,8 @@ Thumbs.db
 # Temporary files
 tmp/
 temp/
+# Test output
 hackernews.xml
 reddit.xml
+# Reddit JSON feed from settingsd
+reddit.json         

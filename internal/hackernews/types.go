@@ -55,6 +55,11 @@ func (h *HackerNewsItem) ImageURL() string {
 	return ""
 }
 
+func (h *HackerNewsItem) Content() string {
+	// HackerNews items don't have body content, only titles and links
+	return ""
+}
+
 // AlgoliaResponse represents the response structure from Algolia API
 type AlgoliaResponse struct {
 	Hits []AlgoliaHit `json:"hits"`

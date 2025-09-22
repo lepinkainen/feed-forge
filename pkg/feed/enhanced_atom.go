@@ -317,8 +317,17 @@ func (g *Generator) buildProviderEnhancedContent(item providers.FeedItem, ogData
 <p><strong>Score:</strong> %d | <strong>Comments:</strong> %d</p>
 </div>`, item.Score(), item.CommentCount()))
 
-	// OpenGraph preview if available
-	if ogDataMap != nil && item.Link() != "" {
+	// Add selftext content if available (prioritize over OpenGraph)
+	selftext := item.Content()
+	if selftext != "" {
+		content.WriteString(`<div class="selftext">`)
+		content.WriteString(selftext)
+		content.WriteString(`</div>`)
+		content.WriteString(`<br/>`)
+	}
+
+	// OpenGraph preview if available (only for posts with external links and no selftext)
+	if ogDataMap != nil && item.Link() != "" && selftext == "" {
 		if og, exists := ogDataMap[item.Link()]; exists && og != nil {
 			content.WriteString(`<div class="link-preview">`)
 			content.WriteString(`<h3>🔗 Link Preview</h3>`)

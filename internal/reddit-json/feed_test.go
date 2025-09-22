@@ -5,7 +5,6 @@ import (
 )
 
 func TestCleanRedditHTML(t *testing.T) {
-	fg := &FeedGenerator{}
 
 	tests := []struct {
 		name     string
@@ -41,7 +40,7 @@ func TestCleanRedditHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := fg.cleanRedditHTML(tt.input)
+			result := cleanRedditHTML(tt.input)
 			if result != tt.expected {
 				t.Errorf("cleanRedditHTML() = %q, want %q", result, tt.expected)
 			}

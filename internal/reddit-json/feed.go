@@ -2,7 +2,6 @@ package redditjson
 
 import (
 	"fmt"
-	"html"
 	"log/slog"
 	"os"
 	"strings"
@@ -102,7 +101,7 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 
 	// Add selftext HTML content if available (prioritize this over OpenGraph)
 	if post.Data.SelfTextHTML != "" && post.Data.SelfTextHTML != "null" {
-		cleanHTML := fg.cleanRedditHTML(post.Data.SelfTextHTML)
+		cleanHTML := cleanRedditHTML(post.Data.SelfTextHTML)
 		content.WriteString(cleanHTML)
 		content.WriteString(`<br/><br/>`)
 	}
@@ -124,24 +123,6 @@ func (fg *FeedGenerator) buildEnhancedContent(post RedditPost, ogData map[string
 	}
 
 	return content.String()
-}
-
-// cleanRedditHTML removes Reddit-specific HTML comments and decodes HTML entities
-func (fg *FeedGenerator) cleanRedditHTML(htmlContent string) string {
-	// Fix double-encoded ampersands that come from Reddit's API
-	htmlContent = strings.ReplaceAll(htmlContent, "&amp;amp;", "&amp;")
-
-	// First, decode HTML entities (Reddit sends HTML-encoded content)
-	htmlContent = html.UnescapeString(htmlContent)
-
-	// Remove Reddit-specific HTML comments
-	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_OFF -->", "")
-	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_ON -->", "")
-
-	// Remove any extra whitespace that might result from comment removal
-	htmlContent = strings.TrimSpace(htmlContent)
-
-	return htmlContent
 }
 
 // generateRedditRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data

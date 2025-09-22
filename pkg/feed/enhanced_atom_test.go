@@ -32,6 +32,7 @@ func (m *mockFeedItem) CommentCount() int    { return m.commentCount }
 func (m *mockFeedItem) CreatedAt() time.Time { return m.createdAt }
 func (m *mockFeedItem) Categories() []string { return m.categories }
 func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
+func (m *mockFeedItem) Content() string      { return "" }
 
 // Test media thumbnail in full feed generation
 func TestGenerateEnhancedAtomWithConfig_MediaThumbnail(t *testing.T) {

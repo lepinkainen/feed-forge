@@ -153,6 +153,7 @@ func (tg *TemplateGenerator) CreateRedditFeedData(posts []providers.FeedItem, og
 			Categories:   post.Categories(),
 			Score:        post.Score(),
 			Comments:     post.CommentCount(),
+			Content:      post.Content(),
 			Summary:      fmt.Sprintf("Score: %d | Comments: %d", post.Score(), post.CommentCount()),
 		}
 
@@ -194,6 +195,7 @@ func (tg *TemplateGenerator) CreateHackerNewsFeedData(items []providers.FeedItem
 			Categories:   item.Categories(),
 			Score:        item.Score(),
 			Comments:     item.CommentCount(),
+			Content:      item.Content(),
 			Summary:      fmt.Sprintf("Score: %d | Comments: %d", item.Score(), item.CommentCount()),
 		}
 

@@ -29,6 +29,12 @@
       <div class="metadata">
         <p><strong>Score:</strong> {{.Score}} | <strong>Comments:</strong> {{.Comments}}</p>
       </div>
+      {{if .Content}}
+        <div class="selftext">
+          {{.Content}}
+        </div>
+        <br/>
+      {{end}}
       {{if index $.OpenGraphData .Link}}
         {{$og := index $.OpenGraphData .Link}}
         <div class="link-preview">

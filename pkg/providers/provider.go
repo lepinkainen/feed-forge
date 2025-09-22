@@ -22,6 +22,7 @@ type FeedItem interface {
 	CreatedAt() time.Time
 	Categories() []string
 	ImageURL() string
+	Content() string
 }
 
 // ProviderFactory creates a new instance of a provider.

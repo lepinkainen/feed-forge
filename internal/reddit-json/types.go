@@ -2,6 +2,8 @@ package redditjson
 
 import (
 	"fmt"
+	"html"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -96,6 +98,32 @@ func (r *RedditPost) ImageURL() string {
 	}
 
 	return ""
+}
+
+// Content returns the cleaned selftext content for the post
+func (r *RedditPost) Content() string {
+	if r.Data.SelfTextHTML != "" && r.Data.SelfTextHTML != "null" {
+		return cleanRedditHTML(r.Data.SelfTextHTML)
+	}
+	return ""
+}
+
+// cleanRedditHTML removes Reddit-specific HTML comments and decodes HTML entities
+func cleanRedditHTML(htmlContent string) string {
+	// Fix double-encoded ampersands that come from Reddit's API
+	htmlContent = strings.ReplaceAll(htmlContent, "&amp;amp;", "&amp;")
+
+	// First, decode HTML entities (Reddit sends HTML-encoded content)
+	htmlContent = html.UnescapeString(htmlContent)
+
+	// Remove Reddit-specific HTML comments
+	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_OFF -->", "")
+	htmlContent = strings.ReplaceAll(htmlContent, "<!-- SC_ON -->", "")
+
+	// Remove any extra whitespace that might result from comment removal
+	htmlContent = strings.TrimSpace(htmlContent)
+
+	return htmlContent
 }
 
 // RedditListing represents the structure of the Reddit API response for listings
