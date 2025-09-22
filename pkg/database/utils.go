@@ -30,7 +30,7 @@ func BackupDatabase(dbPath string) error {
 		return fmt.Errorf("failed to read database file: %w", err)
 	}
 
-	err = os.WriteFile(backupPath, input, 0644)
+	err = os.WriteFile(backupPath, input, 0o644)
 	if err != nil {
 		return fmt.Errorf("failed to write backup file: %w", err)
 	}
@@ -38,8 +38,8 @@ func BackupDatabase(dbPath string) error {
 	return nil
 }
 
-// DatabaseExists checks if a database file exists
-func DatabaseExists(dbPath string) bool {
+// Exists checks if a database file exists
+func Exists(dbPath string) bool {
 	_, err := os.Stat(dbPath)
 	return !os.IsNotExist(err)
 }
@@ -87,7 +87,7 @@ func GetDatabaseInfo(db *Database) (map[string]any, error) {
 	info["sqlite_version"] = version
 
 	// Get database size
-	if size, err := GetDatabaseSize(db.Path()); err == nil {
+	if size, sizeErr := GetDatabaseSize(db.Path()); sizeErr == nil {
 		info["file_size_bytes"] = size
 	}
 

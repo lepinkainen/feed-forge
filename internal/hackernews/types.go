@@ -2,8 +2,8 @@ package hackernews
 
 import "time"
 
-// HackerNewsItem represents a single Hacker News story with metadata
-type HackerNewsItem struct {
+// Item represents a single Hacker News story with metadata
+type Item struct {
 	ItemID           string
 	ItemTitle        string
 	ItemLink         string
@@ -17,45 +17,54 @@ type HackerNewsItem struct {
 	ItemCategories   []string // Categories determined from title, domain, and points
 }
 
-// FeedItem interface implementation for HackerNewsItem
-func (h *HackerNewsItem) Title() string {
+// Title returns the title of the Hacker News item
+func (h *Item) Title() string {
 	return h.ItemTitle
 }
 
-func (h *HackerNewsItem) Link() string {
+// Link returns the URL of the Hacker News item
+func (h *Item) Link() string {
 	return h.ItemLink
 }
 
-func (h *HackerNewsItem) CommentsLink() string {
+// CommentsLink returns the URL to the comments page
+func (h *Item) CommentsLink() string {
 	return h.ItemCommentsLink
 }
 
-func (h *HackerNewsItem) Author() string {
+// Author returns the author of the Hacker News item
+func (h *Item) Author() string {
 	return h.ItemAuthor
 }
 
-func (h *HackerNewsItem) Score() int {
+// Score returns the points/score of the Hacker News item
+func (h *Item) Score() int {
 	return h.Points
 }
 
-func (h *HackerNewsItem) CommentCount() int {
+// CommentCount returns the number of comments on the item
+func (h *Item) CommentCount() int {
 	return h.ItemCommentCount
 }
 
-func (h *HackerNewsItem) CreatedAt() time.Time {
+// CreatedAt returns the creation time of the item
+func (h *Item) CreatedAt() time.Time {
 	return h.ItemCreatedAt
 }
 
-func (h *HackerNewsItem) Categories() []string {
+// Categories returns the categories assigned to the item
+func (h *Item) Categories() []string {
 	return h.ItemCategories
 }
 
-func (h *HackerNewsItem) ImageURL() string {
+// ImageURL returns the image URL for the item (empty for HN items)
+func (h *Item) ImageURL() string {
 	// HackerNews items typically don't have images
 	return ""
 }
 
-func (h *HackerNewsItem) Content() string {
+// Content returns the body content of the item (empty for HN items)
+func (h *Item) Content() string {
 	// HackerNews items don't have body content, only titles and links
 	return ""
 }

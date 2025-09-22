@@ -24,26 +24,28 @@ type Fetcher struct {
 	redditClient *http.Client // Optional authenticated client for Reddit requests
 	db           *Database
 	cache        map[string]*Data
-	cacheMutex   sync.RWMutex
 	domainMutex  sync.Mutex
 	lastFetch    map[string]time.Time
 	semaphore    chan struct{}
 	urlMutexes   sync.Map
 }
 
-// Reddit OAuth API response structures
+// RedditOAuthResponse represents Reddit OAuth API response structure
 type RedditOAuthResponse struct {
 	Data RedditOAuthListingData `json:"data"`
 }
 
+// RedditOAuthListingData represents Reddit OAuth listing data
 type RedditOAuthListingData struct {
 	Children []RedditOAuthPost `json:"children"`
 }
 
+// RedditOAuthPost represents a Reddit OAuth post
 type RedditOAuthPost struct {
 	Data RedditOAuthPostData `json:"data"`
 }
 
+// RedditOAuthPostData represents Reddit OAuth post data
 type RedditOAuthPostData struct {
 	Title        string `json:"title"`
 	Selftext     string `json:"selftext"`
@@ -136,8 +138,8 @@ func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 
 	// Cache the result (success or failure)
 	if f.db != nil && data != nil {
-		if err := f.db.SaveCachedData(data, fetchSuccess); err != nil {
-			slog.Warn("Failed to cache OpenGraph data", "url", targetURL, "error", err)
+		if cacheErr := f.db.SaveCachedData(data, fetchSuccess); cacheErr != nil {
+			slog.Warn("Failed to cache OpenGraph data", "url", targetURL, "error", cacheErr)
 		}
 	}
 
@@ -197,7 +199,7 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	}
 
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -216,7 +218,11 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("Failed to close response body", "error", closeErr)
+		}
+	}()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
@@ -238,7 +244,11 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
 		}
-		defer reader.Close()
+		defer func() {
+			if closeErr := reader.Close(); closeErr != nil {
+				slog.Error("Failed to close reader", "error", closeErr)
+			}
+		}()
 	default:
 		reader = resp.Body
 	}
@@ -524,7 +534,7 @@ func (f *Fetcher) fetchRedditOAuthAPI(ctx context.Context, targetURL string) (*D
 	apiURL := fmt.Sprintf("https://oauth.reddit.com/api/info?id=t3_%s", postID)
 
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -540,7 +550,11 @@ func (f *Fetcher) fetchRedditOAuthAPI(ctx context.Context, targetURL string) (*D
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("Failed to close response body", "error", closeErr)
+		}
+	}()
 
 	// Check status code
 	if resp.StatusCode != http.StatusOK {

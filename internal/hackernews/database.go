@@ -3,14 +3,10 @@ package hackernews
 import (
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
-
-// dbMutex protects concurrent access to OpenGraph database operations
-var dbMutex sync.Mutex
 
 // initializeSchema initializes the database schema using shared utilities
 func initializeSchema(db *database.Database) error {
@@ -37,7 +33,7 @@ func initializeSchema(db *database.Database) error {
 }
 
 // updateStoredItems updates the database with new items, returns map of updated item IDs
-func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[string]bool {
+func updateStoredItems(db *database.Database, newItems []Item) map[string]bool {
 	slog.Debug("Updating stored items", "itemCount", len(newItems))
 	updatedItems := make(map[string]bool)
 
@@ -73,7 +69,7 @@ func updateStoredItems(db *database.Database, newItems []HackerNewsItem) map[str
 }
 
 // getAllItems retrieves items from database with minimum points threshold
-func getAllItems(db *database.Database, limit int, minPoints int) ([]HackerNewsItem, error) {
+func getAllItems(db *database.Database, limit int, minPoints int) ([]Item, error) {
 	slog.Debug("Querying database for items", "limit", limit, "minPoints", minPoints)
 	rows, err := db.DB().Query("SELECT item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at FROM items WHERE points > ? ORDER BY created_at DESC LIMIT ?", minPoints, limit)
 	if err != nil {
@@ -82,9 +78,9 @@ func getAllItems(db *database.Database, limit int, minPoints int) ([]HackerNewsI
 	}
 	defer func() { _ = rows.Close() }()
 
-	var items []HackerNewsItem
+	var items []Item
 	for rows.Next() {
-		var item HackerNewsItem
+		var item Item
 		err := rows.Scan(&item.ItemID, &item.ItemTitle, &item.ItemLink, &item.ItemCommentsLink, &item.Points, &item.ItemCommentCount, &item.ItemAuthor, &item.ItemCreatedAt, &item.UpdatedAt)
 		if err != nil {
 			slog.Error("Error scanning row", "error", err)

@@ -51,7 +51,9 @@ func NewDatabase(dbPath string) (*Database, error) {
 
 	for _, pragma := range pragmas {
 		if _, err := db.Exec(pragma); err != nil {
-			db.Close()
+			if closeErr := db.Close(); closeErr != nil {
+				slog.Error("Failed to close database", "error", closeErr)
+			}
 			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
 		}
 	}
@@ -62,7 +64,9 @@ func NewDatabase(dbPath string) (*Database, error) {
 
 	// Test the connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -73,7 +77,9 @@ func NewDatabase(dbPath string) (*Database, error) {
 
 	// Create schema
 	if err := ogDB.createSchema(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 

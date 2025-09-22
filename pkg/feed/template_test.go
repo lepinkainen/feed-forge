@@ -141,7 +141,7 @@ func TestTemplateGenerator_LoadTemplate(t *testing.T) {
 	}
 
 	// Test template execution
-	data := &FeedTemplateData{
+	data := &TemplateData{
 		FeedTitle: "Test Feed",
 		Items: []TemplateItem{
 			{

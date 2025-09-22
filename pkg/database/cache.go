@@ -51,14 +51,13 @@ func (c *Cache) InitializeCache() error {
 }
 
 // Get retrieves a value from the cache
-func (c *Cache) Get(key string) (string, bool, error) {
+func (c *Cache) Get(key string) (value string, found bool, err error) {
 	query := fmt.Sprintf(`
 		SELECT value FROM %s 
 		WHERE key = ? AND expires_at > CURRENT_TIMESTAMP
 	`, c.tableName)
 
-	var value string
-	err := c.db.DB().QueryRow(query, key).Scan(&value)
+	err = c.db.DB().QueryRow(query, key).Scan(&value)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
@@ -171,7 +170,11 @@ func (c *Cache) GetAll() ([]CacheEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all cache entries: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			slog.Error("Failed to close rows", "error", closeErr)
+		}
+	}()
 
 	var entries []CacheEntry
 	for rows.Next() {

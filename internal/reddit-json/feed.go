@@ -70,5 +70,5 @@ func SaveRedditFeedToFile(posts []RedditPost, outputPath string, ogFetcher *open
 		return err
 	}
 
-	return os.WriteFile(outputPath, []byte(atomContent), 0644)
+	return os.WriteFile(outputPath, []byte(atomContent), 0o644)
 }

@@ -3,7 +3,6 @@ package hackernews
 import (
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/testutil"
 )
@@ -216,92 +215,6 @@ func TestCategorizeByPoints(t *testing.T) {
 			if result != tt.expected {
 				t.Errorf("categorizeByPoints(%d, %d) = %q, expected %q",
 					tt.points, tt.minPoints, result, tt.expected)
-			}
-		})
-	}
-}
-
-func TestCalculatePostAge(t *testing.T) {
-	now := time.Now()
-
-	tests := []struct {
-		name      string
-		createdAt time.Time
-		expected  string
-	}{
-		{
-			name:      "just now",
-			createdAt: now.Add(-30 * time.Second),
-			expected:  "just now",
-		},
-		{
-			name:      "5 minutes ago",
-			createdAt: now.Add(-5 * time.Minute),
-			expected:  "5 minutes ago",
-		},
-		{
-			name:      "1 hour ago",
-			createdAt: now.Add(-1 * time.Hour),
-			expected:  "1 hours ago",
-		},
-		{
-			name:      "3 hours ago",
-			createdAt: now.Add(-3 * time.Hour),
-			expected:  "3 hours ago",
-		},
-		{
-			name:      "1 day ago",
-			createdAt: now.Add(-24 * time.Hour),
-			expected:  "1 days ago",
-		},
-		{
-			name:      "3 days ago",
-			createdAt: now.Add(-3 * 24 * time.Hour),
-			expected:  "3 days ago",
-		},
-		{
-			name:      "1 week ago",
-			createdAt: now.Add(-7 * 24 * time.Hour),
-			expected:  "1 weeks ago",
-		},
-		{
-			name:      "2 weeks ago",
-			createdAt: now.Add(-14 * 24 * time.Hour),
-			expected:  "2 weeks ago",
-		},
-		{
-			name:      "1 month ago",
-			createdAt: now.Add(-30 * 24 * time.Hour),
-			expected:  "4 weeks ago",
-		},
-		{
-			name:      "exactly 1 minute",
-			createdAt: now.Add(-1 * time.Minute),
-			expected:  "1 minutes ago",
-		},
-		{
-			name:      "exactly 1 hour",
-			createdAt: now.Add(-1 * time.Hour),
-			expected:  "1 hours ago",
-		},
-		{
-			name:      "exactly 1 day",
-			createdAt: now.Add(-24 * time.Hour),
-			expected:  "1 days ago",
-		},
-		{
-			name:      "exactly 1 week",
-			createdAt: now.Add(-7 * 24 * time.Hour),
-			expected:  "1 weeks ago",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := calculatePostAge(tt.createdAt)
-			if result != tt.expected {
-				t.Errorf("calculatePostAge(%v) = %q, expected %q",
-					tt.createdAt, result, tt.expected)
 			}
 		})
 	}

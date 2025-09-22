@@ -59,7 +59,7 @@ func main() {
 		limit := CLI.HackerNews.Limit
 
 		// Load category mapper (for now, pass nil - will be improved later)
-		provider = hackernews.NewHackerNewsProvider(minPoints, limit, nil)
+		provider = hackernews.NewProvider(minPoints, limit, nil)
 		if provider == nil {
 			slog.Error("Failed to create Hacker News provider")
 			os.Exit(1)

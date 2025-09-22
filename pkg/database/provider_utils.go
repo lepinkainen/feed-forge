@@ -56,13 +56,17 @@ func InitializeProviderDatabases(contentDBName string, useContentDB bool) (*Prov
 	if useContentDB && contentDBName != "" {
 		contentDBPath, err := filesystem.GetDefaultPath(contentDBName)
 		if err != nil {
-			pd.OpenGraphDB.Close()
+			if closeErr := pd.OpenGraphDB.Close(); closeErr != nil {
+				slog.Error("Failed to close OpenGraph database", "error", closeErr)
+			}
 			return nil, err
 		}
 
 		pd.ContentDB, err = NewDatabase(Config{Path: contentDBPath})
 		if err != nil {
-			pd.OpenGraphDB.Close()
+			if closeErr := pd.OpenGraphDB.Close(); closeErr != nil {
+				slog.Error("Failed to close OpenGraph database", "error", closeErr)
+			}
 			return nil, err
 		}
 	}

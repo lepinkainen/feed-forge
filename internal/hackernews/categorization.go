@@ -3,7 +3,6 @@ package hackernews
 import (
 	"fmt"
 	"strings"
-	"time"
 )
 
 // categorizeContent analyzes content and returns applicable categories based on domain and title
@@ -55,29 +54,5 @@ func categorizeByPoints(points int, minPoints int) string {
 		return fmt.Sprintf("Popular %d+", minPoints)
 	default:
 		return "Rising"
-	}
-}
-
-// calculatePostAge returns a human-readable time difference from the given time to now
-func calculatePostAge(createdAt time.Time) string {
-	now := time.Now()
-	diff := now.Sub(createdAt)
-
-	switch {
-	case diff < time.Hour:
-		minutes := int(diff.Minutes())
-		if minutes < 1 {
-			return "just now"
-		}
-		return fmt.Sprintf("%d minutes ago", minutes)
-	case diff < 24*time.Hour:
-		hours := int(diff.Hours())
-		return fmt.Sprintf("%d hours ago", hours)
-	case diff < 7*24*time.Hour:
-		days := int(diff.Hours() / 24)
-		return fmt.Sprintf("%d days ago", days)
-	default:
-		weeks := int(diff.Hours() / (24 * 7))
-		return fmt.Sprintf("%d weeks ago", weeks)
 	}
 }

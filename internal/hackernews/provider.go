@@ -10,8 +10,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-// HackerNewsProvider implements the FeedProvider interface for Hacker News
-type HackerNewsProvider struct {
+// Provider implements the FeedProvider interface for Hacker News
+type Provider struct {
 	*providers.BaseProvider
 	MinPoints      int
 	Limit          int
@@ -19,8 +19,8 @@ type HackerNewsProvider struct {
 	databases      *database.ProviderDatabases
 }
 
-// NewHackerNewsProvider creates a new HackerNews provider
-func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers.FeedProvider {
+// NewProvider creates a new HackerNews provider
+func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers.FeedProvider {
 	// Initialize CategoryMapper if not provided
 	if categoryMapper == nil {
 		categoryMapper = LoadConfig("", "") // Use default configuration
@@ -39,11 +39,13 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Hacker News base provider", "error", err)
-		databases.Close()
+		if closeErr := databases.Close(); closeErr != nil {
+			slog.Error("Failed to close databases", "error", closeErr)
+		}
 		return nil
 	}
 
-	return &HackerNewsProvider{
+	return &Provider{
 		BaseProvider:   base,
 		MinPoints:      minPoints,
 		Limit:          limit,
@@ -53,10 +55,10 @@ func NewHackerNewsProvider(minPoints, limit int, categoryMapper *CategoryMapper)
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
+func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 	// Clean up expired entries using base provider
 	if err := p.CleanupExpired(); err != nil {
-		// Non-fatal error, just warn
+		slog.Warn("Failed to cleanup expired entries", "error", err)
 	}
 
 	// Get database connections
@@ -64,7 +66,7 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	ogDB := p.databases.OpenGraphDB
 
 	// Fetch current front page items
-	newItems := fetchHackerNewsItems()
+	newItems := fetchItems()
 
 	// Initialize database schema
 	if err := initializeSchema(contentDB); err != nil {
@@ -90,8 +92,8 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	}
 
 	// Ensure output directory exists
-	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
-		return err
+	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
+		return dirErr
 	}
 
 	// Generate and save the feed
@@ -99,7 +101,7 @@ func (p *HackerNewsProvider) GenerateFeed(outfile string, reauth bool) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(outfile, []byte(rss), 0644); err != nil {
+	if err := os.WriteFile(outfile, []byte(rss), 0o644); err != nil {
 		return err
 	}
 

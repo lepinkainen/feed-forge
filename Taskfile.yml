@@ -11,12 +11,13 @@ tasks:
   test:
     desc: "Run tests"
     cmds:
-      - go test -v ./...
+      - go test ./...
 
   lint:
     desc: "Run linter and formatter"
     cmds:
-      - gofmt -w .
+      - goimports -w .
+      - golangci-lint run
       - go vet ./...
       - go mod tidy
 

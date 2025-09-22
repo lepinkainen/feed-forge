@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -50,7 +51,7 @@ func NewClient(config *ClientConfig) *Client {
 
 // GetWithContext performs an HTTP GET request with context and retry logic
 func (c *Client) GetWithContext(ctx context.Context, url string) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create GET request: %w", err)
 	}
@@ -109,7 +110,9 @@ func (c *Client) doWithRetry(req *http.Request) (*http.Response, error) {
 
 		// Check if we should retry based on status code
 		if IsRetryableStatusCode(resp.StatusCode) && attempt < c.config.MaxRetries {
-			resp.Body.Close()
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				slog.Error("Failed to close response body", "error", closeErr)
+			}
 			lastErr = fmt.Errorf("retryable HTTP status: %d", resp.StatusCode)
 			continue
 		}

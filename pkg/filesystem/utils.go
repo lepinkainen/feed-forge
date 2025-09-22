@@ -25,7 +25,7 @@ func EnsureDirectoryExists(filePath string) error {
 		return nil // Current directory
 	}
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 

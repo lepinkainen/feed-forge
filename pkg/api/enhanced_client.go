@@ -63,7 +63,7 @@ func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders
 		ec.rateLimiter.Wait()
 
 		// Create request
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -124,7 +124,7 @@ func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (
 		ec.rateLimiter.Wait()
 
 		// Create request
-		req, err := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -155,7 +155,9 @@ func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (
 		// Check status code
 		if err := httputil.EnsureStatusOK(res); err != nil {
 			ec.logAPICall(url, duration, false, err)
-			res.Body.Close() // Close body on error
+			if closeErr := res.Body.Close(); closeErr != nil {
+				slog.Error("Failed to close response body", "error", closeErr)
+			}
 			// Convert to our HTTPError type for retry logic
 			return &HTTPError{
 				StatusCode: res.StatusCode,

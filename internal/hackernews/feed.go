@@ -12,7 +12,7 @@ import (
 )
 
 // generateRSSFeed creates an Atom RSS feed using template-based generation
-func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) (string, error) {
+func generateRSSFeed(_ *sql.DB, ogDB *opengraph.Database, items []Item, minPoints int, categoryMapper *CategoryMapper) (string, error) {
 	slog.Debug("Generating RSS feed using template-based generation", "itemCount", len(items))
 
 	// Create template generator
@@ -26,7 +26,7 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 	}
 
 	// Process items to add HackerNews-specific categorization
-	preprocessedItems := preprocessHackerNewsItems(items, minPoints, categoryMapper)
+	preprocessedItems := preprocessItems(items, minPoints, categoryMapper)
 
 	// Convert to FeedItem interface
 	feedItems := make([]providers.FeedItem, len(preprocessedItems))
@@ -65,8 +65,8 @@ func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsIte
 	return atomContent.String(), nil
 }
 
-// preprocessHackerNewsItems applies HackerNews-specific categorization and metadata
-func preprocessHackerNewsItems(items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) []HackerNewsItem {
+// preprocessItems applies HackerNews-specific categorization and metadata
+func preprocessItems(items []Item, minPoints int, categoryMapper *CategoryMapper) []Item {
 	domainRegex := regexp.MustCompile(`^https?://([^/]+)`)
 
 	for i := range items {

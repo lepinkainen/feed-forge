@@ -1,6 +1,8 @@
 package providers
 
 import (
+	"log/slog"
+
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
@@ -11,9 +13,6 @@ type BaseProvider struct {
 	// Database connections
 	ContentDB *database.Database
 	OgDB      *opengraph.Database
-
-	// Common configuration
-	outputDir string
 }
 
 // DatabaseConfig holds database configuration for providers
@@ -41,13 +40,17 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	if dbConfig.UseContentDB && dbConfig.ContentDBName != "" {
 		contentDBPath, err := filesystem.GetDefaultPath(dbConfig.ContentDBName)
 		if err != nil {
-			base.OgDB.Close()
+			if closeErr := base.OgDB.Close(); closeErr != nil {
+				slog.Error("Failed to close OpenGraph database", "error", closeErr)
+			}
 			return nil, err
 		}
 
 		base.ContentDB, err = database.NewDatabase(database.Config{Path: contentDBPath})
 		if err != nil {
-			base.OgDB.Close()
+			if closeErr := base.OgDB.Close(); closeErr != nil {
+				slog.Error("Failed to close OpenGraph database", "error", closeErr)
+			}
 			return nil, err
 		}
 	}

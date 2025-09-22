@@ -115,9 +115,9 @@ func TestDatabaseExists(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := DatabaseExists(tt.dbPath)
+			result := Exists(tt.dbPath)
 			if result != tt.expected {
-				t.Errorf("DatabaseExists(%q) = %v, expected %v", tt.dbPath, result, tt.expected)
+				t.Errorf("Exists(%q) = %v, expected %v", tt.dbPath, result, tt.expected)
 			}
 		})
 	}

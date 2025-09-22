@@ -98,5 +98,5 @@ func (r *ProviderRegistry) CreateProvider(name string, config any) (FeedProvider
 	return info.Factory(config)
 }
 
-// Global registry instance
+// DefaultRegistry is the global registry instance
 var DefaultRegistry = NewProviderRegistry()

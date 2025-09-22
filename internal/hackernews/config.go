@@ -18,7 +18,7 @@ type CategoryMapper struct {
 	domainToCategory map[string]string // reverse lookup for efficient searching
 }
 
-// Default configuration URL
+// DefaultConfigURL is the default configuration URL for domain mappings
 const DefaultConfigURL = "https://raw.githubusercontent.com/lepinkainen/hntop-rss/refs/heads/main/configs/domains.json"
 
 // LoadConfig loads configuration with fallback priority:

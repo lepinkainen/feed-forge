@@ -2,6 +2,7 @@ package redditjson
 
 import (
 	"fmt"
+	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -26,7 +27,7 @@ type RedditProvider struct {
 }
 
 // NewRedditProvider creates a new Reddit JSON provider
-func NewRedditProvider(minScore, minComments int, feedID, username string, config *config.Config) providers.FeedProvider {
+func NewRedditProvider(minScore, minComments int, feedID, username string, cfg *config.Config) providers.FeedProvider {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "", // Reddit JSON doesn't use content DB
 		UseContentDB:  false,
@@ -42,7 +43,7 @@ func NewRedditProvider(minScore, minComments int, feedID, username string, confi
 		MinComments:  minComments,
 		FeedID:       feedID,
 		Username:     username,
-		Config:       config,
+		Config:       cfg,
 	}
 }
 
@@ -52,7 +53,7 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 
 	// Clean up expired entries using base provider
 	if err := p.CleanupExpired(); err != nil {
-		// Non-fatal error, just warn
+		slog.Warn("Failed to cleanup expired entries", "error", err)
 	}
 
 	// Construct feed URL from config parameters

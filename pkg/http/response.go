@@ -4,18 +4,27 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
 // ReadResponseBody reads and closes HTTP response body
 func ReadResponseBody(resp *http.Response) ([]byte, error) {
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("Failed to close response body", "error", closeErr)
+		}
+	}()
 	return io.ReadAll(resp.Body)
 }
 
 // DecodeJSONResponse decodes JSON response into a struct
 func DecodeJSONResponse(resp *http.Response, target any) error {
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("Failed to close response body", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP error: %s", resp.Status)

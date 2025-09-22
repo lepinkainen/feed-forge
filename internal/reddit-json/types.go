@@ -45,35 +45,42 @@ type ImageSource struct {
 	Height int    `json:"height"`
 }
 
-// FeedItem interface implementation for RedditPost
+// Title returns the title of the Reddit post
 func (r *RedditPost) Title() string {
 	return r.Data.Title
 }
 
+// Link returns the URL of the Reddit post
 func (r *RedditPost) Link() string {
 	return r.Data.URL
 }
 
+// CommentsLink returns the URL to the Reddit comments
 func (r *RedditPost) CommentsLink() string {
 	return "https://www.reddit.com" + r.Data.Permalink
 }
 
+// Author returns the author of the Reddit post
 func (r *RedditPost) Author() string {
 	return r.Data.Author
 }
 
+// Score returns the score of the Reddit post
 func (r *RedditPost) Score() int {
 	return r.Data.Score
 }
 
+// CommentCount returns the number of comments on the post
 func (r *RedditPost) CommentCount() int {
 	return r.Data.NumComments
 }
 
+// CreatedAt returns the creation time of the post
 func (r *RedditPost) CreatedAt() time.Time {
 	return time.Unix(int64(r.Data.CreatedUTC), 0)
 }
 
+// Categories returns the categories assigned to the post
 func (r *RedditPost) Categories() []string {
 	// Return subreddit in r/ format for enhanced Atom generation
 	if r.Data.Subreddit != "" {

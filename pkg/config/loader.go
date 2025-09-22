@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,7 +75,11 @@ func loadFromURL(url string, timeout time.Duration, target any) error {
 	if err != nil {
 		return fmt.Errorf("failed to fetch config from URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Error("Failed to close response body", "error", closeErr)
+		}
+	}()
 
 	if err := httputil.EnsureStatusOK(resp); err != nil {
 		return fmt.Errorf("HTTP error fetching config: %w", err)

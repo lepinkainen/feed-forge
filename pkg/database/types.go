@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -71,7 +72,9 @@ func NewDatabase(config Config) (*Database, error) {
 
 		for _, pragma := range pragmas {
 			if _, err := db.Exec(pragma); err != nil {
-				db.Close()
+				if closeErr := db.Close(); closeErr != nil {
+					slog.Error("Failed to close database", "error", closeErr)
+				}
 				return nil, err
 			}
 		}
@@ -84,7 +87,9 @@ func NewDatabase(config Config) (*Database, error) {
 
 	// Test connection
 	if err := db.Ping(); err != nil {
-		db.Close()
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
 		return nil, err
 	}
 
@@ -149,14 +154,18 @@ func (db *Database) Transaction(fn func(*sql.Tx) error) error {
 
 	defer func() {
 		if r := recover(); r != nil {
-			tx.Rollback()
+			if rollbackErr := tx.Rollback(); rollbackErr != nil {
+				slog.Error("Failed to rollback transaction", "error", rollbackErr)
+			}
 			panic(r)
 		}
 	}()
 
 	err = fn(tx)
 	if err != nil {
-		tx.Rollback()
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			slog.Error("Failed to rollback transaction", "error", rollbackErr)
+		}
 		return err
 	}
 

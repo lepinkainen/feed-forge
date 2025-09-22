@@ -10,8 +10,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/api"
 )
 
-// fetchHackerNewsItems retrieves current front page items from Algolia API
-func fetchHackerNewsItems() []HackerNewsItem {
+// fetchItems retrieves current front page items from Algolia API
+func fetchItems() []Item {
 	slog.Debug("Fetching Hacker News items from Algolia API")
 
 	var algoliaResp AlgoliaResponse
@@ -22,7 +22,7 @@ func fetchHackerNewsItems() []HackerNewsItem {
 		return nil
 	}
 
-	var items []HackerNewsItem
+	var items []Item
 	now := time.Now()
 	slog.Debug("Processing Algolia response", "hitCount", len(algoliaResp.Hits))
 
@@ -50,7 +50,7 @@ func fetchHackerNewsItems() []HackerNewsItem {
 			"author", hit.Author,
 			"createdAt", createdAt)
 
-		items = append(items, HackerNewsItem{
+		items = append(items, Item{
 			ItemID:           hit.ObjectID,
 			ItemTitle:        hit.Title,
 			ItemLink:         hit.URL,
@@ -68,12 +68,12 @@ func fetchHackerNewsItems() []HackerNewsItem {
 }
 
 // updateItemStats updates item statistics using concurrent API calls to Algolia
-func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[string]bool) {
+func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) {
 	slog.Debug("Updating item stats", "itemCount", len(items))
 	skippedCount := 0
 
 	// Filter items that need updating
-	var itemsToUpdate []HackerNewsItem
+	var itemsToUpdate []Item
 	for _, item := range items {
 		// Skip items with empty ItemID
 		if item.ItemID == "" {
@@ -100,7 +100,7 @@ func updateItemStats(db *sql.DB, items []HackerNewsItem, recentlyUpdated map[str
 
 	// Create worker pool for concurrent API calls
 	const numWorkers = 10
-	workChan := make(chan HackerNewsItem, len(itemsToUpdate))
+	workChan := make(chan Item, len(itemsToUpdate))
 	resultChan := make(chan statsUpdate, len(itemsToUpdate))
 	var wg sync.WaitGroup
 
