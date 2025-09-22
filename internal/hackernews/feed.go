@@ -11,42 +11,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-// generateRSSFeed creates an Atom RSS feed from the provided items with OpenGraph data
+// generateRSSFeed creates an Atom RSS feed using template-based generation
 func generateRSSFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) (string, error) {
-	slog.Debug("Generating RSS feed using enhanced Atom infrastructure", "itemCount", len(items))
-
-	// Create shared feed generator
-	generator := feed.NewGenerator(
-		"Hacker News Top Stories",
-		"High-quality Hacker News stories, updated regularly",
-		"https://news.ycombinator.com/",
-		"Feed Forge",
-	)
-
-	// Process items to add HackerNews-specific categorization
-	preprocessedItems := preprocessHackerNewsItems(items, minPoints, categoryMapper)
-
-	// Convert to FeedItem interface
-	feedItems := make([]providers.FeedItem, len(preprocessedItems))
-	for i, item := range preprocessedItems {
-		feedItems[i] = &item
-	}
-
-	// Use enhanced Atom generation with HackerNews-specific configuration
-	config := feed.HackerNewsEnhancedAtomConfig()
-	ogFetcher := opengraph.NewFetcher(ogDB)
-	atomContent, err := generator.GenerateEnhancedAtomWithConfig(feedItems, config, ogFetcher)
-	if err != nil {
-		slog.Error("Failed to generate enhanced Atom feed", "error", err)
-		return "", err
-	}
-
-	slog.Debug("Enhanced Atom feed generated successfully", "feedSize", len(atomContent))
-	return atomContent, nil
-}
-
-// generateTemplateFeed creates an Atom RSS feed using template-based generation
-func generateTemplateFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNewsItem, minPoints int, categoryMapper *CategoryMapper) (string, error) {
 	slog.Debug("Generating RSS feed using template-based generation", "itemCount", len(items))
 
 	// Create template generator
@@ -55,8 +21,8 @@ func generateTemplateFeed(db *sql.DB, ogDB *opengraph.Database, items []HackerNe
 	// Load Hacker News template
 	err := templateGenerator.LoadTemplate("hackernews-atom", "templates/hackernews-atom.tmpl")
 	if err != nil {
-		slog.Warn("Failed to load Hacker News Atom template, falling back to hardcoded generation", "error", err)
-		return generateRSSFeed(db, ogDB, items, minPoints, categoryMapper)
+		slog.Error("Failed to load Hacker News Atom template", "error", err)
+		return "", err
 	}
 
 	// Process items to add HackerNews-specific categorization

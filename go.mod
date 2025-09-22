@@ -4,7 +4,6 @@ go 1.24.4
 
 require (
 	github.com/alecthomas/kong v1.12.0
-	github.com/gorilla/feeds v1.2.0
 	github.com/spf13/viper v1.20.1
 	golang.org/x/net v0.41.0
 	golang.org/x/oauth2 v0.30.0

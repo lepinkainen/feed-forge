@@ -90,9 +90,9 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 **Enhanced Feed Generation**:
 
 - Configurable enhanced Atom templates with provider-specific customization
-- Multiple feed formats: standard Atom, enhanced Atom with custom namespaces
+- Template-based Atom feeds with provider-specific customization
 - OpenGraph integration for rich content with concurrent fetching
-- Provider-specific metadata in custom XML namespaces (reddit:, hn:)
+- Provider-specific metadata using standard Atom categories
 - Configurable filtering (score, comments, points)
 - Support for multiple link types, enclosures, and extended author information
 
@@ -108,11 +108,11 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 Never make direct HTTP calls - use these enhanced clients to avoid rate limiting and API failures.
 
-**Feed Generation**: Use enhanced Atom templates for rich feeds:
+**Feed Generation**: Use template-based generation for rich feeds:
 
-- `feed.RedditEnhancedAtomConfig()` - Reddit-specific configuration
-- `feed.HackerNewsEnhancedAtomConfig()` - HackerNews-specific configuration
-- `feed.DefaultEnhancedAtomConfig()` - Base configuration for new providers
+- `feed.NewTemplateGenerator()` - Create template generator
+- `CreateRedditFeedData()` - Reddit-specific template data
+- `CreateHackerNewsFeedData()` - HackerNews-specific template data
 
 **Configuration**: All providers use shared configuration utilities (`pkg/config`) with URL/file fallback, format detection (JSON/YAML), and unified config structure
 
@@ -132,7 +132,7 @@ CLI flags override config file values. Each provider inherits from `BaseProvider
 
 **Enhanced HTTP Client**: All API calls use `pkg/api` enhanced client with configurable rate limiting, exponential backoff retries, and provider-specific policies
 
-**Enhanced Feed Templates**: Providers use configurable Atom templates (`pkg/feed/enhanced_atom.go`) supporting custom namespaces, multiple links, rich content, and provider-specific metadata
+**Template-Based Feed Generation**: Providers use Go templates for flexible Atom feed generation with OpenGraph integration, multiple links, rich content, and provider-specific metadata using standard categories
 
 **OpenGraph Integration**: Feed items are enhanced with OpenGraph metadata for better client compatibility, with concurrent fetching and caching.
 
@@ -150,7 +150,7 @@ feed-forge/
 │   ├── api/                     # Enhanced HTTP client with rate limiting and retries
 │   ├── config/                  # Configuration loading utilities with fallback support
 │   ├── database/                # SQLite caching and database interfaces
-│   ├── feed/                    # Enhanced Atom generation, templates, and custom XML
+│   ├── feed/                    # Template-based Atom generation and feed helpers
 │   ├── filesystem/              # File system utilities
 │   ├── http/                    # HTTP client utilities and response handling
 │   ├── interfaces/              # Shared interface definitions

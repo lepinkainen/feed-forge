@@ -10,7 +10,32 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
+// mockFeedItem implements the FeedItem interface for testing
+type mockFeedItem struct {
+	title        string
+	link         string
+	commentsLink string
+	author       string
+	score        int
+	commentCount int
+	createdAt    time.Time
+	categories   []string
+	imageURL     string
+	content      string
+}
+
+func (m *mockFeedItem) Title() string        { return m.title }
+func (m *mockFeedItem) Link() string         { return m.link }
+func (m *mockFeedItem) CommentsLink() string { return m.commentsLink }
+func (m *mockFeedItem) Author() string       { return m.author }
+func (m *mockFeedItem) Score() int           { return m.score }
+func (m *mockFeedItem) CommentCount() int    { return m.commentCount }
+func (m *mockFeedItem) CreatedAt() time.Time { return m.createdAt }
+func (m *mockFeedItem) Categories() []string { return m.categories }
+func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
+func (m *mockFeedItem) Content() string      { return m.content }
+
+func TestHackerNewsTemplateGeneration(t *testing.T) {
 	// Skip this test in CI or if templates directory doesn't exist
 	if _, err := os.Stat("../../templates/hackernews-atom.tmpl"); os.IsNotExist(err) {
 		t.Skip("Templates directory not found, skipping integration test")
@@ -69,31 +94,12 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 
 	templateResult := templateOutput.String()
 
-	// Generate hardcoded feed for comparison using enhanced atom
-	generator := NewGenerator(
-		"Hacker News Top Stories",
-		"High-quality Hacker News stories, updated regularly",
-		"https://news.ycombinator.com/",
-		"Feed Forge",
-	)
-
-	config := HackerNewsEnhancedAtomConfig()
-	hardcodedResult, err := generator.GenerateEnhancedAtomWithConfig(items, config, nil)
-	if err != nil {
-		t.Fatalf("Failed to generate hardcoded feed: %v", err)
-	}
-
-	// Basic checks that both outputs are valid XML
-	// Template output should now have proper XML declaration after switching to text/template
+	// Basic checks that output is valid XML
 	if !strings.Contains(templateResult, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>") {
 		t.Error("Template output missing XML declaration")
 	}
 
-	if !strings.Contains(hardcodedResult, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>") {
-		t.Error("Hardcoded output missing XML declaration")
-	}
-
-	// Check that both contain feed elements
+	// Check that output contains required feed elements
 	expectedElements := []string{
 		"<feed",
 		"<title>Hacker News Top Stories</title>",
@@ -108,9 +114,6 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 		if !strings.Contains(templateResult, element) {
 			t.Errorf("Template output missing expected element: %s", element)
 		}
-		if !strings.Contains(hardcodedResult, element) {
-			t.Errorf("Hardcoded output missing expected element: %s", element)
-		}
 	}
 
 	// Check that template output includes domain information
@@ -123,24 +126,20 @@ func TestHackerNewsTemplateVsHardcoded(t *testing.T) {
 		t.Error("Template output missing standard Atom namespace")
 	}
 
-	// Basic validation that both generate reasonable feed lengths
+	// Basic validation that output generates reasonable feed length
 	if len(templateResult) < 500 {
 		t.Error("Template output seems too short")
 	}
 
-	if len(hardcodedResult) < 500 {
-		t.Error("Hardcoded output seems too short")
-	}
-
 	t.Logf("Template output length: %d characters", len(templateResult))
-	t.Logf("Hardcoded output length: %d characters", len(hardcodedResult))
 
-	// Both should have proper score display in content
+	// Should have proper score display in content
 	if !strings.Contains(templateResult, "<strong>Score:</strong> 150") {
 		t.Error("Template output missing score display in content")
 	}
 
-	if !strings.Contains(hardcodedResult, "<strong>Score:</strong> 150") {
-		t.Error("Hardcoded output missing score display in content")
+	// Should include OpenGraph preview for external links
+	if !strings.Contains(templateResult, "Template-based Feed Generation Guide") {
+		t.Error("Template output missing OpenGraph preview")
 	}
 }
