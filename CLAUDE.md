@@ -62,7 +62,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - `pkg/api/` - Enhanced HTTP client with rate limiting, retries, and standardized error handling
 - `pkg/config/` - Configuration loading utilities with URL/file fallback support
 - `pkg/database/` - SQLite caching, provider utilities, and database interfaces
-- `pkg/feed/` - Atom feed generation, enhanced templates, custom XML formatting, and feed helpers
+- `pkg/feed/` - Template-based Atom feed generation and feed helpers
 - `pkg/http/` - HTTP client utilities and response handling
 - `pkg/opengraph/` - OpenGraph metadata fetching and caching
 - `pkg/filesystem/` - File system utilities and path management
@@ -87,14 +87,14 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - OpenGraph metadata caching (`pkg/opengraph/`) shared across all providers
 - Provider-specific content databases (optional, configurable per provider)
 
-**Enhanced Feed Generation**:
+**Template-Based Feed Generation**:
 
-- Configurable enhanced Atom templates with provider-specific customization
-- Template-based Atom feeds with provider-specific customization
+- Go template-based Atom feeds with provider-specific customization
 - OpenGraph integration for rich content with concurrent fetching
 - Provider-specific metadata using standard Atom categories
 - Configurable filtering (score, comments, points)
-- Support for multiple link types, enclosures, and extended author information
+- Support for multiple link types and extended author information
+- RSS reader compatible (no custom namespaces)
 
 ## Common Development Patterns
 
@@ -144,7 +144,6 @@ feed-forge/
 ├── internal/
 │   ├── config/                  # Configuration management
 │   ├── hackernews/              # Hacker News provider implementation
-│   ├── reddit-oauth/            # Reddit OAuth provider implementation
 │   └── reddit-json/             # Reddit JSON provider implementation
 ├── pkg/                         # Shared packages
 │   ├── api/                     # Enhanced HTTP client with rate limiting and retries
@@ -159,6 +158,7 @@ feed-forge/
 │   ├── testutil/                # Golden file testing utilities
 │   └── utils/                   # URL and common utilities
 ├── testdata/                    # Test fixtures and golden files
+├── templates/                   # Go template files for feed generation
 └── llm-shared/                  # Development guidelines submodule
 ```
 
