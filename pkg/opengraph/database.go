@@ -2,6 +2,7 @@ package opengraph
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -146,7 +147,7 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 		&fetchSuccess,
 	)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // No cached data found
 	}
 	if err != nil {

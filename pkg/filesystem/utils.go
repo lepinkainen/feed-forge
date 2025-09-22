@@ -1,9 +1,16 @@
 package filesystem
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+)
+
+// Common file system errors
+var (
+	ErrFileNotFound = errors.New("file not found")
+	ErrDirNotFound  = errors.New("directory not found")
 )
 
 // GetDefaultPath returns a default file path in the executable directory
@@ -26,6 +33,9 @@ func EnsureDirectoryExists(filePath string) error {
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: %s", ErrDirNotFound, dir)
+		}
 		return fmt.Errorf("failed to create directory %s: %w", dir, err)
 	}
 

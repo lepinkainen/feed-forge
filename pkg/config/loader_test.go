@@ -218,28 +218,28 @@ func TestLoadFromFile_Errors(t *testing.T) {
 			filename:    "nonexistent.json",
 			content:     "",
 			wantErr:     true,
-			errorSubstr: "failed to read file",
+			errorSubstr: "configuration not found",
 		},
 		{
 			name:        "invalid JSON",
 			filename:    "invalid.json",
 			content:     `{"name": "test", invalid}`,
 			wantErr:     true,
-			errorSubstr: "failed to parse JSON",
+			errorSubstr: "configuration is invalid",
 		},
 		{
 			name:        "invalid YAML",
 			filename:    "invalid.yaml",
 			content:     "name: test\n  invalid: : yaml",
 			wantErr:     true,
-			errorSubstr: "failed to parse YAML",
+			errorSubstr: "configuration is invalid",
 		},
 		{
 			name:        "XML parsed as YAML fails",
 			filename:    "config.xml",
 			content:     `<config><name>test</name></config>`,
 			wantErr:     true,
-			errorSubstr: "failed to parse YAML", // XML content fails YAML parsing
+			errorSubstr: "configuration is invalid", // XML content fails YAML parsing
 		},
 	}
 

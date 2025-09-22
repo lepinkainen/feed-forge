@@ -2,6 +2,7 @@ package database
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -58,7 +59,7 @@ func (c *Cache) Get(key string) (value string, found bool, err error) {
 	`, c.tableName)
 
 	err = c.db.DB().QueryRow(query, key).Scan(&value)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {

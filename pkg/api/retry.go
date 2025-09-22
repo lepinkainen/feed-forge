@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -73,12 +74,14 @@ func (rp *RetryPolicy) IsRetryableError(err error) bool {
 	}
 
 	// Check for HTTP status code errors
-	if httpErr, ok := err.(*HTTPError); ok {
+	var httpErr *HTTPError
+	if errors.As(err, &httpErr) {
 		return rp.isRetryableStatusCode(httpErr.StatusCode)
 	}
 
 	// Check for OAuth2 retrieve errors
-	if oauthErr, ok := err.(*oauth2.RetrieveError); ok {
+	var oauthErr *oauth2.RetrieveError
+	if errors.As(err, &oauthErr) {
 		return rp.isRetryableStatusCode(oauthErr.Response.StatusCode)
 	}
 
@@ -93,12 +96,14 @@ func (rp *RetryPolicy) IsRateLimitError(err error) bool {
 	}
 
 	// Check for HTTP status code errors
-	if httpErr, ok := err.(*HTTPError); ok {
+	var httpErr *HTTPError
+	if errors.As(err, &httpErr) {
 		return httpErr.StatusCode == http.StatusTooManyRequests
 	}
 
 	// Check for OAuth2 retrieve errors
-	if oauthErr, ok := err.(*oauth2.RetrieveError); ok {
+	var oauthErr *oauth2.RetrieveError
+	if errors.As(err, &oauthErr) {
 		return oauthErr.Response.StatusCode == http.StatusTooManyRequests
 	}
 
@@ -119,11 +124,17 @@ func (rp *RetryPolicy) isRetryableStatusCode(statusCode int) bool {
 type HTTPError struct {
 	StatusCode int
 	Message    string
+	Err        error // wrapped error
 }
 
 // Error implements the error interface
 func (e *HTTPError) Error() string {
 	return fmt.Sprintf("HTTP %d: %s", e.StatusCode, e.Message)
+}
+
+// Unwrap returns the wrapped error
+func (e *HTTPError) Unwrap() error {
+	return e.Err
 }
 
 // RetryableOperation represents an operation that can be retried

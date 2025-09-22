@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,6 +13,13 @@ import (
 
 	httputil "github.com/lepinkainen/feed-forge/pkg/http"
 	"gopkg.in/yaml.v3"
+)
+
+// Configuration loading errors
+var (
+	ErrConfigNotFound    = errors.New("configuration not found")
+	ErrConfigInvalid     = errors.New("configuration is invalid")
+	ErrUnsupportedFormat = errors.New("unsupported configuration format")
 )
 
 // LoaderConfig represents configuration loading options
@@ -59,7 +67,7 @@ func LoadFromURLWithFallback(config *LoaderConfig, target any) error {
 
 	// Return error if both failed and no fallback
 	if !config.FallbackToDefault {
-		return fmt.Errorf("failed to load configuration from URL and local file")
+		return fmt.Errorf("%w: tried URL and local file", ErrConfigNotFound)
 	}
 
 	return nil
@@ -96,6 +104,9 @@ func loadFromURL(url string, timeout time.Duration, target any) error {
 func loadFromFile(path string, target any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: %s", ErrConfigNotFound, path)
+		}
 		return fmt.Errorf("failed to read file %s: %w", path, err)
 	}
 
@@ -105,14 +116,14 @@ func loadFromFile(path string, target any) error {
 	switch format {
 	case "json":
 		if err := json.Unmarshal(data, target); err != nil {
-			return fmt.Errorf("failed to parse JSON from %s: %w", path, err)
+			return fmt.Errorf("%w: failed to parse JSON from %s: %v", ErrConfigInvalid, path, err)
 		}
 	case "yaml":
 		if err := yaml.Unmarshal(data, target); err != nil {
-			return fmt.Errorf("failed to parse YAML from %s: %w", path, err)
+			return fmt.Errorf("%w: failed to parse YAML from %s: %v", ErrConfigInvalid, path, err)
 		}
 	default:
-		return fmt.Errorf("unsupported file format for %s (detected: %s)", path, format)
+		return fmt.Errorf("%w: %s (detected: %s)", ErrUnsupportedFormat, path, format)
 	}
 
 	return nil

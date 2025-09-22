@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -10,6 +11,12 @@ import (
 	"text/template"
 
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+)
+
+// Template processing errors
+var (
+	ErrTemplateNotFound = errors.New("template not found")
+	ErrTemplateInvalid  = errors.New("template is invalid")
 )
 
 // TemplateGenerator handles template-based feed generation
@@ -77,7 +84,7 @@ func (tg *TemplateGenerator) LoadTemplate(name, filePath string) error {
 	// Parse template with the specified name
 	tmpl, err := template.New(name).Funcs(tg.funcMap).Parse(string(content))
 	if err != nil {
-		return fmt.Errorf("failed to parse template %s: %w", filePath, err)
+		return fmt.Errorf("%w: failed to parse template %s: %v", ErrTemplateInvalid, filePath, err)
 	}
 
 	tg.templates[name] = tmpl
@@ -108,7 +115,7 @@ func (tg *TemplateGenerator) LoadTemplatesFromDir(dir string) error {
 func (tg *TemplateGenerator) GenerateFromTemplate(templateName string, data *TemplateData, writer io.Writer) error {
 	tmpl, exists := tg.templates[templateName]
 	if !exists {
-		return fmt.Errorf("template %s not found", templateName)
+		return fmt.Errorf("%w: %s", ErrTemplateNotFound, templateName)
 	}
 
 	slog.Debug("Executing template", "name", templateName, "items", len(data.Items))
