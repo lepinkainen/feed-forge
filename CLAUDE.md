@@ -108,11 +108,11 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 Never make direct HTTP calls - use these enhanced clients to avoid rate limiting and API failures.
 
-**Feed Generation**: Use template-based generation for rich feeds:
+**Feed Generation**: Use unified template-based generation for rich feeds:
 
-- `feed.NewTemplateGenerator()` - Create template generator
-- `CreateRedditFeedData()` - Reddit-specific template data
-- `CreateHackerNewsFeedData()` - HackerNews-specific template data
+- `feed.GenerateAtomFeed()` - Unified feed generation with provider-agnostic logic
+- `feed.SaveAtomFeedToFile()` - Generate and save Atom feeds to file
+- `feed.NewTemplateGenerator()` - Create template generator for advanced use cases
 
 **Configuration**: All providers use shared configuration utilities (`pkg/config`) with URL/file fallback, format detection (JSON/YAML), and unified config structure
 

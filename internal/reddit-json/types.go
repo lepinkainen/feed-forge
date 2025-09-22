@@ -115,6 +115,16 @@ func (r *RedditPost) Content() string {
 	return ""
 }
 
+// AuthorURI returns the Reddit user profile URL
+func (r *RedditPost) AuthorURI() string {
+	return fmt.Sprintf("https://www.reddit.com/user/%s", r.Data.Author)
+}
+
+// Subreddit returns the subreddit name (without r/ prefix)
+func (r *RedditPost) Subreddit() string {
+	return r.Data.Subreddit
+}
+
 // cleanRedditHTML removes Reddit-specific HTML comments and decodes HTML entities
 func cleanRedditHTML(htmlContent string) string {
 	// Fix double-encoded ampersands that come from Reddit's API

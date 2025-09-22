@@ -2,7 +2,7 @@ package hackernews
 
 import (
 	"log/slog"
-	"os"
+	"regexp"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -96,15 +96,55 @@ func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 		return dirErr
 	}
 
-	// Generate and save the feed
-	rss, err := generateRSSFeed(contentDB.DB(), ogDB, allItems, p.MinPoints, p.CategoryMapper)
-	if err != nil {
-		return err
+	// Process items to add HackerNews-specific categorization
+	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
+
+	// Convert to FeedItem interface
+	feedItems := make([]providers.FeedItem, len(preprocessedItems))
+	for i, item := range preprocessedItems {
+		feedItems[i] = &item
 	}
-	if err := os.WriteFile(outfile, []byte(rss), 0o644); err != nil {
+
+	// Define feed configuration
+	feedConfig := feed.Config{
+		Title:       "Hacker News Top Stories",
+		Link:        "https://news.ycombinator.com/",
+		Description: "High-quality Hacker News stories, updated regularly",
+		Author:      "Feed Forge",
+		ID:          "https://news.ycombinator.com/",
+	}
+
+	// Generate and save the feed using unified generator
+	if err := feed.SaveAtomFeedToFile(feedItems, "hackernews-atom", "templates/hackernews-atom.tmpl", outfile, feedConfig, ogDB); err != nil {
 		return err
 	}
 
 	feed.LogFeedGeneration(len(allItems), outfile)
 	return nil
+}
+
+// preprocessItems applies HackerNews-specific categorization and metadata
+func preprocessItems(items []Item, minPoints int, categoryMapper *CategoryMapper) []Item {
+	domainRegex := regexp.MustCompile(`^https?://([^/]+)`)
+
+	for i := range items {
+		item := &items[i]
+
+		// Extract domain from the article link
+		domain := ""
+		if matches := domainRegex.FindStringSubmatch(item.ItemLink); len(matches) > 1 {
+			domain = matches[1]
+		}
+
+		// Generate HackerNews-specific categories
+		categories := categorizeContent(item.ItemTitle, domain, item.ItemLink, categoryMapper)
+		pointCategory := categorizeByPoints(item.Points, minPoints)
+		categories = append(categories, pointCategory)
+
+		// Populate the item's Domain and Categories fields for the FeedItem interface
+		item.Domain = domain
+		item.ItemCategories = categories
+	}
+
+	return items
 }

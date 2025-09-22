@@ -1,6 +1,9 @@
 package hackernews
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Item represents a single Hacker News story with metadata
 type Item struct {
@@ -67,6 +70,16 @@ func (h *Item) ImageURL() string {
 func (h *Item) Content() string {
 	// HackerNews items don't have body content, only titles and links
 	return ""
+}
+
+// AuthorURI returns the Hacker News user profile URL
+func (h *Item) AuthorURI() string {
+	return fmt.Sprintf("https://news.ycombinator.com/user?id=%s", h.ItemAuthor)
+}
+
+// ItemDomain returns the domain extracted from the item link
+func (h *Item) ItemDomain() string {
+	return h.Domain
 }
 
 // AlgoliaResponse represents the response structure from Algolia API

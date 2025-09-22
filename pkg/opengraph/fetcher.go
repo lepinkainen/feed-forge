@@ -3,7 +3,6 @@ package opengraph
 import (
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -20,37 +19,13 @@ import (
 
 // Fetcher handles OpenGraph metadata fetching with rate limiting and caching
 type Fetcher struct {
-	client       *http.Client
-	redditClient *http.Client // Optional authenticated client for Reddit requests
-	db           *Database
-	cache        map[string]*Data
-	domainMutex  sync.Mutex
-	lastFetch    map[string]time.Time
-	semaphore    chan struct{}
-	urlMutexes   sync.Map
-}
-
-// RedditOAuthResponse represents Reddit OAuth API response structure
-type RedditOAuthResponse struct {
-	Data RedditOAuthListingData `json:"data"`
-}
-
-// RedditOAuthListingData represents Reddit OAuth listing data
-type RedditOAuthListingData struct {
-	Children []RedditOAuthPost `json:"children"`
-}
-
-// RedditOAuthPost represents a Reddit OAuth post
-type RedditOAuthPost struct {
-	Data RedditOAuthPostData `json:"data"`
-}
-
-// RedditOAuthPostData represents Reddit OAuth post data
-type RedditOAuthPostData struct {
-	Title        string `json:"title"`
-	Selftext     string `json:"selftext"`
-	SelftextHTML string `json:"selftext_html"`
-	Thumbnail    string `json:"thumbnail"`
+	client      *http.Client
+	db          *Database
+	cache       map[string]*Data
+	domainMutex sync.Mutex
+	lastFetch   map[string]time.Time
+	semaphore   chan struct{}
+	urlMutexes  sync.Map
 }
 
 // NewFetcher creates a new OpenGraph fetcher
@@ -70,13 +45,6 @@ func NewFetcher(db *Database) *Fetcher {
 		lastFetch: make(map[string]time.Time),
 		semaphore: make(chan struct{}, 5), // Max 5 concurrent fetches
 	}
-}
-
-// NewFetcherWithRedditClient creates a new OpenGraph fetcher with an authenticated Reddit client
-func NewFetcherWithRedditClient(db *Database, redditClient *http.Client) *Fetcher {
-	fetcher := NewFetcher(db)
-	fetcher.redditClient = redditClient
-	return fetcher
 }
 
 // FetchData fetches OpenGraph data from a URL with caching
@@ -192,12 +160,6 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	f.lastFetch[domain] = time.Now()
 	f.domainMutex.Unlock()
 
-	// Check if this is a Reddit post URL and use Reddit API instead
-	if f.isRedditPostURL(targetURL) {
-		slog.Debug("Detected Reddit post URL, using Reddit API", "url", targetURL)
-		return f.fetchRedditAPI(ctx, targetURL)
-	}
-
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, http.NoBody)
 	if err != nil {
@@ -281,13 +243,6 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	}
 
 	f.extractOpenGraphTags(doc, data)
-	f.applyFallbacks(data, htmlContent)
-
-	// Check for cookie consent message in description and clear if found
-	if data.Description != "" && f.containsCookieConsent(data.Description) {
-		slog.Warn("Detected cookie consent message in OpenGraph description, excluding description", "url", targetURL)
-		data.Description = ""
-	}
 
 	slog.Debug("Extracted OpenGraph data", "url", targetURL, "title", data.Title, "hasDescription", data.Description != "")
 
@@ -367,60 +322,6 @@ func (f *Fetcher) processMetaTag(n *html.Node, data *Data) {
 	}
 }
 
-// applyFallbacks applies fallback strategies for missing OpenGraph data
-func (f *Fetcher) applyFallbacks(data *Data, htmlContent string) {
-	// If no description, try to extract from first paragraph
-	if data.Description == "" {
-		data.Description = f.extractFirstParagraph(htmlContent)
-	}
-
-	// If no site name, try to extract from domain
-	if data.SiteName == "" && data.URL != "" {
-		if u, err := url.Parse(data.URL); err == nil {
-			data.SiteName = u.Host
-		}
-	}
-}
-
-// extractFirstParagraph extracts the first paragraph from HTML content
-func (f *Fetcher) extractFirstParagraph(htmlContent string) string {
-	doc, err := html.Parse(strings.NewReader(htmlContent))
-	if err != nil {
-		return ""
-	}
-
-	var findFirstP func(*html.Node) string
-	findFirstP = func(n *html.Node) string {
-		if n.Type == html.ElementNode && n.Data == "p" {
-			var text strings.Builder
-			var extractText func(*html.Node)
-			extractText = func(node *html.Node) {
-				if node.Type == html.TextNode {
-					text.WriteString(node.Data)
-				}
-				for c := node.FirstChild; c != nil; c = c.NextSibling {
-					extractText(c)
-				}
-			}
-			extractText(n)
-
-			result := strings.TrimSpace(text.String())
-			if len(result) > 20 {
-				return result
-			}
-		}
-
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if result := findFirstP(c); result != "" {
-				return result
-			}
-		}
-		return ""
-	}
-
-	return findFirstP(doc)
-}
-
 // cleanupData validates and cleans up OpenGraph data
 func (f *Fetcher) cleanupData(data *Data) {
 	// Truncate long descriptions
@@ -471,186 +372,18 @@ func (f *Fetcher) convertToUTF8(body []byte, contentType string) (string, error)
 	return string(utf8Bytes), nil
 }
 
-// isRedditPostURL checks if a URL is a Reddit post URL
-func (f *Fetcher) isRedditPostURL(targetURL string) bool {
-	// Check for regular Reddit post URLs: /r/subreddit/comments/postid/
-	if strings.Contains(targetURL, "reddit.com/r/") && strings.Contains(targetURL, "/comments/") {
-		return true
-	}
-	// Check for Reddit gallery URLs: /gallery/postid
-	if strings.Contains(targetURL, "reddit.com/gallery/") {
-		return true
-	}
-	return false
-}
-
-// extractPostIDFromURL extracts the post ID from a Reddit URL
-func (f *Fetcher) extractPostIDFromURL(targetURL string) string {
-	// Handle gallery URLs: https://www.reddit.com/gallery/1lw7km7
-	if strings.Contains(targetURL, "/gallery/") {
-		parts := strings.Split(targetURL, "/gallery/")
-		if len(parts) >= 2 {
-			postID := strings.Split(parts[1], "/")[0] // Get first part after /gallery/
-			return postID
-		}
-	}
-
-	// Handle regular post URLs: https://www.reddit.com/r/subreddit/comments/1lw7km7/title/
-	if strings.Contains(targetURL, "/comments/") {
-		parts := strings.Split(targetURL, "/comments/")
-		if len(parts) >= 2 {
-			postID := strings.Split(parts[1], "/")[0] // Get first part after /comments/
-			return postID
-		}
-	}
-
-	return ""
-}
-
-// fetchRedditAPI fetches Reddit post content via OAuth API or returns nil for OpenGraph fallback
-func (f *Fetcher) fetchRedditAPI(ctx context.Context, targetURL string) (*Data, error) {
-	// Only use OAuth API if authenticated Reddit client is available
-	if f.redditClient == nil {
-		slog.Debug("No authenticated Reddit client available, falling back to OpenGraph parsing", "url", targetURL)
-		return nil, nil // Return nil to trigger OpenGraph HTML parsing fallback
-	}
-
-	// Use OAuth API for all Reddit URLs when authenticated
-	slog.Debug("Using Reddit OAuth API for all Reddit URLs", "url", targetURL)
-	return f.fetchRedditOAuthAPI(ctx, targetURL)
-}
-
-// fetchRedditOAuthAPI fetches Reddit post content via OAuth API for all Reddit URLs
-func (f *Fetcher) fetchRedditOAuthAPI(ctx context.Context, targetURL string) (*Data, error) {
-	// Extract post ID from Reddit URL
-	// Supports both gallery URLs (https://www.reddit.com/gallery/1lw7km7)
-	// and regular post URLs (https://www.reddit.com/r/subreddit/comments/1lw7km7/title/)
-	postID := f.extractPostIDFromURL(targetURL)
-	if postID == "" {
-		return nil, fmt.Errorf("could not extract post ID from URL: %s", targetURL)
-	}
-
-	// Use Reddit OAuth API to get post info
-	apiURL := fmt.Sprintf("https://oauth.reddit.com/api/info?id=t3_%s", postID)
-
-	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", apiURL, http.NoBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set headers for Reddit OAuth API
-	req.Header.Set("User-Agent", "FeedForge/1.0 by theshrike79")
-	req.Header.Set("Accept", "application/json")
-
-	slog.Debug("Fetching Reddit OAuth API data", "url", apiURL, "post_id", postID)
-
-	// Make the request using authenticated client
-	resp, err := f.redditClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("HTTP request failed: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			slog.Error("Failed to close response body", "error", closeErr)
-		}
-	}()
-
-	// Check status code
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP error: %d %s", resp.StatusCode, resp.Status)
-	}
-
-	// Read response body with size limit
-	const maxBodySize = 1024 * 1024 // 1MB limit
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBodySize))
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Parse Reddit OAuth API response
-	var oauthResponse RedditOAuthResponse
-	if err := json.Unmarshal(body, &oauthResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse Reddit OAuth API response: %w", err)
-	}
-
-	// Validate we have the expected structure
-	if len(oauthResponse.Data.Children) == 0 {
-		return nil, fmt.Errorf("no post data found in OAuth API response")
-	}
-
-	// Get the post data
-	post := oauthResponse.Data.Children[0].Data
-
-	// Create OpenGraph data
-	now := time.Now()
-	data := &Data{
-		URL:       targetURL,
-		FetchedAt: now,
-		ExpiresAt: now.Add(time.Duration(DefaultCacheHours) * time.Hour),
-	}
-
-	// Extract title
-	if post.Title != "" {
-		data.Title = post.Title
-	}
-
-	// Extract description from selftext_html (preferred) or selftext
-	if post.SelftextHTML != "" {
-		// Clean up HTML entities and basic formatting
-		description := strings.ReplaceAll(post.SelftextHTML, "&lt;", "<")
-		description = strings.ReplaceAll(description, "&gt;", ">")
-		description = strings.ReplaceAll(description, "&quot;", "\"")
-		description = strings.ReplaceAll(description, "&#39;", "'")
-		description = strings.ReplaceAll(description, "&amp;", "&")
-
-		// Check for cookie consent message and exclude if found
-		if !f.containsCookieConsent(description) {
-			data.Description = description
-		} else {
-			slog.Warn("Detected cookie consent message in Reddit OAuth API post, excluding description", "url", targetURL)
-		}
-	} else if post.Selftext != "" && !f.containsCookieConsent(post.Selftext) {
-		data.Description = post.Selftext
-	} else if post.Selftext != "" {
-		slog.Warn("Detected cookie consent message in Reddit OAuth API post selftext, excluding description", "url", targetURL)
-	}
-
-	// Extract thumbnail if it's a valid URL (not "self" or empty)
-	if post.Thumbnail != "" && post.Thumbnail != "self" && utils.IsValidURL(post.Thumbnail) {
-		data.Image = post.Thumbnail
-	}
-
-	// Set site name
-	data.SiteName = "Reddit"
-
-	slog.Debug("Extracted Reddit OAuth API content", "url", targetURL, "title", data.Title, "has_description", data.Description != "", "has_image", data.Image != "")
-
-	return data, nil
-}
-
-// containsCookieConsent checks if text contains Reddit's cookie consent message
-func (f *Fetcher) containsCookieConsent(text string) bool {
-	return strings.Contains(text, "Reddit and its partners use cookies and similar technologies to provide you with a better experience.")
-}
-
 // isBlockedURL checks if a URL is from a domain that blocks external access
 func (f *Fetcher) isBlockedURL(targetURL string) bool {
-	// Allow Reddit post URLs (including gallery posts) but block Reddit media URLs
-	if strings.Contains(targetURL, "reddit.com") {
-		// Allow all Reddit post URLs (these will be handled by Reddit JSON fetcher)
-		return false
-	}
-
 	blockedDomains := []string{
 		"x.com",
 		"twitter.com",
 		"facebook.com",
 		"instagram.com",
 		"linkedin.com",
+		"reddit.com",
 		"i.redd.it",
 		"v.redd.it",
-		"redd.it", // Keep blocking short reddit URLs
+		"redd.it",
 	}
 
 	for _, domain := range blockedDomains {

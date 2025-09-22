@@ -35,6 +35,37 @@ func (m *mockFeedItem) Categories() []string { return m.categories }
 func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
 func (m *mockFeedItem) Content() string      { return m.content }
 
+// AuthorURI returns a mock author URI based on the categories
+func (m *mockFeedItem) AuthorURI() string {
+	if len(m.categories) > 0 && strings.HasPrefix(m.categories[0], "r/") {
+		return "https://www.reddit.com/user/" + m.author
+	}
+	if strings.Contains(m.commentsLink, "news.ycombinator.com") {
+		return "https://news.ycombinator.com/user?id=" + m.author
+	}
+	return ""
+}
+
+// Subreddit returns the subreddit name for Reddit posts
+func (m *mockFeedItem) Subreddit() string {
+	if len(m.categories) > 0 && strings.HasPrefix(m.categories[0], "r/") {
+		return strings.TrimPrefix(m.categories[0], "r/")
+	}
+	return ""
+}
+
+// ItemDomain returns the domain for HackerNews posts
+func (m *mockFeedItem) ItemDomain() string {
+	if strings.Contains(m.commentsLink, "news.ycombinator.com") {
+		for _, category := range m.categories {
+			if strings.Contains(category, ".") && !strings.Contains(category, " ") {
+				return category
+			}
+		}
+	}
+	return ""
+}
+
 func TestHackerNewsTemplateGeneration(t *testing.T) {
 	// Skip this test in CI or if templates directory doesn't exist
 	if _, err := os.Stat("../../templates/hackernews-atom.tmpl"); os.IsNotExist(err) {
@@ -84,8 +115,15 @@ func TestHackerNewsTemplateGeneration(t *testing.T) {
 		},
 	}
 
-	// Generate template-based feed
-	templateData := tg.CreateHackerNewsFeedData(items, ogData)
+	// Generate template-based feed using unified generator
+	config := Config{
+		Title:       "Hacker News Top Stories",
+		Link:        "https://news.ycombinator.com/",
+		Description: "High-quality Hacker News stories, updated regularly",
+		Author:      "Feed Forge",
+		ID:          "https://news.ycombinator.com/",
+	}
+	templateData := createGenericFeedData(items, config, ogData)
 	var templateOutput strings.Builder
 	err = tg.GenerateFromTemplate("hackernews-atom", templateData, &templateOutput)
 	if err != nil {
