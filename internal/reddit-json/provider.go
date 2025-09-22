@@ -79,7 +79,7 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 	ogFetcher := opengraph.NewFetcher(p.OgDB)
 
 	// Generate Atom feed using template-based generation
-	if err := SaveRedditFeedToFile(filteredPosts, outfile, ogFetcher, true); err != nil {
+	if err := SaveRedditFeedToFile(filteredPosts, outfile, ogFetcher); err != nil {
 		return err
 	}
 
