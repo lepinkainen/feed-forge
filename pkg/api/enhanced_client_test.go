@@ -58,10 +58,10 @@ func TestEnhancedClient_GetAndDecode(t *testing.T) {
 	tests := []struct {
 		name           string
 		serverResponse func(w http.ResponseWriter, r *http.Request)
-		target         interface{}
+		target         any
 		headers        map[string]string
 		wantErr        bool
-		wantTarget     interface{}
+		wantTarget     any
 	}{
 		{
 			name: "successful JSON decode",

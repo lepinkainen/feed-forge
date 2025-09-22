@@ -116,8 +116,8 @@ func (c *Cache) CleanupExpired() error {
 }
 
 // GetStats returns cache statistics
-func (c *Cache) GetStats() (map[string]interface{}, error) {
-	stats := make(map[string]interface{})
+func (c *Cache) GetStats() (map[string]any, error) {
+	stats := make(map[string]any)
 
 	// Total entries
 	var totalEntries int64

@@ -74,7 +74,7 @@ func TestProviderRegistry_Register(t *testing.T) {
 				Name:        "Test Provider",
 				Description: "A test provider",
 				Version:     "1.0.0",
-				Factory: func(config interface{}) (FeedProvider, error) {
+				Factory: func(config any) (FeedProvider, error) {
 					return &mockFeedProvider{}, nil
 				},
 			},
@@ -87,7 +87,7 @@ func TestProviderRegistry_Register(t *testing.T) {
 					Name:        "Existing Provider",
 					Description: "Already registered",
 					Version:     "1.0.0",
-					Factory: func(config interface{}) (FeedProvider, error) {
+					Factory: func(config any) (FeedProvider, error) {
 						return &mockFeedProvider{}, nil
 					},
 				})
@@ -97,7 +97,7 @@ func TestProviderRegistry_Register(t *testing.T) {
 				Name:        "Duplicate Provider",
 				Description: "Should fail",
 				Version:     "2.0.0",
-				Factory: func(config interface{}) (FeedProvider, error) {
+				Factory: func(config any) (FeedProvider, error) {
 					return &mockFeedProvider{}, nil
 				},
 			},
@@ -139,7 +139,7 @@ func TestProviderRegistry_Get(t *testing.T) {
 		Name:        "Test Provider",
 		Description: "A test provider",
 		Version:     "1.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	}
@@ -197,7 +197,7 @@ func TestProviderRegistry_List(t *testing.T) {
 			Name:        name,
 			Description: "Test provider",
 			Version:     "1.0.0",
-			Factory: func(config interface{}) (FeedProvider, error) {
+			Factory: func(config any) (FeedProvider, error) {
 				return &mockFeedProvider{}, nil
 			},
 		})
@@ -227,7 +227,7 @@ func TestProviderRegistry_CreateProvider(t *testing.T) {
 	// Register a provider that creates successfully
 	registry.Register("success", &ProviderInfo{
 		Name: "Success Provider",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	})
@@ -235,7 +235,7 @@ func TestProviderRegistry_CreateProvider(t *testing.T) {
 	// Register a provider that fails to create
 	registry.Register("fail", &ProviderInfo{
 		Name: "Fail Provider",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return nil, errors.New("creation failed")
 		},
 	})
@@ -243,7 +243,7 @@ func TestProviderRegistry_CreateProvider(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		config   interface{}
+		config   any
 		wantErr  bool
 	}{
 		{
@@ -301,7 +301,7 @@ func TestProviderRegistry_Concurrent(t *testing.T) {
 					Name:        name,
 					Description: "Concurrent test provider",
 					Version:     "1.0.0",
-					Factory: func(config interface{}) (FeedProvider, error) {
+					Factory: func(config any) (FeedProvider, error) {
 						return &mockFeedProvider{}, nil
 					},
 				}
@@ -415,7 +415,7 @@ func TestDefaultRegistry(t *testing.T) {
 		Name:        "Test Default",
 		Description: "Testing default registry",
 		Version:     "1.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	})

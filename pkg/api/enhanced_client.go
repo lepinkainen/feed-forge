@@ -57,7 +57,7 @@ func NewEnhancedClient(config *EnhancedClientConfig) *EnhancedClient {
 }
 
 // GetAndDecode performs an HTTP GET request with rate limiting, retries, and JSON decoding
-func (ec *EnhancedClient) GetAndDecode(url string, target interface{}, additionalHeaders map[string]string) error {
+func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders map[string]string) error {
 	operation := func() error {
 		// Apply rate limiting
 		ec.rateLimiter.Wait()
@@ -203,7 +203,7 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 		status = "failure"
 	}
 
-	fields := []interface{}{
+	fields := []any{
 		"url", url,
 		"duration", duration,
 		"status", status,

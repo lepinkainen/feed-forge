@@ -10,7 +10,7 @@ import (
 )
 
 // GetAndDecode performs an HTTP GET request and decodes the JSON response.
-func GetAndDecode(client *http.Client, url string, target interface{}, headers map[string]string) error {
+func GetAndDecode(client *http.Client, url string, target any, headers map[string]string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)

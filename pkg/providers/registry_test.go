@@ -23,7 +23,7 @@ func TestRegisterProvider(t *testing.T) {
 		Name:        "Test Provider",
 		Description: "A test provider for convenience function",
 		Version:     "1.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	}
@@ -58,7 +58,7 @@ func TestRegisterProvider_Duplicate(t *testing.T) {
 		Name:        "First Provider",
 		Description: "First registration",
 		Version:     "1.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	}
@@ -67,7 +67,7 @@ func TestRegisterProvider_Duplicate(t *testing.T) {
 		Name:        "Second Provider",
 		Description: "Duplicate registration",
 		Version:     "2.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	}
@@ -107,7 +107,7 @@ func TestGetProvider(t *testing.T) {
 		Name:        "Get Test Provider",
 		Description: "A test provider for GetProvider function",
 		Version:     "1.0.0",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	}
@@ -177,7 +177,7 @@ func TestListProviders(t *testing.T) {
 			Name:        name,
 			Description: "List test provider",
 			Version:     "1.0.0",
-			Factory: func(config interface{}) (FeedProvider, error) {
+			Factory: func(config any) (FeedProvider, error) {
 				return &mockFeedProvider{}, nil
 			},
 		})
@@ -217,14 +217,14 @@ func TestCreateProvider(t *testing.T) {
 	// Register test providers
 	DefaultRegistry.Register("create-success", &ProviderInfo{
 		Name: "Create Success Provider",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return &mockFeedProvider{}, nil
 		},
 	})
 
 	DefaultRegistry.Register("create-fail", &ProviderInfo{
 		Name: "Create Fail Provider",
-		Factory: func(config interface{}) (FeedProvider, error) {
+		Factory: func(config any) (FeedProvider, error) {
 			return nil, fmt.Errorf("creation failed")
 		},
 	})
@@ -232,7 +232,7 @@ func TestCreateProvider(t *testing.T) {
 	tests := []struct {
 		name     string
 		provider string
-		config   interface{}
+		config   any
 		wantErr  bool
 	}{
 		{

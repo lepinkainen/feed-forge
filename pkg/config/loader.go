@@ -33,7 +33,7 @@ func DefaultLoaderConfig() *LoaderConfig {
 
 // LoadOrFetch loads configuration with fallback priority: local file -> remote URL
 // This is the main function providers should use for configuration loading
-func LoadOrFetch(localPath, remoteURL string, target interface{}) error {
+func LoadOrFetch(localPath, remoteURL string, target any) error {
 	config := DefaultLoaderConfig()
 	config.LocalPath = localPath
 	config.RemoteURL = remoteURL
@@ -41,7 +41,7 @@ func LoadOrFetch(localPath, remoteURL string, target interface{}) error {
 }
 
 // LoadFromURLWithFallback loads configuration from URL with local fallback
-func LoadFromURLWithFallback(config *LoaderConfig, target interface{}) error {
+func LoadFromURLWithFallback(config *LoaderConfig, target any) error {
 	// Try remote URL first if provided
 	if config.RemoteURL != "" {
 		if err := loadFromURL(config.RemoteURL, config.Timeout, target); err == nil {
@@ -65,7 +65,7 @@ func LoadFromURLWithFallback(config *LoaderConfig, target interface{}) error {
 }
 
 // loadFromURL loads configuration from a remote URL using shared HTTP utilities
-func loadFromURL(url string, timeout time.Duration, target interface{}) error {
+func loadFromURL(url string, timeout time.Duration, target any) error {
 	httpConfig := httputil.DefaultConfig()
 	httpConfig.Timeout = timeout
 
@@ -88,7 +88,7 @@ func loadFromURL(url string, timeout time.Duration, target interface{}) error {
 }
 
 // loadFromFile loads configuration from a local file with automatic format detection
-func loadFromFile(path string, target interface{}) error {
+func loadFromFile(path string, target any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", path, err)

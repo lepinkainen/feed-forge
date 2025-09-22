@@ -9,7 +9,7 @@ type Database interface {
 
 // StatsProvider defines the interface for databases that provide statistics
 type StatsProvider interface {
-	GetStats() (map[string]interface{}, error)
+	GetStats() (map[string]any, error)
 }
 
 // CleanupProvider defines the interface for databases that support cleanup operations

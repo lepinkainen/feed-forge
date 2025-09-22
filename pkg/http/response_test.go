@@ -372,7 +372,7 @@ func TestResponseBodyClosure(t *testing.T) {
 	resp.Body = tracker
 
 	// Test DecodeJSONResponse
-	var target map[string]interface{}
+	var target map[string]any
 	err = DecodeJSONResponse(resp, &target)
 	if err != nil {
 		t.Errorf("DecodeJSONResponse() error = %v", err)

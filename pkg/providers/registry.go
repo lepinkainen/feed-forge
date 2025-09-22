@@ -22,6 +22,6 @@ func ListProviders() []string {
 }
 
 // CreateProvider is a convenience function to create a provider from the default registry.
-func CreateProvider(name string, config interface{}) (FeedProvider, error) {
+func CreateProvider(name string, config any) (FeedProvider, error) {
 	return DefaultRegistry.CreateProvider(name, config)
 }

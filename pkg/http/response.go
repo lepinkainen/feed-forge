@@ -14,7 +14,7 @@ func ReadResponseBody(resp *http.Response) ([]byte, error) {
 }
 
 // DecodeJSONResponse decodes JSON response into a struct
-func DecodeJSONResponse(resp *http.Response, target interface{}) error {
+func DecodeJSONResponse(resp *http.Response, target any) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

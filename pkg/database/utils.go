@@ -75,8 +75,8 @@ func AnalyzeDatabase(db *Database) error {
 }
 
 // GetDatabaseInfo returns information about the database
-func GetDatabaseInfo(db *Database) (map[string]interface{}, error) {
-	info := make(map[string]interface{})
+func GetDatabaseInfo(db *Database) (map[string]any, error) {
+	info := make(map[string]any)
 
 	// Get SQLite version
 	var version string

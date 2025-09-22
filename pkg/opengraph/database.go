@@ -203,11 +203,11 @@ func (db *Database) CleanupExpired() error {
 }
 
 // GetStats returns statistics about the cache
-func (db *Database) GetStats() (map[string]interface{}, error) {
+func (db *Database) GetStats() (map[string]any, error) {
 	db.mu.RLock()
 	defer db.mu.RUnlock()
 
-	stats := make(map[string]interface{})
+	stats := make(map[string]any)
 
 	// Total entries
 	var totalEntries int

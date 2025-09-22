@@ -26,7 +26,7 @@ type FeedItem interface {
 }
 
 // ProviderFactory creates a new instance of a provider.
-type ProviderFactory func(config interface{}) (FeedProvider, error)
+type ProviderFactory func(config any) (FeedProvider, error)
 
 // ProviderInfo contains metadata about a provider.
 type ProviderInfo struct {
@@ -89,7 +89,7 @@ func (r *ProviderRegistry) List() []string {
 }
 
 // CreateProvider creates a new instance of the specified provider.
-func (r *ProviderRegistry) CreateProvider(name string, config interface{}) (FeedProvider, error) {
+func (r *ProviderRegistry) CreateProvider(name string, config any) (FeedProvider, error) {
 	info, err := r.Get(name)
 	if err != nil {
 		return nil, err

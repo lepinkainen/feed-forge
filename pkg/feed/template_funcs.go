@@ -48,6 +48,6 @@ func truncateText(s string, maxLen int) string {
 }
 
 // sprintf is a helper for template string formatting
-func sprintf(format string, args ...interface{}) string {
+func sprintf(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
