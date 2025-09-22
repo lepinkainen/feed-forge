@@ -10,7 +10,7 @@ This document provides essential context for the Gemini CLI agent operating with
 - **Provider Interface**: `pkg/providers/provider.go`
 - **Configuration**: `internal/config/config.go` (loads `config.yaml`)
 - **Hacker News Provider**: `internal/hackernews/`
-- **Reddit Providers**: `internal/reddit-json/` and `internal/reddit-oauth/`
+- **Reddit Provider**: `internal/reddit-json/`
 
 ## Developer Workflows
 
@@ -23,7 +23,7 @@ The project uses **Taskfile.dev** for managing development tasks. Do not use raw
 
 To run the application, use the binary in the `build/` directory:
 
-- `./build/feed-forge reddit-oauth -o reddit.xml --min-score 100`
+- `./build/feed-forge reddit -o reddit.xml --min-score 100`
 - `./build/feed-forge hacker-news -o hackernews.xml --min-points 50`
 
 ## Architecture
