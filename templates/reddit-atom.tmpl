@@ -21,8 +21,6 @@
       <uri>{{.AuthorURI | xmlEscape}}</uri>
     </author>
     {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
-    <category term="score:{{.Score}}" label="Score: {{.Score}}" scheme="reddit-metadata"/>
-    <category term="comments:{{.Comments}}" label="Comments: {{.Comments}}" scheme="reddit-metadata"/>
     {{if .Subreddit}}<category term="subreddit:{{.Subreddit | xmlEscape}}" label="Subreddit: r/{{.Subreddit | xmlEscape}}" scheme="reddit-metadata"/>{{end}}
 
     <content type="html"><![CDATA[
