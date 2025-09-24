@@ -100,7 +100,7 @@ func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 			}
 		}
 	} else if data != nil {
-		f.cleanupData(data)
+		f.cleanupData(data, targetURL)
 		slog.Debug("Successfully fetched OpenGraph data", "url", targetURL, "title", data.Title)
 	}
 
@@ -323,7 +323,7 @@ func (f *Fetcher) processMetaTag(n *html.Node, data *Data) {
 }
 
 // cleanupData validates and cleans up OpenGraph data
-func (f *Fetcher) cleanupData(data *Data) {
+func (f *Fetcher) cleanupData(data *Data, baseURL string) {
 	// Truncate long descriptions
 	if len(data.Description) > 500 {
 		data.Description = data.Description[:497] + "..."
@@ -334,10 +334,19 @@ func (f *Fetcher) cleanupData(data *Data) {
 		data.Title = data.Title[:197] + "..."
 	}
 
-	// Validate image URL
-	if data.Image != "" && !utils.IsValidURL(data.Image) {
-		slog.Warn("Invalid image URL found, clearing", "url", data.Image)
-		data.Image = ""
+	// Validate and resolve image URL
+	if data.Image != "" {
+		// Try to resolve relative URLs against the base URL
+		resolvedURL, err := utils.ResolveURL(baseURL, data.Image)
+		if err != nil {
+			slog.Warn("Failed to resolve image URL, clearing", "url", data.Image, "error", err)
+			data.Image = ""
+		} else if !utils.IsValidURL(resolvedURL) {
+			slog.Warn("Invalid image URL found after resolution, clearing", "original", data.Image, "resolved", resolvedURL)
+			data.Image = ""
+		} else {
+			data.Image = resolvedURL
+		}
 	}
 
 	// Clean up whitespace and normalize

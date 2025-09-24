@@ -2,6 +2,7 @@ package hackernews
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -177,6 +178,12 @@ func fetchItemStats(itemID string) statsUpdate {
 	var algoliaItem AlgoliaHit
 	err := client.GetAndDecode(url, &algoliaItem, nil)
 	if err != nil {
+		// Check if this is a 404 Not Found or 410 Gone error, indicating the item has been deleted
+		var httpErr *api.HTTPError
+		if errors.As(err, &httpErr) && (httpErr.StatusCode == 404 || httpErr.StatusCode == 410) {
+			slog.Debug("Item not found (404/410), marking as dead", "hn_id", itemID, "status", httpErr.StatusCode)
+			return statsUpdate{itemID: itemID, isDeadItem: true, err: nil}
+		}
 		return statsUpdate{itemID: itemID, err: fmt.Errorf("failed to decode JSON: %w", err)}
 	}
 

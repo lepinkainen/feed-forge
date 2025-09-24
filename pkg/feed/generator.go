@@ -28,7 +28,7 @@ func GenerateAtomFeed(items []providers.FeedItem, templateName, templatePath str
 	// Create template generator
 	templateGenerator := NewTemplateGenerator()
 
-	// Load template
+	// Load template (old API for backward compatibility)
 	err := templateGenerator.LoadTemplate(templateName, templatePath)
 	if err != nil {
 		slog.Error("Failed to load template", "templateName", templateName, "path", templatePath, "error", err)
@@ -71,6 +71,64 @@ func SaveAtomFeedToFile(items []providers.FeedItem, templateName, templatePath, 
 	slog.Debug("Generating and saving Atom feed", "outputPath", outputPath, "itemCount", len(items))
 
 	atomContent, err := GenerateAtomFeed(items, templateName, templatePath, config, ogDB)
+	if err != nil {
+		slog.Error("Failed to generate Atom feed", "error", err)
+		return err
+	}
+
+	return os.WriteFile(outputPath, []byte(atomContent), 0o644)
+}
+
+// GenerateAtomFeedWithEmbeddedTemplate creates an Atom RSS feed using embedded templates with local override
+func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
+	slog.Debug("Generating Atom feed with embedded template", "templateName", templateName, "itemCount", len(items))
+
+	// Create template generator
+	templateGenerator := NewTemplateGenerator()
+
+	// Load template with fallback to embedded
+	err := templateGenerator.LoadTemplateWithFallback(templateName)
+	if err != nil {
+		slog.Error("Failed to load template", "templateName", templateName, "error", err)
+		return "", err
+	}
+
+	// Collect URLs for OpenGraph fetching
+	urls := make([]string, 0, len(items))
+	for _, item := range items {
+		if item.Link() != "" && item.Link() != item.CommentsLink() {
+			urls = append(urls, item.Link())
+		}
+	}
+
+	// Fetch OpenGraph data concurrently
+	var ogData map[string]*opengraph.Data
+	if ogDB != nil {
+		ogFetcher := opengraph.NewFetcher(ogDB)
+		slog.Debug("Fetching OpenGraph data for unified feed", "url_count", len(urls))
+		ogData = ogFetcher.FetchConcurrent(urls)
+	}
+
+	// Create template data using generic function
+	templateData := createGenericFeedData(items, config, ogData)
+
+	// Generate using template
+	var atomContent strings.Builder
+	err = templateGenerator.GenerateFromTemplate(templateName, templateData, &atomContent)
+	if err != nil {
+		slog.Error("Failed to generate template feed", "error", err)
+		return "", err
+	}
+
+	slog.Debug("Unified Atom feed generated successfully", "feedSize", len(atomContent.String()))
+	return atomContent.String(), nil
+}
+
+// SaveAtomFeedToFileWithEmbeddedTemplate generates and saves an Atom feed using embedded templates with local override
+func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *opengraph.Database) error {
+	slog.Debug("Generating and saving Atom feed with embedded template", "outputPath", outputPath, "itemCount", len(items))
+
+	atomContent, err := GenerateAtomFeedWithEmbeddedTemplate(items, templateName, config, ogDB)
 	if err != nil {
 		slog.Error("Failed to generate Atom feed", "error", err)
 		return err

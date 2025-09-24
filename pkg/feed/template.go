@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -89,6 +90,49 @@ func (tg *TemplateGenerator) LoadTemplate(name, filePath string) error {
 
 	tg.templates[name] = tmpl
 	slog.Debug("Template loaded successfully", "name", name)
+	return nil
+}
+
+// LoadTemplateWithFallback loads a template with fallback to embedded version
+// First tries to load from local file, then falls back to embedded template
+func (tg *TemplateGenerator) LoadTemplateWithFallback(name string) error {
+	filename := name + ".tmpl"
+
+	if overrideFS := getTemplateOverrideFS(); overrideFS != nil {
+		content, err := fs.ReadFile(overrideFS, filename)
+		if err == nil {
+			slog.Debug("Loading override template", "name", name, "source", "override_fs")
+			return tg.loadTemplateFromContent(name, string(content))
+		}
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("failed to read override template %s: %w", filename, err)
+		}
+	}
+
+	if fallbackFS := getTemplateFallbackFS(); fallbackFS != nil {
+		content, err := fs.ReadFile(fallbackFS, filename)
+		if err == nil {
+			slog.Debug("Loading embedded template", "name", name, "source", "embedded_fs")
+			return tg.loadTemplateFromContent(name, string(content))
+		}
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%w: %s (no override file or embedded template found)", ErrTemplateNotFound, name)
+		}
+		return fmt.Errorf("failed to read embedded template %s: %w", filename, err)
+	}
+
+	return fmt.Errorf("%w: %s (no template filesystem configured)", ErrTemplateNotFound, name)
+}
+
+// loadTemplateFromContent loads a template from string content
+func (tg *TemplateGenerator) loadTemplateFromContent(name, content string) error {
+	tmpl, err := template.New(name).Funcs(tg.funcMap).Parse(content)
+	if err != nil {
+		return fmt.Errorf("%w: failed to parse template %s: %v", ErrTemplateInvalid, name, err)
+	}
+
+	tg.templates[name] = tmpl
+	slog.Debug("Template loaded successfully from content", "name", name)
 	return nil
 }
 

@@ -23,7 +23,7 @@ type Provider struct {
 func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers.FeedProvider {
 	// Initialize CategoryMapper if not provided
 	if categoryMapper == nil {
-		categoryMapper = LoadConfig("", "") // Use default configuration
+		categoryMapper = LoadConfig("") // Use default configuration
 	}
 
 	// Initialize databases
@@ -114,8 +114,8 @@ func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 		ID:          "https://news.ycombinator.com/",
 	}
 
-	// Generate and save the feed using unified generator
-	if err := feed.SaveAtomFeedToFile(feedItems, "hackernews-atom", "templates/hackernews-atom.tmpl", outfile, feedConfig, ogDB); err != nil {
+	// Generate and save the feed using embedded templates with local override
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, ogDB); err != nil {
 		return err
 	}
 

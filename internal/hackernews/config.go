@@ -1,9 +1,13 @@
 package hackernews
 
 import (
+	"encoding/json"
+	"errors"
+	"io/fs"
 	"log/slog"
 	"strings"
 
+	"github.com/lepinkainen/feed-forge/configs"
 	configloader "github.com/lepinkainen/feed-forge/pkg/config"
 )
 
@@ -18,32 +22,42 @@ type CategoryMapper struct {
 	domainToCategory map[string]string // reverse lookup for efficient searching
 }
 
-// DefaultConfigURL is the default configuration URL for domain mappings
-const DefaultConfigURL = "https://raw.githubusercontent.com/lepinkainen/hntop-rss/refs/heads/main/configs/domains.json"
-
 // LoadConfig loads configuration with fallback priority:
 // 1. Local file (if specified)
-// 2. Remote URL (default or custom)
+// 2. Embedded domains.json file
 // If no configuration can be loaded, returns nil to disable domain mapping
-func LoadConfig(configPath, configURL string) *CategoryMapper {
+func LoadConfig(configPath string) *CategoryMapper {
 	var config DomainConfig
 
-	// Use default URL if none provided
-	url := configURL
-	if url == "" {
-		url = DefaultConfigURL
+	slog.Debug("Loading HackerNews domain config", "path", configPath)
+
+	// Try local file first if specified
+	if configPath != "" {
+		err := configloader.LoadOrFetch(configPath, "", &config)
+		if err == nil {
+			slog.Debug("Successfully loaded domain configuration from local file")
+			return NewCategoryMapper(&config)
+		}
+		slog.Warn("Failed to load local config file, falling back to embedded config", "error", err)
 	}
 
-	slog.Debug("Loading HackerNews domain config", "path", configPath, "url", url)
-
-	// Use shared configuration loading utility
-	err := configloader.LoadOrFetch(configPath, url, &config)
+	// Fall back to embedded configuration
+	embeddedData, err := configs.EmbeddedConfigs.ReadFile("domains.json")
 	if err != nil {
-		slog.Warn("Failed to load domain config, domain mapping will be disabled", "error", err)
+		if errors.Is(err, fs.ErrNotExist) {
+			slog.Warn("Embedded domain config not found, domain mapping will be disabled")
+			return nil
+		}
+		slog.Warn("Failed to read embedded domain config, domain mapping will be disabled", "error", err)
 		return nil
 	}
 
-	slog.Debug("Successfully loaded domain configuration")
+	if err := json.Unmarshal(embeddedData, &config); err != nil {
+		slog.Warn("Failed to load embedded domain config, domain mapping will be disabled", "error", err)
+		return nil
+	}
+
+	slog.Debug("Successfully loaded domain configuration from embedded file")
 	return NewCategoryMapper(&config)
 }
 

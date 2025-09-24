@@ -90,8 +90,8 @@ func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
 		ID:          "https://www.reddit.com/",
 	}
 
-	// Generate Atom feed using unified generator
-	if err := feed.SaveAtomFeedToFile(feedItems, "reddit-atom", "templates/reddit-atom.tmpl", outfile, feedConfig, p.OgDB); err != nil {
+	// Generate Atom feed using embedded templates with local override
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "reddit-atom", outfile, feedConfig, p.OgDB); err != nil {
 		return err
 	}
 
