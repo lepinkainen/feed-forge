@@ -50,4 +50,7 @@ temp/
 hackernews.xml
 reddit.xml
 # Reddit JSON feed from settingsd
-reddit.json         
+reddit.json      
+
+# Private files
+.envrc
