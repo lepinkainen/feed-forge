@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
@@ -42,9 +43,31 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	// Configure SQLite for better concurrency and performance
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil { // 5 second timeout for lock contention
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	var journalMode string
+	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
+		if closeErr := db.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
+		return nil, fmt.Errorf("failed to read journal mode: %w", err)
+	}
+
+	if !strings.EqualFold(journalMode, "wal") {
+		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil { // Enable WAL mode for concurrent readers/writers
+			if closeErr := db.Close(); closeErr != nil {
+				slog.Error("Failed to close database", "error", closeErr)
+			}
+			return nil, fmt.Errorf("failed to set journal mode: %w", err)
+		}
+	}
+
 	pragmas := []string{
-		"PRAGMA journal_mode=WAL",    // Enable WAL mode for concurrent readers/writers
-		"PRAGMA busy_timeout=5000",   // 5 second timeout for lock contention
 		"PRAGMA synchronous=NORMAL",  // Balance between performance and safety
 		"PRAGMA temp_store=memory",   // Store temp tables in memory
 		"PRAGMA mmap_size=268435456", // 256MB memory mapped I/O
