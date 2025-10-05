@@ -100,10 +100,7 @@ func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
 
 	// Convert to FeedItem interface
-	feedItems := make([]providers.FeedItem, len(preprocessedItems))
-	for i, item := range preprocessedItems {
-		feedItems[i] = &item
-	}
+	feedItems := convertToFeedItems(preprocessedItems)
 
 	// Define feed configuration
 	feedConfig := feed.Config{
@@ -147,4 +144,13 @@ func preprocessItems(items []Item, minPoints int, categoryMapper *CategoryMapper
 	}
 
 	return items
+}
+
+// convertToFeedItems wraps preprocessed Hacker News items with the FeedItem interface.
+func convertToFeedItems(items []Item) []providers.FeedItem {
+	feedItems := make([]providers.FeedItem, len(items))
+	for i := range items {
+		feedItems[i] = &items[i]
+	}
+	return feedItems
 }
