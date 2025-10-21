@@ -22,7 +22,7 @@ const (
 )
 
 // fetchItems fetches Fingerpori comics from the HS.fi API
-func fetchItems() ([]FingerporiItem, error) {
+func fetchItems() ([]Item, error) {
 	slog.Debug("Fetching Fingerpori items from API", "url", FingerporiAPIURL)
 
 	// Create HTTP client with timeout
@@ -35,7 +35,11 @@ func fetchItems() ([]FingerporiItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error fetching data: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			slog.Warn("Error closing response body", "error", closeErr)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
@@ -48,7 +52,7 @@ func fetchItems() ([]FingerporiItem, error) {
 	}
 
 	// Parse the JSON data
-	var items []FingerporiItem
+	var items []Item
 	if err := json.Unmarshal(body, &items); err != nil {
 		return nil, fmt.Errorf("error parsing JSON: %w", err)
 	}
@@ -58,7 +62,7 @@ func fetchItems() ([]FingerporiItem, error) {
 }
 
 // processItems processes raw API items and adds computed fields
-func processItems(items []FingerporiItem) []FingerporiItem {
+func processItems(items []Item) []Item {
 	now := time.Now()
 
 	for i := range items {
@@ -83,7 +87,7 @@ func processItems(items []FingerporiItem) []FingerporiItem {
 		}
 
 		// Generate HTML content with the image
-		item.ContentHTML = fmt.Sprintf(`<img src="%s" alt="%s">`,
+		item.ContentHTML = fmt.Sprintf(`<img src=%q alt=%q>`,
 			item.ProcessedImageURL, item.ItemTitle)
 	}
 

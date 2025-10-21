@@ -78,7 +78,7 @@ func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 }
 
 // convertToFeedItems wraps Fingerpori items with the FeedItem interface
-func convertToFeedItems(items []FingerporiItem) []providers.FeedItem {
+func convertToFeedItems(items []Item) []providers.FeedItem {
 	feedItems := make([]providers.FeedItem, len(items))
 	for i := range items {
 		feedItems[i] = &items[i]

@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-func TestFingerporiItem_FeedItemInterface(t *testing.T) {
+func TestItem_FeedItemInterface(t *testing.T) {
 	// Create a test item
-	item := &FingerporiItem{
+	item := &Item{
 		ItemID:      12345,
 		Href:        "/fingerpori/cart-1234567890",
 		DisplayDate: "2024-01-15T00:00:00.000+02:00",
@@ -70,9 +70,9 @@ func TestFingerporiItem_FeedItemInterface(t *testing.T) {
 
 func TestExtractImageID(t *testing.T) {
 	tests := []struct {
-		name  string
-		url   string
-		want  string
+		name string
+		url  string
+		want string
 	}{
 		{
 			name: "Valid URL with image ID",
@@ -101,7 +101,7 @@ func TestExtractImageID(t *testing.T) {
 }
 
 func TestProcessItems(t *testing.T) {
-	items := []FingerporiItem{
+	items := []Item{
 		{
 			ItemID:      1,
 			DisplayDate: "2024-01-15T00:00:00.000+02:00",
