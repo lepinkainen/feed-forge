@@ -11,8 +11,8 @@
 {{range .Items}}
   <entry>
     <title>[r/{{.Subreddit}}] {{.Title | xmlEscape}}</title>
-    <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
-    {{if ne .Link .CommentsLink}}<link rel="related" type="text/html" href="{{.Link | xmlEscape}}" title="Article"/>{{end}}
+    <link rel="alternate" type="text/html" href="{{.CommentsLink | xmlEscape}}"/>
+    {{if ne .Link .CommentsLink}}<link rel="related" type="text/html" href="{{.Link | xmlEscape}}" title="External article"/>{{end}}
     <id>{{.ID | xmlEscape}}</id>
     <updated>{{.Updated}}</updated>
     <published>{{.Published}}</published>
@@ -45,7 +45,7 @@
       {{end}}
       <div class="links">
         {{if ne .Link .CommentsLink}}
-          <p><a href="{{.Link | xmlEscape}}">View External Link</a> | <a href="{{.CommentsLink | xmlEscape}}">View Comments</a></p>
+          <p><a href="{{.CommentsLink | xmlEscape}}">View Comments</a> | <a href="{{.Link | xmlEscape}}">View External Link</a></p>
         {{else}}
           <p><a href="{{.CommentsLink | xmlEscape}}">View Link</a></p>
         {{end}}
