@@ -1,3 +1,4 @@
+// Package database provides SQLite caching and database interfaces.
 package database
 
 import (

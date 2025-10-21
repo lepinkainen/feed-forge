@@ -1,3 +1,4 @@
+// Package hackernews provides a provider for fetching Hacker News stories.
 package hackernews
 
 import (

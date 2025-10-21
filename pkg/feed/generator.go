@@ -1,3 +1,4 @@
+// Package feed provides template-based Atom feed generation and feed helpers.
 package feed
 
 import (

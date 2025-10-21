@@ -1,3 +1,4 @@
+// Package filesystem provides file system utilities and path management.
 package filesystem
 
 import (

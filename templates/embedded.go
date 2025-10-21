@@ -1,3 +1,4 @@
+// Package templates provides embedded Go templates for feed generation.
 package templates
 
 import "embed"

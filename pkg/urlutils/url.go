@@ -1,4 +1,5 @@
-package utils
+// Package urlutils provides URL and common helper functions.
+package urlutils
 
 import "net/url"
 

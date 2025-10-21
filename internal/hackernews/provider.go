@@ -55,7 +55,7 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
+func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	// Clean up expired entries using base provider
 	if err := p.CleanupExpired(); err != nil {
 		slog.Warn("Failed to cleanup expired entries", "error", err)

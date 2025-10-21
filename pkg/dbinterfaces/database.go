@@ -1,4 +1,5 @@
-package interfaces
+// Package dbinterfaces provides shared database interface definitions.
+package dbinterfaces
 
 import "io"
 

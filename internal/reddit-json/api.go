@@ -1,3 +1,4 @@
+// Package redditjson provides a provider for fetching Reddit JSON feeds.
 package redditjson
 
 import (
@@ -40,7 +41,7 @@ func (r *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 }
 
 // FetchConcurrentHomepage fetches posts (single page for JSON feed)
-func (r *RedditAPI) FetchConcurrentHomepage(pageCount int) ([]RedditPost, error) {
+func (r *RedditAPI) FetchConcurrentHomepage(_ int) ([]RedditPost, error) {
 	// JSON feed is a single page, so just return the main fetch
 	return r.FetchRedditHomepage()
 }

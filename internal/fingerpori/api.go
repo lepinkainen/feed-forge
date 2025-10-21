@@ -1,3 +1,4 @@
+// Package fingerpori provides a provider for fetching Fingerpori comics from HS.fi.
 package fingerpori
 
 import (

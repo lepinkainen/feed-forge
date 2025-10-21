@@ -47,7 +47,7 @@ func NewRedditProvider(minScore, minComments int, feedID, username string, cfg *
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *RedditProvider) GenerateFeed(outfile string, reauth bool) error {
+func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
 	// reauth parameter is ignored for JSON feeds (no authentication needed)
 
 	// Clean up expired entries using base provider

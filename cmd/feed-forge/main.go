@@ -1,3 +1,4 @@
+// Package main provides the CLI entry point for feed-forge.
 package main
 
 import (

@@ -1,3 +1,4 @@
+// Package testutil provides golden file testing utilities.
 package testutil
 
 import (

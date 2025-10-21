@@ -1,3 +1,4 @@
+// Package configs provides embedded configuration files for feed-forge.
 package configs
 
 import "embed"

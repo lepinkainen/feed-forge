@@ -1,3 +1,4 @@
+// Package api provides enhanced HTTP clients with rate limiting and retries.
 package api
 
 import (

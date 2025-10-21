@@ -1,3 +1,4 @@
+// Package config provides configuration loading utilities with fallback support.
 package config
 
 import (

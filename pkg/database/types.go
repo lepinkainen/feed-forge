@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lepinkainen/feed-forge/pkg/interfaces"
+	"github.com/lepinkainen/feed-forge/pkg/dbinterfaces"
 )
 
 var (
@@ -24,8 +24,8 @@ type Database struct {
 	dbPath string
 }
 
-// Ensure Database implements interfaces.Database
-var _ interfaces.Database = (*Database)(nil)
+// Ensure Database implements dbinterfaces.Database
+var _ dbinterfaces.Database = (*Database)(nil)
 
 // Config holds database configuration
 type Config struct {

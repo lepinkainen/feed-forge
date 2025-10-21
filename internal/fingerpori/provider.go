@@ -33,7 +33,7 @@ func NewProvider(limit int) providers.FeedProvider {
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
+func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	slog.Debug("Generating Fingerpori feed")
 
 	// Fetch items from the API

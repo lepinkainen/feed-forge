@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lepinkainen/feed-forge/pkg/utils"
+	"github.com/lepinkainen/feed-forge/pkg/urlutils"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
@@ -33,7 +33,7 @@ func NewFetcher(db *Database) *Fetcher {
 	return &Fetcher{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
-			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")
 				}
@@ -50,7 +50,7 @@ func NewFetcher(db *Database) *Fetcher {
 // FetchData fetches OpenGraph data from a URL with caching
 func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 	// Validate URL format
-	if !utils.IsValidURL(targetURL) {
+	if !urlutils.IsValidURL(targetURL) {
 		return nil, fmt.Errorf("invalid URL format: %s", targetURL)
 	}
 
@@ -337,14 +337,15 @@ func (f *Fetcher) cleanupData(data *Data, baseURL string) {
 	// Validate and resolve image URL
 	if data.Image != "" {
 		// Try to resolve relative URLs against the base URL
-		resolvedURL, err := utils.ResolveURL(baseURL, data.Image)
-		if err != nil {
+		resolvedURL, err := urlutils.ResolveURL(baseURL, data.Image)
+		switch {
+		case err != nil:
 			slog.Warn("Failed to resolve image URL, clearing", "url", data.Image, "error", err)
 			data.Image = ""
-		} else if !utils.IsValidURL(resolvedURL) {
+		case !urlutils.IsValidURL(resolvedURL):
 			slog.Warn("Invalid image URL found after resolution, clearing", "original", data.Image, "resolved", resolvedURL)
 			data.Image = ""
-		} else {
+		default:
 			data.Image = resolvedURL
 		}
 	}

@@ -1,3 +1,4 @@
+// Package providers provides provider interfaces and base implementations.
 package providers
 
 import (

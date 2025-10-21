@@ -1,3 +1,4 @@
+// Package opengraph provides OpenGraph metadata fetching and caching.
 package opengraph
 
 import (
@@ -8,9 +9,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lepinkainen/feed-forge/pkg/dbinterfaces"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
-	"github.com/lepinkainen/feed-forge/pkg/interfaces"
-	_ "modernc.org/sqlite"
+	_ "modernc.org/sqlite" // SQLite driver
 )
 
 // Database wraps database operations with thread safety
@@ -20,10 +21,10 @@ type Database struct {
 	dbPath string
 }
 
-// Ensure Database implements interfaces
-var _ interfaces.Database = (*Database)(nil)
-var _ interfaces.StatsProvider = (*Database)(nil)
-var _ interfaces.CleanupProvider = (*Database)(nil)
+// Ensure Database implements dbinterfaces
+var _ dbinterfaces.Database = (*Database)(nil)
+var _ dbinterfaces.StatsProvider = (*Database)(nil)
+var _ dbinterfaces.CleanupProvider = (*Database)(nil)
 
 // NewDatabase creates a new OpenGraph database instance
 func NewDatabase(dbPath string) (*Database, error) {
