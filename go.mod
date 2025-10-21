@@ -3,7 +3,7 @@ module github.com/lepinkainen/feed-forge
 go 1.24.4
 
 require (
-	github.com/alecthomas/kong v1.12.0
+	github.com/alecthomas/kong v1.12.1
 	github.com/spf13/viper v1.21.0
 	golang.org/x/net v0.41.0
 	golang.org/x/oauth2 v0.30.0
