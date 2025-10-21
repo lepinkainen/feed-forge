@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>{{.FeedTitle}}</title>
+  <link href="{{.FeedLink}}"/>
+  <id>{{.FeedID}}</id>
+  <updated>{{.Updated}}</updated>
+  <author><name>{{.FeedAuthor}}</name></author>
+  <subtitle>{{.FeedDescription}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator}}</generator>
+
+{{range .Items}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <author>
+      <name>{{.Author | xmlEscape}}</name>
+    </author>
+    {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
+
+    <content type="html"><![CDATA[
+      <div class="comic">
+        {{.Content}}
+      </div>
+      <div class="links">
+        <p><a href="{{.Link | xmlEscape}}">View on HS.fi</a></p>
+      </div>
+    ]]></content>
+
+    <summary>Fingerpori comic for {{.Published | formatDate}}</summary>
+
+    {{if .ImageURL}}<link rel="enclosure" type="image/jpeg" href="{{.ImageURL | xmlEscape}}"/>{{end}}
+    {{if .ImageURL}}<media:thumbnail url="{{.ImageURL | xmlEscape}}"/>{{end}}
+  </entry>
+{{end}}
+</feed>

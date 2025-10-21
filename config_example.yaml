@@ -12,3 +12,8 @@ reddit:
 hackernews:
   min_points: 50
   limit: 30
+
+# Fingerpori provider configuration
+fingerpori:
+  limit: 100
+  output_path: "fingerpori.xml"

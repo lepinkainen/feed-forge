@@ -6,6 +6,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/lepinkainen/feed-forge/internal/config"
+	"github.com/lepinkainen/feed-forge/internal/fingerpori"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
@@ -29,6 +30,11 @@ var CLI struct {
 		MinPoints int    `help:"Minimum points threshold" default:"50"`
 		Limit     int    `help:"Maximum number of items" default:"30"`
 	} `cmd:"hacker-news" help:"Generate RSS feed from Hacker News."`
+
+	Fingerpori struct {
+		Outfile string `help:"Output file path" short:"o" default:"fingerpori.xml"`
+		Limit   int    `help:"Maximum number of items" default:"100"`
+	} `cmd:"fingerpori" help:"Generate RSS feed from Fingerpori comics."`
 }
 
 func main() {
@@ -102,6 +108,24 @@ func main() {
 
 		if err := provider.GenerateFeed(CLI.Reddit.Outfile, false); err != nil {
 			slog.Error("Failed to generate Reddit feed", "error", err)
+			os.Exit(1)
+		}
+
+	case "fingerpori":
+		slog.Debug("Generating Fingerpori feed...")
+
+		// Override config with CLI flags if provided
+		limit := CLI.Fingerpori.Limit
+
+		// Create Fingerpori provider
+		provider = fingerpori.NewProvider(limit)
+		if provider == nil {
+			slog.Error("Failed to create Fingerpori provider")
+			os.Exit(1)
+		}
+
+		if err := provider.GenerateFeed(CLI.Fingerpori.Outfile, false); err != nil {
+			slog.Error("Failed to generate Fingerpori feed", "error", err)
 			os.Exit(1)
 		}
 

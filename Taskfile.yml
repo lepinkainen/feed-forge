@@ -59,6 +59,12 @@ tasks:
     cmds:
       - ./build/feed-forge hacker-news
 
+  run-fingerpori:
+    desc: "Run Fingerpori feed generation"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge fingerpori
+
   update-golden:
     desc: "Update golden files when tests are in stable state"
     cmds:
