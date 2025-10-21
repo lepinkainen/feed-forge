@@ -32,31 +32,48 @@ func NewProvider(limit int) providers.FeedProvider {
 	}
 }
 
-// GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string, _ bool) error {
-	slog.Debug("Generating Fingerpori feed")
+// FetchItems implements the FeedProvider interface
+func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+	slog.Debug("Fetching Fingerpori items")
 
 	// Fetch items from the API
 	items, err := fetchItems()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Process items to add computed fields
 	items = processItems(items)
 
+	// Use provided limit or fall back to provider's default
+	itemLimit := limit
+	if itemLimit == 0 {
+		itemLimit = p.Limit
+	}
+
 	// Apply limit if specified
-	if p.Limit > 0 && len(items) > p.Limit {
-		items = items[:p.Limit]
+	if itemLimit > 0 && len(items) > itemLimit {
+		items = items[:itemLimit]
+	}
+
+	// Convert to FeedItem interface
+	return convertToFeedItems(items), nil
+}
+
+// GenerateFeed implements the FeedProvider interface
+func (p *Provider) GenerateFeed(outfile string, _ bool) error {
+	slog.Debug("Generating Fingerpori feed")
+
+	// Fetch items using the shared FetchItems method
+	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
+	if err != nil {
+		return err
 	}
 
 	// Ensure output directory exists
 	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
 		return dirErr
 	}
-
-	// Convert to FeedItem interface
-	feedItems := convertToFeedItems(items)
 
 	// Define feed configuration
 	feedConfig := feed.Config{
@@ -73,7 +90,7 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 		return err
 	}
 
-	feed.LogFeedGeneration(len(items), outfile)
+	feed.LogFeedGeneration(len(feedItems), outfile)
 	return nil
 }
 

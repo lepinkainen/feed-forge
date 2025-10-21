@@ -46,15 +46,8 @@ func NewRedditProvider(minScore, minComments int, feedID, username string, cfg *
 	}
 }
 
-// GenerateFeed implements the FeedProvider interface
-func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
-	// reauth parameter is ignored for JSON feeds (no authentication needed)
-
-	// Clean up expired entries using base provider
-	if err := p.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
-	}
-
+// FetchItems implements the FeedProvider interface
+func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	// Construct feed URL from config parameters
 	feedURL := constructFeedURL(p.FeedID, p.Username)
 
@@ -64,21 +57,44 @@ func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
 	// Fetch Reddit posts from JSON feed
 	posts, err := redditAPI.FetchRedditHomepage()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Filter posts
 	filteredPosts := FilterPosts(posts, p.MinScore, p.MinComments)
 
-	// Ensure output directory exists
-	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
-		return err
+	// Apply limit if specified
+	if limit > 0 && limit < len(filteredPosts) {
+		filteredPosts = filteredPosts[:limit]
 	}
 
 	// Convert to FeedItem interface
 	feedItems := make([]providers.FeedItem, len(filteredPosts))
 	for i, post := range filteredPosts {
 		feedItems[i] = &post
+	}
+
+	return feedItems, nil
+}
+
+// GenerateFeed implements the FeedProvider interface
+func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
+	// reauth parameter is ignored for JSON feeds (no authentication needed)
+
+	// Clean up expired entries using base provider
+	if err := p.CleanupExpired(); err != nil {
+		slog.Warn("Failed to cleanup expired entries", "error", err)
+	}
+
+	// Fetch items using the shared FetchItems method
+	feedItems, err := p.FetchItems(0) // 0 means no limit
+	if err != nil {
+		return err
+	}
+
+	// Ensure output directory exists
+	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
+		return err
 	}
 
 	// Define feed configuration
@@ -95,6 +111,6 @@ func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
 		return err
 	}
 
-	feed.LogFeedGeneration(len(filteredPosts), outfile)
+	feed.LogFeedGeneration(len(feedItems), outfile)
 	return nil
 }

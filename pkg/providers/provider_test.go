@@ -11,6 +11,7 @@ import (
 // Mock implementations for testing
 type mockFeedProvider struct {
 	generateFeedFunc func(outfile string, reauth bool) error
+	fetchItemsFunc   func(limit int) ([]FeedItem, error)
 }
 
 func (m *mockFeedProvider) GenerateFeed(outfile string, reauth bool) error {
@@ -18,6 +19,13 @@ func (m *mockFeedProvider) GenerateFeed(outfile string, reauth bool) error {
 		return m.generateFeedFunc(outfile, reauth)
 	}
 	return nil
+}
+
+func (m *mockFeedProvider) FetchItems(limit int) ([]FeedItem, error) {
+	if m.fetchItemsFunc != nil {
+		return m.fetchItemsFunc(limit)
+	}
+	return []FeedItem{}, nil
 }
 
 type mockFeedItem struct {
@@ -30,6 +38,7 @@ type mockFeedItem struct {
 	createdAt    time.Time
 	categories   []string
 	imageURL     string
+	content      string
 }
 
 func (m *mockFeedItem) Title() string        { return m.title }
@@ -41,6 +50,7 @@ func (m *mockFeedItem) CommentCount() int    { return m.commentCount }
 func (m *mockFeedItem) CreatedAt() time.Time { return m.createdAt }
 func (m *mockFeedItem) Categories() []string { return m.categories }
 func (m *mockFeedItem) ImageURL() string     { return m.imageURL }
+func (m *mockFeedItem) Content() string      { return m.content }
 
 func TestNewProviderRegistry(t *testing.T) {
 	registry := NewProviderRegistry()

@@ -177,6 +177,10 @@ func (tp *testProvider) GenerateFeed(outfile string, reauth bool) error {
 	return nil
 }
 
+func (tp *testProvider) FetchItems(limit int) ([]FeedItem, error) {
+	return []FeedItem{}, nil
+}
+
 // Mock test for BaseProvider interface compliance
 func TestBaseProvider_InterfaceCompliance(t *testing.T) {
 	// Verify that BaseProvider can be embedded in structs that implement FeedProvider

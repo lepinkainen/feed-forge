@@ -54,6 +54,50 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 	}
 }
 
+// FetchItems implements the FeedProvider interface
+func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+	// Get database connection
+	contentDB := p.databases.ContentDB
+
+	// Fetch current front page items
+	newItems := fetchItems()
+
+	// Initialize database schema
+	if err := initializeSchema(contentDB); err != nil {
+		return nil, err
+	}
+
+	// Update database with new items and get list of updated item IDs
+	recentlyUpdated := updateStoredItems(contentDB, newItems)
+
+	// Use provided limit or fall back to provider's default
+	itemLimit := limit
+	if itemLimit == 0 {
+		itemLimit = p.Limit
+	}
+
+	// Get all items from database
+	allItems, err := getAllItems(contentDB, itemLimit, p.MinPoints)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update item stats with current data from Algolia, skipping recently updated items
+	updateItemStats(contentDB.DB(), allItems, recentlyUpdated)
+
+	// Re-fetch items to get updated stats
+	allItems, err = getAllItems(contentDB, itemLimit, p.MinPoints)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process items to add HackerNews-specific categorization
+	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
+
+	// Convert to FeedItem interface
+	return convertToFeedItems(preprocessedItems), nil
+}
+
 // GenerateFeed implements the FeedProvider interface
 func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	// Clean up expired entries using base provider
@@ -61,32 +105,8 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 		slog.Warn("Failed to cleanup expired entries", "error", err)
 	}
 
-	// Get database connections
-	contentDB := p.databases.ContentDB
-	ogDB := p.databases.OpenGraphDB
-
-	// Fetch current front page items
-	newItems := fetchItems()
-
-	// Initialize database schema
-	if err := initializeSchema(contentDB); err != nil {
-		return err
-	}
-
-	// Update database with new items and get list of updated item IDs
-	recentlyUpdated := updateStoredItems(contentDB, newItems)
-
-	// Get all items from database
-	allItems, err := getAllItems(contentDB, p.Limit, p.MinPoints)
-	if err != nil {
-		return err
-	}
-
-	// Update item stats with current data from Algolia, skipping recently updated items
-	updateItemStats(contentDB.DB(), allItems, recentlyUpdated)
-
-	// Re-fetch items to get updated stats for RSS generation
-	allItems, err = getAllItems(contentDB, p.Limit, p.MinPoints)
+	// Fetch items using the shared FetchItems method
+	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
 	if err != nil {
 		return err
 	}
@@ -95,12 +115,6 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
 		return dirErr
 	}
-
-	// Process items to add HackerNews-specific categorization
-	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
-
-	// Convert to FeedItem interface
-	feedItems := convertToFeedItems(preprocessedItems)
 
 	// Define feed configuration
 	feedConfig := feed.Config{
@@ -112,11 +126,11 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	}
 
 	// Generate and save the feed using embedded templates with local override
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, ogDB); err != nil {
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, p.databases.OpenGraphDB); err != nil {
 		return err
 	}
 
-	feed.LogFeedGeneration(len(allItems), outfile)
+	feed.LogFeedGeneration(len(feedItems), outfile)
 	return nil
 }
 

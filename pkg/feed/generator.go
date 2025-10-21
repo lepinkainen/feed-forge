@@ -169,6 +169,7 @@ func createGenericFeedData(items []providers.FeedItem, config Config, ogData map
 			Comments:     item.CommentCount(),
 			Content:      item.Content(),
 			Summary:      fmt.Sprintf("Score: %d | Comments: %d", item.Score(), item.CommentCount()),
+			ImageURL:     item.ImageURL(),
 		}
 
 		// Extract provider-specific fields through type assertions

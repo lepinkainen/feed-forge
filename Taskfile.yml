@@ -65,6 +65,24 @@ tasks:
     cmds:
       - ./build/feed-forge fingerpori
 
+  preview-reddit:
+    desc: "Preview Reddit feed items interactively"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge preview reddit
+
+  preview-hackernews:
+    desc: "Preview Hacker News feed items interactively"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge preview hacker-news
+
+  preview-fingerpori:
+    desc: "Preview Fingerpori feed items interactively"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge preview fingerpori
+
   update-golden:
     desc: "Update golden files when tests are in stable state"
     cmds:
