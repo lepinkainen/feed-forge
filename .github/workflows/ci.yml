@@ -73,7 +73,13 @@ jobs:
         run: go install golang.org/x/tools/cmd/goimports@latest
 
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          skip-cache: true
+          skip-pkg-cache: true
+          skip-build-cache: true
+          args: --version
 
       - name: Install Task
         uses: arduino/setup-task@v2
