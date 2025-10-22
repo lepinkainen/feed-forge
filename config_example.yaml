@@ -1,19 +1,26 @@
 # Feed-Forge Configuration Example
+#
+# This file demonstrates the configuration format for feed-forge.
+# Copy this to 'config.yaml' and customize for your needs.
+#
+# Note: CLI flags always override configuration file values.
+# Field names use kebab-case to match CLI flag names.
 
 # Reddit provider configuration
 reddit:
-  feed_id: ""
-  username: ""
-  output_path: "reddit.xml"
-  score_filter: 50
-  comment_filter: 10
+  feed-id: ""           # Required: Your Reddit feed ID (from https://www.reddit.com/prefs/feeds/)
+  username: ""          # Required: Your Reddit username
+  min-score: 50         # Minimum post score to include
+  min-comments: 10      # Minimum comment count to include
+  outfile: reddit.xml   # Output file path
 
 # Hacker News provider configuration
-hackernews:
-  min_points: 50
-  limit: 30
+hacker-news:
+  min-points: 50        # Minimum points threshold
+  limit: 30             # Maximum number of items
+  outfile: hackernews.xml
 
 # Fingerpori provider configuration
 fingerpori:
-  limit: 100
-  output_path: "fingerpori.xml"
+  limit: 100            # Maximum number of items
+  outfile: fingerpori.xml
