@@ -37,7 +37,6 @@ tasks:
 
   build-ci:
     desc: "Build for CI environment"
-    deps: [test-ci, lint]
     cmds:
       - mkdir -p build
       - go build -o build/feed-forge cmd/feed-forge/main.go
