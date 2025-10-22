@@ -54,10 +54,12 @@
 
     <summary>{{.Summary | xmlEscape}}</summary>
 
+    {{if .ImageURL}}Enclosure: <link rel="enclosure" type="image/jpeg" href="{{.ImageURL | xmlEscape}}"/>{{end}}
+    {{if .ImageURL}}Media: <media:thumbnail url="{{.ImageURL | xmlEscape}}"/>{{end}}
     {{if index $.OpenGraphData .Link}}
       {{$og := index $.OpenGraphData .Link}}
-      {{if $og.Image}}<link rel="enclosure" type="image/jpeg" href="{{$og.Image | xmlEscape}}"/>{{end}}
-      {{if $og.Image}}<media:thumbnail url="{{$og.Image | xmlEscape}}"/>{{end}}
+      {{if $og.Image}}Opengraph1: <link rel="enclosure" type="image/jpeg" href="{{$og.Image | xmlEscape}}"/>{{end}}
+      {{if $og.Image}}Opengraph2: <media:thumbnail url="{{$og.Image | xmlEscape}}"/>{{end}}
     {{end}}
   </entry>
 {{end}}
