@@ -18,34 +18,33 @@ linters:
   exclusions:
     paths:
       - llm-shared
-
-linters-settings:
-  govet:
-    enable:
-      - shadow
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - exitAfterDefer
-      - rangeValCopy
-      - hugeParam
-      - singleCaseSwitch
-      - ifElseChain
-      - paramTypeCombine
-  revive:
-    severity: warning
-    rules:
-      - name: exported
-        severity: warning
-        disabled: false
-        arguments:
-          - "checkPrivateReceivers"
-          - "sayRepetitiveInsteadOfStutters"
+  settings:
+    govet:
+      enable:
+        - shadow
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - exitAfterDefer
+        - rangeValCopy
+        - hugeParam
+        - singleCaseSwitch
+        - ifElseChain
+        - paramTypeCombine
+    revive:
+      severity: warning
+      rules:
+        - name: exported
+          severity: warning
+          disabled: false
+          arguments:
+            - "checkPrivateReceivers"
+            - "sayRepetitiveInsteadOfStutters"
 
 issues:
   max-issues-per-linter: 0
