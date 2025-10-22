@@ -1,6 +1,7 @@
 package hackernews
 
 import (
+	"fmt"
 	"log/slog"
 	"regexp"
 
@@ -17,6 +18,12 @@ type Provider struct {
 	Limit          int
 	CategoryMapper *CategoryMapper
 	databases      *database.ProviderDatabases
+}
+
+// Config holds HackerNews provider configuration for the factory
+type Config struct {
+	MinPoints int
+	Limit     int
 }
 
 // NewProvider creates a new HackerNews provider
@@ -52,6 +59,30 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		CategoryMapper: categoryMapper,
 		databases:      databases,
 	}
+}
+
+// factory creates a HackerNews provider from configuration
+func factory(config any) (providers.FeedProvider, error) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, fmt.Errorf("invalid config type for hackernews provider: expected *hackernews.Config")
+	}
+
+	provider := NewProvider(cfg.MinPoints, cfg.Limit, nil)
+	if provider == nil {
+		return nil, fmt.Errorf("failed to create hackernews provider")
+	}
+
+	return provider, nil
+}
+
+func init() {
+	providers.MustRegister("hacker-news", &providers.ProviderInfo{
+		Name:        "hacker-news",
+		Description: "Generate RSS feeds from Hacker News top stories",
+		Version:     "1.0.0",
+		Factory:     factory,
+	})
 }
 
 // FetchItems implements the FeedProvider interface

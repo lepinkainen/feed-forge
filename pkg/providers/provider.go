@@ -101,3 +101,11 @@ func (r *ProviderRegistry) CreateProvider(name string, config any) (FeedProvider
 
 // DefaultRegistry is the global registry instance
 var DefaultRegistry = NewProviderRegistry()
+
+// MustRegister registers a provider with the default registry and panics on error.
+// This is intended for use in init() functions for provider self-registration.
+func MustRegister(name string, info *ProviderInfo) {
+	if err := DefaultRegistry.Register(name, info); err != nil {
+		panic(err)
+	}
+}

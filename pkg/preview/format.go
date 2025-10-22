@@ -164,7 +164,7 @@ func wrapXMLContent(xml string, width int) string {
 			result.WriteString("\n")
 			remaining = remaining[breakPoint:]
 		}
-		if len(remaining) > 0 {
+		if remaining != "" {
 			result.WriteString(remaining)
 			result.WriteString("\n")
 		}

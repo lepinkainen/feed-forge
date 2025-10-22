@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/lepinkainen/feed-forge/internal/config"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
@@ -22,11 +21,18 @@ type RedditProvider struct {
 	MinComments int
 	FeedID      string
 	Username    string
-	Config      *config.Config
+}
+
+// Config holds Reddit provider configuration for the factory
+type Config struct {
+	MinScore    int
+	MinComments int
+	FeedID      string
+	Username    string
 }
 
 // NewRedditProvider creates a new Reddit JSON provider
-func NewRedditProvider(minScore, minComments int, feedID, username string, cfg *config.Config) providers.FeedProvider {
+func NewRedditProvider(minScore, minComments int, feedID, username string) providers.FeedProvider {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "", // Reddit JSON doesn't use content DB
 		UseContentDB:  false,
@@ -42,8 +48,31 @@ func NewRedditProvider(minScore, minComments int, feedID, username string, cfg *
 		MinComments:  minComments,
 		FeedID:       feedID,
 		Username:     username,
-		Config:       cfg,
 	}
+}
+
+// factory creates a Reddit provider from configuration
+func factory(config any) (providers.FeedProvider, error) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, fmt.Errorf("invalid config type for reddit provider: expected *redditjson.Config")
+	}
+
+	provider := NewRedditProvider(cfg.MinScore, cfg.MinComments, cfg.FeedID, cfg.Username)
+	if provider == nil {
+		return nil, fmt.Errorf("failed to create reddit provider")
+	}
+
+	return provider, nil
+}
+
+func init() {
+	providers.MustRegister("reddit", &providers.ProviderInfo{
+		Name:        "reddit",
+		Description: "Generate RSS feeds from Reddit JSON feeds",
+		Version:     "1.0.0",
+		Factory:     factory,
+	})
 }
 
 // FetchItems implements the FeedProvider interface

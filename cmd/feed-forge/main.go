@@ -7,13 +7,16 @@ import (
 	"os"
 
 	"github.com/alecthomas/kong"
-	"github.com/lepinkainen/feed-forge/internal/config"
-	"github.com/lepinkainen/feed-forge/internal/fingerpori"
-	"github.com/lepinkainen/feed-forge/internal/hackernews"
-	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
+	kongyaml "github.com/alecthomas/kong-yaml"
+
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
+
+	// Import providers to trigger init() self-registration
+	"github.com/lepinkainen/feed-forge/internal/fingerpori"
+	"github.com/lepinkainen/feed-forge/internal/hackernews"
+	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 )
 
 // CLI structure
@@ -64,7 +67,10 @@ var CLI struct {
 }
 
 func main() {
-	ctx := kong.Parse(&CLI)
+	// Parse CLI with Kong YAML configuration file loading
+	ctx := kong.Parse(&CLI,
+		kong.Configuration(kongyaml.Loader, "config.yaml", "~/.feed-forge/config.yaml"),
+	)
 
 	// Configure logging level based on debug flag
 	if CLI.Debug {
@@ -73,27 +79,23 @@ func main() {
 		slog.SetLogLoggerLevel(slog.LevelWarn)
 	}
 
-	// Load configuration
-	cfg, err := config.LoadConfig(CLI.Config)
-	if err != nil {
-		slog.Error("Failed to load configuration", "error", err)
-		os.Exit(1)
-	}
-
 	var provider providers.FeedProvider
 
 	switch ctx.Command() {
 	case "hacker-news":
 		slog.Debug("Generating Hacker News feed...")
 
-		// Override config with CLI flags if provided
-		minPoints := CLI.HackerNews.MinPoints
-		limit := CLI.HackerNews.Limit
+		// Create provider config from CLI arguments
+		providerConfig := &hackernews.Config{
+			MinPoints: CLI.HackerNews.MinPoints,
+			Limit:     CLI.HackerNews.Limit,
+		}
 
-		// Load category mapper (for now, pass nil - will be improved later)
-		provider = hackernews.NewProvider(minPoints, limit, nil)
-		if provider == nil {
-			slog.Error("Failed to create Hacker News provider")
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("hacker-news", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Hacker News provider", "error", err)
 			os.Exit(1)
 		}
 
@@ -105,30 +107,25 @@ func main() {
 	case "reddit":
 		slog.Debug("Generating Reddit feed...")
 
-		// Override config with CLI flags if provided
-		minScore := CLI.Reddit.MinScore
-		minComments := CLI.Reddit.MinComments
-		feedID := CLI.Reddit.FeedID
-		username := CLI.Reddit.Username
-
-		// Use config values as fallback if CLI flags are empty
-		if feedID == "" {
-			feedID = cfg.Reddit.FeedID
-		}
-		if username == "" {
-			username = cfg.Reddit.Username
-		}
-
 		// Validate required parameters
-		if feedID == "" || username == "" {
+		if CLI.Reddit.FeedID == "" || CLI.Reddit.Username == "" {
 			slog.Error("Reddit feed requires both feed_id and username to be set via CLI flags or config file")
 			os.Exit(1)
 		}
 
-		// Create Reddit provider
-		provider = redditjson.NewRedditProvider(minScore, minComments, feedID, username, cfg)
-		if provider == nil {
-			slog.Error("Failed to create Reddit provider")
+		// Create provider config from CLI arguments
+		providerConfig := &redditjson.Config{
+			MinScore:    CLI.Reddit.MinScore,
+			MinComments: CLI.Reddit.MinComments,
+			FeedID:      CLI.Reddit.FeedID,
+			Username:    CLI.Reddit.Username,
+		}
+
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("reddit", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Reddit provider", "error", err)
 			os.Exit(1)
 		}
 
@@ -140,13 +137,16 @@ func main() {
 	case "fingerpori":
 		slog.Debug("Generating Fingerpori feed...")
 
-		// Override config with CLI flags if provided
-		limit := CLI.Fingerpori.Limit
+		// Create provider config from CLI arguments
+		providerConfig := &fingerpori.Config{
+			Limit: CLI.Fingerpori.Limit,
+		}
 
-		// Create Fingerpori provider
-		provider = fingerpori.NewProvider(limit)
-		if provider == nil {
-			slog.Error("Failed to create Fingerpori provider")
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("fingerpori", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Fingerpori provider", "error", err)
 			os.Exit(1)
 		}
 
@@ -158,36 +158,30 @@ func main() {
 	case "preview reddit":
 		slog.Debug("Previewing Reddit feed...")
 
-		// Override config with CLI flags if provided
-		minScore := CLI.Preview.Reddit.MinScore
-		minComments := CLI.Preview.Reddit.MinComments
-		feedID := CLI.Preview.Reddit.FeedID
-		username := CLI.Preview.Reddit.Username
-		limit := CLI.Preview.Reddit.Limit
-
-		// Use config values as fallback if CLI flags are empty
-		if feedID == "" {
-			feedID = cfg.Reddit.FeedID
-		}
-		if username == "" {
-			username = cfg.Reddit.Username
-		}
-
 		// Validate required parameters
-		if feedID == "" || username == "" {
+		if CLI.Preview.Reddit.FeedID == "" || CLI.Preview.Reddit.Username == "" {
 			slog.Error("Reddit feed requires both feed_id and username to be set via CLI flags or config file")
 			os.Exit(1)
 		}
 
-		// Create Reddit provider
-		provider = redditjson.NewRedditProvider(minScore, minComments, feedID, username, cfg)
-		if provider == nil {
-			slog.Error("Failed to create Reddit provider")
+		// Create provider config from CLI arguments
+		providerConfig := &redditjson.Config{
+			MinScore:    CLI.Preview.Reddit.MinScore,
+			MinComments: CLI.Preview.Reddit.MinComments,
+			FeedID:      CLI.Preview.Reddit.FeedID,
+			Username:    CLI.Preview.Reddit.Username,
+		}
+
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("reddit", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Reddit provider", "error", err)
 			os.Exit(1)
 		}
 
 		// Fetch items
-		items, err := provider.FetchItems(limit)
+		items, err := provider.FetchItems(CLI.Preview.Reddit.Limit)
 		if err != nil {
 			slog.Error("Failed to fetch Reddit items", "error", err)
 			os.Exit(1)
@@ -222,19 +216,22 @@ func main() {
 	case "preview hacker-news":
 		slog.Debug("Previewing Hacker News feed...")
 
-		// Override config with CLI flags if provided
-		minPoints := CLI.Preview.HackerNews.MinPoints
-		limit := CLI.Preview.HackerNews.Limit
+		// Create provider config from CLI arguments
+		providerConfig := &hackernews.Config{
+			MinPoints: CLI.Preview.HackerNews.MinPoints,
+			Limit:     CLI.Preview.HackerNews.Limit,
+		}
 
-		// Create Hacker News provider
-		provider = hackernews.NewProvider(minPoints, limit, nil)
-		if provider == nil {
-			slog.Error("Failed to create Hacker News provider")
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("hacker-news", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Hacker News provider", "error", err)
 			os.Exit(1)
 		}
 
 		// Fetch items
-		items, err := provider.FetchItems(limit)
+		items, err := provider.FetchItems(CLI.Preview.HackerNews.Limit)
 		if err != nil {
 			slog.Error("Failed to fetch Hacker News items", "error", err)
 			os.Exit(1)
@@ -269,18 +266,21 @@ func main() {
 	case "preview fingerpori":
 		slog.Debug("Previewing Fingerpori feed...")
 
-		// Override config with CLI flags if provided
-		limit := CLI.Preview.Fingerpori.Limit
+		// Create provider config from CLI arguments
+		providerConfig := &fingerpori.Config{
+			Limit: CLI.Preview.Fingerpori.Limit,
+		}
 
-		// Create Fingerpori provider
-		provider = fingerpori.NewProvider(limit)
-		if provider == nil {
-			slog.Error("Failed to create Fingerpori provider")
+		// Create provider using registry
+		var err error
+		provider, err = providers.DefaultRegistry.CreateProvider("fingerpori", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Fingerpori provider", "error", err)
 			os.Exit(1)
 		}
 
 		// Fetch items
-		items, err := provider.FetchItems(limit)
+		items, err := provider.FetchItems(CLI.Preview.Fingerpori.Limit)
 		if err != nil {
 			slog.Error("Failed to fetch Fingerpori items", "error", err)
 			os.Exit(1)

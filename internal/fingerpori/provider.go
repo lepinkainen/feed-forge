@@ -1,6 +1,7 @@
 package fingerpori
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -11,6 +12,11 @@ import (
 // Provider implements the FeedProvider interface for Fingerpori comics
 type Provider struct {
 	*providers.BaseProvider
+	Limit int
+}
+
+// Config holds Fingerpori provider configuration for the factory
+type Config struct {
 	Limit int
 }
 
@@ -30,6 +36,30 @@ func NewProvider(limit int) providers.FeedProvider {
 		BaseProvider: base,
 		Limit:        limit,
 	}
+}
+
+// factory creates a Fingerpori provider from configuration
+func factory(config any) (providers.FeedProvider, error) {
+	cfg, ok := config.(*Config)
+	if !ok {
+		return nil, fmt.Errorf("invalid config type for fingerpori provider: expected *fingerpori.Config")
+	}
+
+	provider := NewProvider(cfg.Limit)
+	if provider == nil {
+		return nil, fmt.Errorf("failed to create fingerpori provider")
+	}
+
+	return provider, nil
+}
+
+func init() {
+	providers.MustRegister("fingerpori", &providers.ProviderInfo{
+		Name:        "fingerpori",
+		Description: "Generate RSS feeds from Fingerpori comics",
+		Version:     "1.0.0",
+		Factory:     factory,
+	})
 }
 
 // FetchItems implements the FeedProvider interface
