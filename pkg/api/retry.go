@@ -7,8 +7,6 @@ import (
 	"math"
 	"net/http"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 // RetryPolicy defines the configuration for retry behavior
@@ -79,12 +77,6 @@ func (rp *RetryPolicy) IsRetryableError(err error) bool {
 		return rp.isRetryableStatusCode(httpErr.StatusCode)
 	}
 
-	// Check for OAuth2 retrieve errors
-	var oauthErr *oauth2.RetrieveError
-	if errors.As(err, &oauthErr) {
-		return rp.isRetryableStatusCode(oauthErr.Response.StatusCode)
-	}
-
 	// For other errors, default to not retrying
 	return false
 }
@@ -99,12 +91,6 @@ func (rp *RetryPolicy) IsRateLimitError(err error) bool {
 	var httpErr *HTTPError
 	if errors.As(err, &httpErr) {
 		return httpErr.StatusCode == http.StatusTooManyRequests
-	}
-
-	// Check for OAuth2 retrieve errors
-	var oauthErr *oauth2.RetrieveError
-	if errors.As(err, &oauthErr) {
-		return oauthErr.Response.StatusCode == http.StatusTooManyRequests
 	}
 
 	return false

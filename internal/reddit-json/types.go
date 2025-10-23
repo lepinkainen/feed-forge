@@ -5,8 +5,6 @@ import (
 	"html"
 	"strings"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 // RedditPost represents a simplified Reddit post structure for our needs
@@ -151,8 +149,4 @@ type RedditListing struct {
 	} `json:"data"`
 }
 
-// Global variables
-var (
-	OAuth2Config *oauth2.Config
-	Token        *oauth2.Token
-)
+// OAuth2 variables are no longer needed - Reddit provider uses public JSON API

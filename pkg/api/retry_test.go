@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"golang.org/x/oauth2"
 )
 
 func TestRetryPolicy_CalculateBackoff(t *testing.T) {
@@ -83,16 +81,6 @@ func TestRetryPolicy_IsRetryableError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "OAuth2 500 error is retryable",
-			err:      &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusInternalServerError}},
-			expected: true,
-		},
-		{
-			name:     "OAuth2 400 error is not retryable",
-			err:      &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusBadRequest}},
-			expected: false,
-		},
-		{
 			name:     "generic error is not retryable",
 			err:      errors.New("generic error"),
 			expected: false,
@@ -130,16 +118,6 @@ func TestRetryPolicy_IsRateLimitError(t *testing.T) {
 		{
 			name:     "HTTP 500 error is not rate limit",
 			err:      &HTTPError{StatusCode: http.StatusInternalServerError, Message: "Server Error"},
-			expected: false,
-		},
-		{
-			name:     "OAuth2 429 error is rate limit",
-			err:      &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusTooManyRequests}},
-			expected: true,
-		},
-		{
-			name:     "OAuth2 500 error is not rate limit",
-			err:      &oauth2.RetrieveError{Response: &http.Response{StatusCode: http.StatusInternalServerError}},
 			expected: false,
 		},
 		{
