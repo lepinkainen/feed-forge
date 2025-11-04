@@ -6,10 +6,21 @@ import (
 	"time"
 )
 
+// FeedMetadata contains feed-level metadata used for generation
+type FeedMetadata struct {
+	Title       string
+	Link        string
+	Description string
+	Author      string
+	ID          string
+	TemplateName string // e.g., "reddit-atom", "hackernews-atom"
+}
+
 // FeedProvider defines the interface for a feed source.
 type FeedProvider interface {
 	GenerateFeed(outfile string, reauth bool) error
 	FetchItems(limit int) ([]FeedItem, error)
+	Metadata() FeedMetadata
 }
 
 // FeedItem defines the essential fields for any feed entry.
@@ -108,4 +119,14 @@ func MustRegister(name string, info *ProviderInfo) {
 	if err := DefaultRegistry.Register(name, info); err != nil {
 		panic(err)
 	}
+}
+
+// ConvertToFeedItems is a generic helper to convert provider-specific items to FeedItem interface.
+// T must be a type that implements FeedItem.
+func ConvertToFeedItems[T FeedItem](items []T) []FeedItem {
+	feedItems := make([]FeedItem, len(items))
+	for i := range items {
+		feedItems[i] = items[i]
+	}
+	return feedItems
 }

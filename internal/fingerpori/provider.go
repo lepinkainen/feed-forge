@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -62,6 +60,18 @@ func init() {
 	})
 }
 
+// Metadata returns feed metadata for the Fingerpori provider
+func (p *Provider) Metadata() providers.FeedMetadata {
+	return providers.FeedMetadata{
+		Title:        "Fingerpori Comics",
+		Link:         "https://www.hs.fi/fingerpori/",
+		Description:  "Daily Fingerpori comics from Helsingin Sanomat",
+		Author:       "Pertti Jarla",
+		ID:           "https://www.hs.fi/fingerpori/",
+		TemplateName: "fingerpori-atom",
+	}
+}
+
 // FetchItems implements the FeedProvider interface
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	slog.Debug("Fetching Fingerpori items")
@@ -86,49 +96,14 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 		items = items[:itemLimit]
 	}
 
-	// Convert to FeedItem interface
-	return convertToFeedItems(items), nil
+	// Convert to FeedItem interface using generic helper
+	return providers.ConvertToFeedItems(items), nil
 }
 
 // GenerateFeed implements the FeedProvider interface
 func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	slog.Debug("Generating Fingerpori feed")
-
-	// Fetch items using the shared FetchItems method
-	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
-	if err != nil {
-		return err
-	}
-
-	// Ensure output directory exists
-	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
-		return dirErr
-	}
-
-	// Define feed configuration
-	feedConfig := feed.Config{
-		Title:       "Fingerpori Comics",
-		Link:        "https://www.hs.fi/fingerpori/",
-		Description: "Daily Fingerpori comics from Helsingin Sanomat",
-		Author:      "Pertti Jarla",
-		ID:          "https://www.hs.fi/fingerpori/",
-	}
-
-	// Generate and save the feed using embedded templates
-	// Note: We don't use OpenGraph DB for comic images
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "fingerpori-atom", outfile, feedConfig, nil); err != nil {
-		return err
-	}
-
-	feed.LogFeedGeneration(len(feedItems), outfile)
-	return nil
-}
-
-// convertToFeedItems wraps Fingerpori items with the FeedItem interface
-func convertToFeedItems(items []Item) []providers.FeedItem {
-	feedItems := make([]providers.FeedItem, len(items))
-	for i := range items {
-		feedItems[i] = &items[i]
-	}
-	return feedItems
+	// Note: Fingerpori doesn't use OpenGraph DB (OgDB is nil)
+	// Delegate to BaseProvider's common implementation
+	return p.BaseProvider.GenerateFeed(p, outfile)
 }

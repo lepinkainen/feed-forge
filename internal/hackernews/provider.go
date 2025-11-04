@@ -5,9 +5,6 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/lepinkainen/feed-forge/pkg/database"
-	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -17,7 +14,6 @@ type Provider struct {
 	MinPoints      int
 	Limit          int
 	CategoryMapper *CategoryMapper
-	databases      *database.ProviderDatabases
 }
 
 // Config holds HackerNews provider configuration for the factory
@@ -33,22 +29,13 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		categoryMapper = LoadConfig("") // Use default configuration
 	}
 
-	// Initialize databases
-	databases, err := database.InitializeProviderDatabases("hackernews.db", true)
-	if err != nil {
-		slog.Error("Failed to initialize Hacker News databases", "error", err)
-		return nil
-	}
-
+	// Initialize base provider with content database
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "hackernews.db",
 		UseContentDB:  true,
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Hacker News base provider", "error", err)
-		if closeErr := databases.Close(); closeErr != nil {
-			slog.Error("Failed to close databases", "error", closeErr)
-		}
 		return nil
 	}
 
@@ -57,7 +44,6 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		MinPoints:      minPoints,
 		Limit:          limit,
 		CategoryMapper: categoryMapper,
-		databases:      databases,
 	}
 }
 
@@ -85,10 +71,22 @@ func init() {
 	})
 }
 
+// Metadata returns feed metadata for the HackerNews provider
+func (p *Provider) Metadata() providers.FeedMetadata {
+	return providers.FeedMetadata{
+		Title:        "Hacker News Top Stories",
+		Link:         "https://news.ycombinator.com/",
+		Description:  "High-quality Hacker News stories, updated regularly",
+		Author:       "Feed Forge",
+		ID:           "https://news.ycombinator.com/",
+		TemplateName: "hackernews-atom",
+	}
+}
+
 // FetchItems implements the FeedProvider interface
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
-	// Get database connection
-	contentDB := p.databases.ContentDB
+	// Get database connection from BaseProvider
+	contentDB := p.ContentDB
 
 	// Fetch current front page items
 	newItems := fetchItems()
@@ -125,44 +123,14 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	// Process items to add HackerNews-specific categorization
 	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
 
-	// Convert to FeedItem interface
-	return convertToFeedItems(preprocessedItems), nil
+	// Convert to FeedItem interface using generic helper
+	return providers.ConvertToFeedItems(preprocessedItems), nil
 }
 
 // GenerateFeed implements the FeedProvider interface
 func (p *Provider) GenerateFeed(outfile string, _ bool) error {
-	// Clean up expired entries using base provider
-	if err := p.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
-	}
-
-	// Fetch items using the shared FetchItems method
-	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
-	if err != nil {
-		return err
-	}
-
-	// Ensure output directory exists
-	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
-		return dirErr
-	}
-
-	// Define feed configuration
-	feedConfig := feed.Config{
-		Title:       "Hacker News Top Stories",
-		Link:        "https://news.ycombinator.com/",
-		Description: "High-quality Hacker News stories, updated regularly",
-		Author:      "Feed Forge",
-		ID:          "https://news.ycombinator.com/",
-	}
-
-	// Generate and save the feed using embedded templates with local override
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, p.databases.OpenGraphDB); err != nil {
-		return err
-	}
-
-	feed.LogFeedGeneration(len(feedItems), outfile)
-	return nil
+	// Delegate to BaseProvider's common implementation
+	return p.BaseProvider.GenerateFeed(p, outfile)
 }
 
 // preprocessItems applies HackerNews-specific categorization and metadata
@@ -189,13 +157,4 @@ func preprocessItems(items []Item, minPoints int, categoryMapper *CategoryMapper
 	}
 
 	return items
-}
-
-// convertToFeedItems wraps preprocessed Hacker News items with the FeedItem interface.
-func convertToFeedItems(items []Item) []providers.FeedItem {
-	feedItems := make([]providers.FeedItem, len(items))
-	for i := range items {
-		feedItems[i] = &items[i]
-	}
-	return feedItems
 }
