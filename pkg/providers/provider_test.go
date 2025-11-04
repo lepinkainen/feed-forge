@@ -6,12 +6,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 )
 
 // Mock implementations for testing
 type mockFeedProvider struct {
 	generateFeedFunc func(outfile string, reauth bool) error
-	fetchItemsFunc   func(limit int) ([]FeedItem, error)
+	fetchItemsFunc   func(limit int) ([]feedtypes.FeedItem, error)
 }
 
 func (m *mockFeedProvider) GenerateFeed(outfile string, reauth bool) error {
@@ -21,11 +23,22 @@ func (m *mockFeedProvider) GenerateFeed(outfile string, reauth bool) error {
 	return nil
 }
 
-func (m *mockFeedProvider) FetchItems(limit int) ([]FeedItem, error) {
+func (m *mockFeedProvider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
 	if m.fetchItemsFunc != nil {
 		return m.fetchItemsFunc(limit)
 	}
-	return []FeedItem{}, nil
+	return []feedtypes.FeedItem{}, nil
+}
+
+func (m *mockFeedProvider) Metadata() FeedMetadata {
+	return FeedMetadata{
+		Title:        "Mock Feed",
+		Link:         "https://example.com",
+		Description:  "Mock feed for testing",
+		Author:       "Test Author",
+		ID:           "mock-feed",
+		TemplateName: "mock-atom",
+	}
 }
 
 type mockFeedItem struct {

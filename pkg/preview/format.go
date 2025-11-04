@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/providers"
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 )
 
 // wrapText wraps text to the specified width, breaking at word boundaries when possible
@@ -53,7 +53,7 @@ func wrapText(text string, width int) string {
 
 // FormatCompactListItem formats a single feed item in compact list format
 // Example: "1. [1234↑ 56💬] 2025-10-21T13:33:58+03:00 - Post Title"
-func FormatCompactListItem(index int, item providers.FeedItem) string {
+func FormatCompactListItem(index int, item feedtypes.FeedItem) string {
 	score := item.Score()
 	comments := item.CommentCount()
 	title := item.Title()
@@ -69,7 +69,7 @@ func FormatCompactListItem(index int, item providers.FeedItem) string {
 }
 
 // FormatDetailedItem formats a single feed item with all metadata
-func FormatDetailedItem(item providers.FeedItem) string {
+func FormatDetailedItem(item feedtypes.FeedItem) string {
 	var b strings.Builder
 
 	b.WriteString("═══════════════════════════════════════════════════════════════════════\n")
@@ -115,9 +115,9 @@ func FormatDetailedItem(item providers.FeedItem) string {
 }
 
 // FormatXMLItem formats a single feed item as an Atom XML entry using the actual feed template
-func FormatXMLItem(item providers.FeedItem, templateName string, config feed.Config) string {
+func FormatXMLItem(item feedtypes.FeedItem, templateName string, config feed.Config) string {
 	// Generate a full feed with just this one item using the real template
-	items := []providers.FeedItem{item}
+	items := []feedtypes.FeedItem{item}
 
 	feedXML, err := feed.GenerateAtomFeedWithEmbeddedTemplate(items, templateName, config, nil)
 	if err != nil {

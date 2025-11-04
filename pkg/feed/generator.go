@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
-	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // Config contains metadata for feed generation
@@ -23,7 +23,7 @@ type Config struct {
 
 // GenerateAtomFeed creates an Atom RSS feed using template-based generation
 // This is the unified function that replaces provider-specific generation logic
-func GenerateAtomFeed(items []providers.FeedItem, templateName, templatePath string, config Config, ogDB *opengraph.Database) (string, error) {
+func GenerateAtomFeed(items []feedtypes.FeedItem, templateName, templatePath string, config Config, ogDB *opengraph.Database) (string, error) {
 	slog.Debug("Generating Atom feed using unified generator", "templateName", templateName, "itemCount", len(items))
 
 	// Create template generator
@@ -68,7 +68,7 @@ func GenerateAtomFeed(items []providers.FeedItem, templateName, templatePath str
 }
 
 // SaveAtomFeedToFile generates and saves an Atom feed to a file
-func SaveAtomFeedToFile(items []providers.FeedItem, templateName, templatePath, outputPath string, config Config, ogDB *opengraph.Database) error {
+func SaveAtomFeedToFile(items []feedtypes.FeedItem, templateName, templatePath, outputPath string, config Config, ogDB *opengraph.Database) error {
 	slog.Debug("Generating and saving Atom feed", "outputPath", outputPath, "itemCount", len(items))
 
 	atomContent, err := GenerateAtomFeed(items, templateName, templatePath, config, ogDB)
@@ -81,7 +81,7 @@ func SaveAtomFeedToFile(items []providers.FeedItem, templateName, templatePath, 
 }
 
 // GenerateAtomFeedWithEmbeddedTemplate creates an Atom RSS feed using embedded templates with local override
-func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
+func GenerateAtomFeedWithEmbeddedTemplate(items []feedtypes.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
 	slog.Debug("Generating Atom feed with embedded template", "templateName", templateName, "itemCount", len(items))
 
 	// Create template generator
@@ -126,7 +126,7 @@ func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateNa
 }
 
 // SaveAtomFeedToFileWithEmbeddedTemplate generates and saves an Atom feed using embedded templates with local override
-func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *opengraph.Database) error {
+func SaveAtomFeedToFileWithEmbeddedTemplate(items []feedtypes.FeedItem, templateName, outputPath string, config Config, ogDB *opengraph.Database) error {
 	slog.Debug("Generating and saving Atom feed with embedded template", "outputPath", outputPath, "itemCount", len(items))
 
 	atomContent, err := GenerateAtomFeedWithEmbeddedTemplate(items, templateName, config, ogDB)
@@ -140,7 +140,7 @@ func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, template
 
 // createGenericFeedData converts FeedItems to template data structure
 // This replaces the provider-specific CreateRedditFeedData and CreateHackerNewsFeedData functions
-func createGenericFeedData(items []providers.FeedItem, config Config, ogData map[string]*opengraph.Data) *TemplateData {
+func createGenericFeedData(items []feedtypes.FeedItem, config Config, ogData map[string]*opengraph.Data) *TemplateData {
 	now := time.Now()
 
 	data := &TemplateData{

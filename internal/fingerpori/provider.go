@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -73,7 +74,7 @@ func (p *Provider) Metadata() providers.FeedMetadata {
 }
 
 // FetchItems implements the FeedProvider interface
-func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+func (p *Provider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
 	slog.Debug("Fetching Fingerpori items")
 
 	// Fetch items from the API
@@ -97,7 +98,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	}
 
 	// Convert to FeedItem interface (requires pointers since Item implements FeedItem on *Item)
-	feedItems := make([]providers.FeedItem, len(items))
+	feedItems := make([]feedtypes.FeedItem, len(items))
 	for i := range items {
 		feedItems[i] = &items[i]
 	}

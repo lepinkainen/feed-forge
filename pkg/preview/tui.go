@@ -7,7 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/providers"
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 )
 
 // ViewMode represents the current view mode
@@ -22,7 +22,7 @@ const (
 
 // Model represents the Bubble Tea model for the preview TUI
 type Model struct {
-	items         []providers.FeedItem
+	items         []feedtypes.FeedItem
 	cursor        int
 	viewMode      ViewMode
 	providerName  string
@@ -34,7 +34,7 @@ type Model struct {
 }
 
 // NewModel creates a new preview model
-func NewModel(items []providers.FeedItem, providerName, templateName string, feedConfig feed.Config) Model {
+func NewModel(items []feedtypes.FeedItem, providerName, templateName string, feedConfig feed.Config) Model {
 	return Model{
 		items:         items,
 		cursor:        0,
@@ -250,7 +250,7 @@ func (m Model) renderXMLView() string {
 }
 
 // Run starts the Bubble Tea program
-func Run(items []providers.FeedItem, providerName, templateName string, feedConfig feed.Config) error {
+func Run(items []feedtypes.FeedItem, providerName, templateName string, feedConfig feed.Config) error {
 	if len(items) == 0 {
 		fmt.Println("No items to preview")
 		return nil

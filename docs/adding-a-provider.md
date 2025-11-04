@@ -24,8 +24,7 @@ import (
     "fmt"
     "log/slog"
 
-    "github.com/lepinkainen/feed-forge/pkg/feed"
-    "github.com/lepinkainen/feed-forge/pkg/filesystem"
+    "github.com/lepinkainen/feed-forge/pkg/feedtypes"
     "github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -98,9 +97,14 @@ func init() {
 
 ### 4. Implement FeedProvider Interface
 
+The `FeedProvider` interface requires three methods:
+- `FetchItems(limit int) ([]feedtypes.FeedItem, error)` - Fetch and filter items
+- `Metadata() providers.FeedMetadata` - Return feed metadata
+- `GenerateFeed(outfile string, reauth bool) error` - Generate the feed file
+
 ```go
 // FetchItems implements the FeedProvider interface
-func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+func (p *Provider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
     // 1. Fetch data from your source
     items, err := fetchFromYourAPI()
     if err != nil {
@@ -114,8 +118,9 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
         filteredItems = filteredItems[:limit]
     }
 
-    // 3. Convert to FeedItem interface
-    feedItems := make([]providers.FeedItem, len(filteredItems))
+    // 3. Convert to FeedItem interface by taking pointers
+    // Note: Items implement FeedItem on pointer receivers (*Item)
+    feedItems := make([]feedtypes.FeedItem, len(filteredItems))
     for i := range filteredItems {
         feedItems[i] = &filteredItems[i]
     }
@@ -123,52 +128,29 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
     return feedItems, nil
 }
 
+// Metadata implements the FeedProvider interface
+func (p *Provider) Metadata() providers.FeedMetadata {
+    return providers.FeedMetadata{
+        Title:        "Your Provider Feed",
+        Link:         "https://yourprovider.com/",
+        Description:  "Feed description",
+        Author:       "Feed Forge",
+        ID:           "https://yourprovider.com/",
+        TemplateName: "yourprovider-atom",
+    }
+}
+
 // GenerateFeed implements the FeedProvider interface
 func (p *Provider) GenerateFeed(outfile string, _ bool) error {
-    // 1. Clean up expired OpenGraph cache entries
-    if err := p.CleanupExpired(); err != nil {
-        slog.Warn("Failed to cleanup expired entries", "error", err)
-    }
-
-    // 2. Fetch items
-    feedItems, err := p.FetchItems(0) // 0 means no limit
-    if err != nil {
-        return err
-    }
-
-    // 3. Ensure output directory exists
-    if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
-        return err
-    }
-
-    // 4. Configure feed metadata
-    feedConfig := feed.Config{
-        Title:       "Your Provider Feed",
-        Link:        "https://yourprovider.com/",
-        Description: "Feed description",
-        Author:      "Feed Forge",
-        ID:          "https://yourprovider.com/",
-    }
-
-    // 5. Generate Atom feed
-    if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(
-        feedItems,
-        "yourprovider-atom", // Template name
-        outfile,
-        feedConfig,
-        p.OgDB, // OpenGraph database for metadata
-    ); err != nil {
-        return err
-    }
-
-    feed.LogFeedGeneration(len(feedItems), outfile)
-    return nil
+    // Delegate to BaseProvider's common implementation
+    // This handles: cleanup, fetching items, directory creation, and feed generation
+    return p.BaseProvider.GenerateFeed(p, outfile)
 }
 ```
 
 ### 5. Create Your Item Type
 
-Your items must implement `providers.FeedItem` interface:
+Your items must implement `feedtypes.FeedItem` interface on **pointer receivers**:
 
 ```go
 type Item struct {
@@ -184,7 +166,8 @@ type Item struct {
     ItemContent      string
 }
 
-// Implement FeedItem interface
+// Implement FeedItem interface on *pointer receivers*
+// This is critical - the interface must be implemented on *Item, not Item
 func (i *Item) Title() string         { return i.ItemTitle }
 func (i *Item) Link() string          { return i.ItemLink }
 func (i *Item) CommentsLink() string  { return i.ItemCommentsLink }
@@ -196,6 +179,8 @@ func (i *Item) Categories() []string  { return i.ItemCategories }
 func (i *Item) ImageURL() string      { return i.ItemImage }
 func (i *Item) Content() string       { return i.ItemContent }
 ```
+
+**Important**: The interface methods use pointer receivers (`*Item`). This means when converting to `[]feedtypes.FeedItem`, you must take pointers to the items (as shown in step 4).
 
 ### 6. Update main.go (One-Time Setup)
 
@@ -314,6 +299,35 @@ func TestProvider_FetchItems(t *testing.T) {
 **Files to modify:**
 - `cmd/feed-forge/main.go` (add CLI command + handler)
 
-**Total effort:** One file with ~150-200 lines for basic provider, plus one-time main.go update.
+**Total effort:** One file with ~100-150 lines for basic provider (thanks to BaseProvider delegation), plus one-time main.go update.
 
-The provider registry handles everything else automatically!
+The provider registry and BaseProvider handle everything else automatically!
+
+## Key Architecture Notes
+
+### BaseProvider Pattern
+The `BaseProvider` provides a default `GenerateFeed` implementation that:
+1. Cleans up expired OpenGraph cache entries
+2. Calls your `FetchItems()` method
+3. Ensures output directory exists
+4. Calls your `Metadata()` method for feed configuration
+5. Generates the Atom feed using templates
+6. Logs the result
+
+You only need to implement:
+- `FetchItems()` - Your custom item fetching/filtering logic
+- `Metadata()` - Your feed metadata
+- `GenerateFeed()` - Usually just delegates to `BaseProvider.GenerateFeed(p, outfile)`
+
+### FeedItem Interface
+The `feedtypes.FeedItem` interface is defined in a separate package (`pkg/feedtypes`) to avoid import cycles. All provider item types must implement this interface on **pointer receivers** (`*Item`), which is why the conversion loop uses `&filteredItems[i]` to get pointers.
+
+### Type Safety
+When implementing `FetchItems()`, the return type must be `[]feedtypes.FeedItem`. Since your items implement the interface on pointer receivers, you must convert `[]Item` to `[]feedtypes.FeedItem` by taking pointers to each element:
+
+```go
+feedItems := make([]feedtypes.FeedItem, len(items))
+for i := range items {
+    feedItems[i] = &items[i]  // Pointer to satisfy interface
+}
+```

@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"regexp"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -84,7 +85,7 @@ func (p *Provider) Metadata() providers.FeedMetadata {
 }
 
 // FetchItems implements the FeedProvider interface
-func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+func (p *Provider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
 	// Get database connection from BaseProvider
 	contentDB := p.ContentDB
 
@@ -124,7 +125,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
 
 	// Convert to FeedItem interface (requires pointers since Item implements FeedItem on *Item)
-	feedItems := make([]providers.FeedItem, len(preprocessedItems))
+	feedItems := make([]feedtypes.FeedItem, len(preprocessedItems))
 	for i := range preprocessedItems {
 		feedItems[i] = &preprocessedItems[i]
 	}

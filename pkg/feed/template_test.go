@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
-	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 func TestCreateGenericFeedData_Reddit(t *testing.T) {
-	items := []providers.FeedItem{
+	items := []feedtypes.FeedItem{
 		&mockFeedItem{
 			title:        "Test Reddit Post",
 			link:         "https://example.com/article",
@@ -70,7 +70,7 @@ func TestCreateGenericFeedData_Reddit(t *testing.T) {
 }
 
 func TestCreateGenericFeedData_HackerNews(t *testing.T) {
-	items := []providers.FeedItem{
+	items := []feedtypes.FeedItem{
 		&mockFeedItem{
 			title:        "Test HN Post",
 			link:         "https://example.com/article",

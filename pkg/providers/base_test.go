@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 )
 
 func TestDatabaseConfig(t *testing.T) {
@@ -177,8 +179,19 @@ func (tp *testProvider) GenerateFeed(outfile string, reauth bool) error {
 	return nil
 }
 
-func (tp *testProvider) FetchItems(limit int) ([]FeedItem, error) {
-	return []FeedItem{}, nil
+func (tp *testProvider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
+	return []feedtypes.FeedItem{}, nil
+}
+
+func (tp *testProvider) Metadata() FeedMetadata {
+	return FeedMetadata{
+		Title:        "Test Feed",
+		Link:         "https://example.com",
+		Description:  "Test feed for testing",
+		Author:       "Test Author",
+		ID:           "test-feed",
+		TemplateName: "test-atom",
+	}
 }
 
 // Mock test for BaseProvider interface compliance

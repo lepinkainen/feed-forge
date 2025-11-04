@@ -3,6 +3,7 @@ package redditjson
 import (
 	"fmt"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -85,7 +86,7 @@ func (p *RedditProvider) Metadata() providers.FeedMetadata {
 }
 
 // FetchItems implements the FeedProvider interface
-func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
+func (p *RedditProvider) FetchItems(limit int) ([]feedtypes.FeedItem, error) {
 	// Construct feed URL from config parameters
 	feedURL := constructFeedURL(p.FeedID, p.Username)
 
@@ -107,7 +108,7 @@ func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	}
 
 	// Convert to FeedItem interface (requires pointers since RedditPost implements FeedItem on *RedditPost)
-	feedItems := make([]providers.FeedItem, len(filteredPosts))
+	feedItems := make([]feedtypes.FeedItem, len(filteredPosts))
 	for i := range filteredPosts {
 		feedItems[i] = &filteredPosts[i]
 	}
