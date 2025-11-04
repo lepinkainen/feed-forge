@@ -2,13 +2,12 @@
 package fingerpori
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/api"
 )
 
 const (
@@ -26,36 +25,14 @@ const (
 func fetchItems() ([]Item, error) {
 	slog.Debug("Fetching Fingerpori items from API", "url", FingerporiAPIURL)
 
-	// Create HTTP client with timeout
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
+	// Create enhanced HTTP client with rate limiting and retry support
+	client := api.NewGenericClient()
 
-	// Fetch the JSON data
-	resp, err := client.Get(FingerporiAPIURL)
-	if err != nil {
-		return nil, fmt.Errorf("error fetching data: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			slog.Warn("Error closing response body", "error", closeErr)
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	// Read the response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
-
-	// Parse the JSON data
+	// Fetch and decode the JSON data using enhanced client
 	var items []Item
-	if err := json.Unmarshal(body, &items); err != nil {
-		return nil, fmt.Errorf("error parsing JSON: %w", err)
+	err := client.GetAndDecode(FingerporiAPIURL, &items, nil)
+	if err != nil {
+		return nil, fmt.Errorf("error fetching Fingerpori data: %w", err)
 	}
 
 	slog.Debug("Successfully fetched Fingerpori items", "count", len(items))

@@ -3,27 +3,25 @@ package providers
 import (
 	"fmt"
 	"sync"
-	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 )
+
+// FeedMetadata contains feed-level metadata used for generation
+type FeedMetadata struct {
+	Title        string
+	Link         string
+	Description  string
+	Author       string
+	ID           string
+	TemplateName string // e.g., "reddit-atom", "hackernews-atom"
+}
 
 // FeedProvider defines the interface for a feed source.
 type FeedProvider interface {
 	GenerateFeed(outfile string, reauth bool) error
-	FetchItems(limit int) ([]FeedItem, error)
-}
-
-// FeedItem defines the essential fields for any feed entry.
-type FeedItem interface {
-	Title() string
-	Link() string
-	CommentsLink() string
-	Author() string
-	Score() int
-	CommentCount() int
-	CreatedAt() time.Time
-	Categories() []string
-	ImageURL() string
-	Content() string
+	FetchItems(limit int) ([]feedtypes.FeedItem, error)
+	Metadata() FeedMetadata
 }
 
 // ProviderFactory creates a new instance of a provider.

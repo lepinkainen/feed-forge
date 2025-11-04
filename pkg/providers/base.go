@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
+	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
@@ -84,4 +85,44 @@ func (b *BaseProvider) CleanupExpired() error {
 		return nil
 	}
 	return b.OgDB.CleanupExpired()
+}
+
+// GenerateFeed provides a common implementation for all providers
+// Providers only need to implement FetchItems() and Metadata()
+func (b *BaseProvider) GenerateFeed(provider FeedProvider, outfile string) error {
+	// Clean up expired entries
+	if err := b.CleanupExpired(); err != nil {
+		slog.Warn("Failed to cleanup expired entries", "error", err)
+	}
+
+	// Fetch items using the provider's FetchItems method
+	feedItems, err := provider.FetchItems(0) // 0 means use provider's default limit
+	if err != nil {
+		return err
+	}
+
+	// Ensure output directory exists
+	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
+		return err
+	}
+
+	// Get provider metadata
+	metadata := provider.Metadata()
+
+	// Define feed configuration
+	feedConfig := feed.Config{
+		Title:       metadata.Title,
+		Link:        metadata.Link,
+		Description: metadata.Description,
+		Author:      metadata.Author,
+		ID:          metadata.ID,
+	}
+
+	// Generate Atom feed using embedded templates with local override
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, metadata.TemplateName, outfile, feedConfig, b.OgDB); err != nil {
+		return err
+	}
+
+	feed.LogFeedGeneration(len(feedItems), outfile)
+	return nil
 }

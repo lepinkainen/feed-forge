@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedtypes"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
-	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 // mockFeedItem implements the FeedItem interface for testing
@@ -82,7 +82,7 @@ func TestHackerNewsTemplateGeneration(t *testing.T) {
 	}
 
 	// Create mock Hacker News items
-	items := []providers.FeedItem{
+	items := []feedtypes.FeedItem{
 		&mockFeedItem{
 			title:        "Template-based feed generation for HN",
 			link:         "https://example.com/article",
