@@ -96,8 +96,12 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 		items = items[:itemLimit]
 	}
 
-	// Convert to FeedItem interface using generic helper
-	return providers.ConvertToFeedItems(items), nil
+	// Convert to FeedItem interface (requires pointers since Item implements FeedItem on *Item)
+	feedItems := make([]providers.FeedItem, len(items))
+	for i := range items {
+		feedItems[i] = &items[i]
+	}
+	return feedItems, nil
 }
 
 // GenerateFeed implements the FeedProvider interface

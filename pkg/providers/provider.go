@@ -120,13 +120,3 @@ func MustRegister(name string, info *ProviderInfo) {
 		panic(err)
 	}
 }
-
-// ConvertToFeedItems is a generic helper to convert provider-specific items to FeedItem interface.
-// T must be a type that implements FeedItem.
-func ConvertToFeedItems[T FeedItem](items []T) []FeedItem {
-	feedItems := make([]FeedItem, len(items))
-	for i := range items {
-		feedItems[i] = items[i]
-	}
-	return feedItems
-}

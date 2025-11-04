@@ -123,8 +123,12 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	// Process items to add HackerNews-specific categorization
 	preprocessedItems := preprocessItems(allItems, p.MinPoints, p.CategoryMapper)
 
-	// Convert to FeedItem interface using generic helper
-	return providers.ConvertToFeedItems(preprocessedItems), nil
+	// Convert to FeedItem interface (requires pointers since Item implements FeedItem on *Item)
+	feedItems := make([]providers.FeedItem, len(preprocessedItems))
+	for i := range preprocessedItems {
+		feedItems[i] = &preprocessedItems[i]
+	}
+	return feedItems, nil
 }
 
 // GenerateFeed implements the FeedProvider interface

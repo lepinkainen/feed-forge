@@ -106,8 +106,12 @@ func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
 		filteredPosts = filteredPosts[:limit]
 	}
 
-	// Convert to FeedItem interface using generic helper
-	return providers.ConvertToFeedItems(filteredPosts), nil
+	// Convert to FeedItem interface (requires pointers since RedditPost implements FeedItem on *RedditPost)
+	feedItems := make([]providers.FeedItem, len(filteredPosts))
+	for i := range filteredPosts {
+		feedItems[i] = &filteredPosts[i]
+	}
+	return feedItems, nil
 }
 
 // GenerateFeed implements the FeedProvider interface
