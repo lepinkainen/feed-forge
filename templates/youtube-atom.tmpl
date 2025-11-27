@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>{{.FeedTitle}}</title>
+  <link href="{{.FeedLink}}"/>
+  <id>{{.FeedID}}</id>
+  <updated>{{.Updated}}</updated>
+  <author><name>{{.FeedAuthor}}</name></author>
+  <subtitle>{{.FeedDescription}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator}}</generator>
+
+{{range .Items}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <author>
+      <name>{{.Author | xmlEscape}}</name>
+      {{if .AuthorURI}}<uri>{{.AuthorURI | xmlEscape}}</uri>{{end}}
+    </author>
+    {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
+
+    <content type="html"><![CDATA[
+      <div class="video-metadata">
+        {{if gt .Score 0}}<p><strong>Views:</strong> {{.Score}}</p>{{end}}
+      </div>
+      {{if .ImageURL}}
+        <div class="video-thumbnail">
+          <img src="{{.ImageURL | xmlEscape}}" alt="Video thumbnail" style="max-width: 100%; height: auto;"/>
+        </div>
+      {{end}}
+      {{if .Content}}
+        <div class="video-description">
+          <h3>Description</h3>
+          <p>{{.Content | xmlEscape}}</p>
+        </div>
+      {{end}}
+      {{if index $.OpenGraphData .Link}}
+        {{$og := index $.OpenGraphData .Link}}
+        <div class="link-preview">
+          <h3>🔗 Additional Information</h3>
+          {{if and $og.Image (ne $og.Image $.ImageURL)}}<img src="{{$og.Image | xmlEscape}}" alt="Preview image" style="max-width: 200px; height: auto;"/>{{end}}
+          {{if $og.Title}}<h4>{{$og.Title | xmlEscape}}</h4>{{end}}
+          {{if $og.Description}}<p>{{$og.Description | xmlEscape}}</p>{{end}}
+          {{if $og.SiteName}}<p><em>Source: {{$og.SiteName | xmlEscape}}</em></p>{{end}}
+        </div>
+      {{end}}
+      <div class="links">
+        <p><a href="{{.Link | xmlEscape}}">Watch on YouTube</a></p>
+      </div>
+    ]]></content>
+
+    <summary>{{.Summary | xmlEscape}}</summary>
+
+    {{if .ImageURL}}<link rel="enclosure" type="image/jpeg" href="{{.ImageURL | xmlEscape}}"/>{{end}}
+    {{if .ImageURL}}<media:thumbnail url="{{.ImageURL | xmlEscape}}"/>{{end}}
+  </entry>
+{{end}}
+</feed>
