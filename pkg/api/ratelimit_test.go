@@ -78,7 +78,7 @@ func TestSimpleRateLimiter_Concurrent(t *testing.T) {
 	callTimes := make([]time.Time, 5)
 
 	// Make 5 concurrent calls
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		wg.Add(1)
 		go func(index int) {
 			defer wg.Done()
@@ -183,7 +183,7 @@ func TestTokenBucketRateLimiter_RefillTokens(t *testing.T) {
 	rl := NewTokenBucketRateLimiter(5, 50*time.Millisecond)
 
 	// Consume all tokens
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		rl.Wait()
 	}
 
@@ -197,7 +197,7 @@ func TestTokenBucketRateLimiter_RefillTokens(t *testing.T) {
 
 	// Manually check tokens by trying to consume them
 	tokensAvailable := 0
-	for i := 0; i < 10; i++ { // Try more than max to verify cap
+	for range 10 { // Try more than max to verify cap
 		if rl.CanProceed() {
 			rl.Wait()
 			tokensAvailable++
@@ -220,7 +220,7 @@ func TestTokenBucketRateLimiter_MaxTokensCap(t *testing.T) {
 
 	// Should not exceed max tokens
 	tokensAvailable := 0
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if rl.CanProceed() {
 			rl.Wait()
 			tokensAvailable++
@@ -238,7 +238,7 @@ func TestNoOpRateLimiter(t *testing.T) {
 	rl := NewNoOpRateLimiter()
 
 	// Should always be able to proceed
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if !rl.CanProceed() {
 			t.Errorf("NoOpRateLimiter.CanProceed() should always return true")
 		}
@@ -246,7 +246,7 @@ func TestNoOpRateLimiter(t *testing.T) {
 
 	// Wait should be instantaneous
 	start := time.Now()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		rl.Wait()
 	}
 	elapsed := time.Since(start)

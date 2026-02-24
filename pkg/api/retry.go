@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -98,12 +99,7 @@ func (rp *RetryPolicy) IsRateLimitError(err error) bool {
 
 // isRetryableStatusCode checks if a status code should trigger retries
 func (rp *RetryPolicy) isRetryableStatusCode(statusCode int) bool {
-	for _, code := range rp.RetryableErrors {
-		if statusCode == code {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(rp.RetryableErrors, statusCode)
 }
 
 // HTTPError represents an HTTP error with status code

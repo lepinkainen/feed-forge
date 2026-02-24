@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 )
 
 // ReadResponseBody reads and closes HTTP response body
@@ -35,10 +36,8 @@ func DecodeJSONResponse(resp *http.Response, target any) error {
 
 // CheckStatusCode validates HTTP response status code
 func CheckStatusCode(resp *http.Response, expectedCodes ...int) error {
-	for _, code := range expectedCodes {
-		if resp.StatusCode == code {
-			return nil
-		}
+	if slices.Contains(expectedCodes, resp.StatusCode) {
+		return nil
 	}
 	return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 }

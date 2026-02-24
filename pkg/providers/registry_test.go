@@ -2,15 +2,14 @@ package providers
 
 import (
 	"fmt"
+	"maps"
 	"testing"
 )
 
 func TestRegisterProvider(t *testing.T) {
 	// Save current state and restore after test
 	originalProviders := make(map[string]*ProviderInfo)
-	for k, v := range DefaultRegistry.providers {
-		originalProviders[k] = v
-	}
+	maps.Copy(originalProviders, DefaultRegistry.providers)
 	defer func() {
 		DefaultRegistry.providers = originalProviders
 	}()
@@ -44,9 +43,7 @@ func TestRegisterProvider(t *testing.T) {
 func TestRegisterProvider_Duplicate(t *testing.T) {
 	// Save current state and restore after test
 	originalProviders := make(map[string]*ProviderInfo)
-	for k, v := range DefaultRegistry.providers {
-		originalProviders[k] = v
-	}
+	maps.Copy(originalProviders, DefaultRegistry.providers)
 	defer func() {
 		DefaultRegistry.providers = originalProviders
 	}()
@@ -92,9 +89,7 @@ func TestRegisterProvider_Duplicate(t *testing.T) {
 func TestGetProvider(t *testing.T) {
 	// Save current state and restore after test
 	originalProviders := make(map[string]*ProviderInfo)
-	for k, v := range DefaultRegistry.providers {
-		originalProviders[k] = v
-	}
+	maps.Copy(originalProviders, DefaultRegistry.providers)
 	defer func() {
 		DefaultRegistry.providers = originalProviders
 	}()
@@ -154,9 +149,7 @@ func TestGetProvider(t *testing.T) {
 func TestListProviders(t *testing.T) {
 	// Save current state and restore after test
 	originalProviders := make(map[string]*ProviderInfo)
-	for k, v := range DefaultRegistry.providers {
-		originalProviders[k] = v
-	}
+	maps.Copy(originalProviders, DefaultRegistry.providers)
 	defer func() {
 		DefaultRegistry.providers = originalProviders
 	}()
@@ -204,9 +197,7 @@ func TestListProviders(t *testing.T) {
 func TestCreateProvider(t *testing.T) {
 	// Save current state and restore after test
 	originalProviders := make(map[string]*ProviderInfo)
-	for k, v := range DefaultRegistry.providers {
-		originalProviders[k] = v
-	}
+	maps.Copy(originalProviders, DefaultRegistry.providers)
 	defer func() {
 		DefaultRegistry.providers = originalProviders
 	}()

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"slices"
 	"testing"
 	"time"
 )
@@ -169,13 +170,7 @@ func TestDefaultRetryPolicy(t *testing.T) {
 	}
 
 	for _, code := range expectedRetryableCodes {
-		found := false
-		for _, retryCode := range policy.RetryableErrors {
-			if retryCode == code {
-				found = true
-				break
-			}
-		}
+		found := slices.Contains(policy.RetryableErrors, code)
 		if !found {
 			t.Errorf("DefaultRetryPolicy() missing retryable code %d", code)
 		}

@@ -155,17 +155,11 @@ func (m Model) renderListView() string {
 		maxVisible := m.height - 6 // Account for header, footer, and padding
 		if maxVisible < len(m.items) {
 			// Keep cursor in the middle of the screen when possible
-			visibleStart = m.cursor - maxVisible/2
-			if visibleStart < 0 {
-				visibleStart = 0
-			}
+			visibleStart = max(m.cursor-maxVisible/2, 0)
 			visibleEnd = visibleStart + maxVisible
 			if visibleEnd > len(m.items) {
 				visibleEnd = len(m.items)
-				visibleStart = visibleEnd - maxVisible
-				if visibleStart < 0 {
-					visibleStart = 0
-				}
+				visibleStart = max(visibleEnd-maxVisible, 0)
 			}
 		}
 	}

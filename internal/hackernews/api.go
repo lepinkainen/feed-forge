@@ -108,14 +108,12 @@ func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) 
 
 	// Start workers
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for item := range workChan {
 				update := fetchItemStats(item.ItemID)
 				resultChan <- update
 			}
-		}()
+		})
 	}
 
 	// Send work to workers

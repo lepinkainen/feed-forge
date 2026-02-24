@@ -302,10 +302,10 @@ func TestProviderRegistry_Concurrent(t *testing.T) {
 
 	// Concurrent registrations
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(offset int) {
 			defer wg.Done()
-			for j := 0; j < numProviders; j++ {
+			for j := range numProviders {
 				name := fmt.Sprintf("provider-%d-%d", offset, j)
 				info := &ProviderInfo{
 					Name:        name,
@@ -322,10 +322,10 @@ func TestProviderRegistry_Concurrent(t *testing.T) {
 
 	// Concurrent reads
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				registry.List()
 			}
 		}()
