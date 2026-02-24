@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kong"
 	kongyaml "github.com/alecthomas/kong-yaml"
@@ -66,10 +67,26 @@ var CLI struct {
 	} `cmd:"preview" help:"Preview feed items interactively."`
 }
 
+func resolveConfigPath(args []string, defaultPath string) string {
+	for i := range args {
+		arg := args[i]
+		switch {
+		case arg == "--config" && i+1 < len(args):
+			return args[i+1]
+		case strings.HasPrefix(arg, "--config="):
+			return strings.TrimPrefix(arg, "--config=")
+		}
+	}
+
+	return defaultPath
+}
+
 func main() {
+	configPath := resolveConfigPath(os.Args[1:], "config.yaml")
+
 	// Parse CLI with Kong YAML configuration file loading
 	ctx := kong.Parse(&CLI,
-		kong.Configuration(kongyaml.Loader, "config.yaml", "~/.feed-forge/config.yaml"),
+		kong.Configuration(kongyaml.Loader, configPath, "config.yaml", "~/.feed-forge/config.yaml"),
 	)
 
 	// Configure logging level based on debug flag
@@ -100,7 +117,7 @@ func main() {
 		}
 
 		if err := provider.GenerateFeed(CLI.HackerNews.Outfile, false); err != nil {
-			slog.Error("Failed to generate Hacker News feed", "error", err)
+			slog.Error("Failed to generate Hacker News feed", "output_file", CLI.HackerNews.Outfile, "error", err)
 			os.Exit(1)
 		}
 
@@ -130,7 +147,7 @@ func main() {
 		}
 
 		if err := provider.GenerateFeed(CLI.Reddit.Outfile, false); err != nil {
-			slog.Error("Failed to generate Reddit feed", "error", err)
+			slog.Error("Failed to generate Reddit feed", "output_file", CLI.Reddit.Outfile, "feed_id", CLI.Reddit.FeedID, "username", CLI.Reddit.Username, "error", err)
 			os.Exit(1)
 		}
 
@@ -151,7 +168,7 @@ func main() {
 		}
 
 		if err := provider.GenerateFeed(CLI.Fingerpori.Outfile, false); err != nil {
-			slog.Error("Failed to generate Fingerpori feed", "error", err)
+			slog.Error("Failed to generate Fingerpori feed", "output_file", CLI.Fingerpori.Outfile, "error", err)
 			os.Exit(1)
 		}
 
@@ -183,7 +200,7 @@ func main() {
 		// Fetch items
 		items, err := provider.FetchItems(CLI.Preview.Reddit.Limit)
 		if err != nil {
-			slog.Error("Failed to fetch Reddit items", "error", err)
+			slog.Error("Failed to fetch Reddit items", "feed_id", CLI.Preview.Reddit.FeedID, "username", CLI.Preview.Reddit.Username, "error", err)
 			os.Exit(1)
 		}
 

@@ -28,7 +28,7 @@ func GetAndDecode(client *http.Client, url string, target any, headers map[strin
 	defer func() { _ = res.Body.Close() }()
 
 	if err := httputil.EnsureStatusOK(res); err != nil {
-		return fmt.Errorf("http status error: %w", err)
+		return fmt.Errorf("http status error for %s: %w", url, err)
 	}
 
 	if err := json.NewDecoder(res.Body).Decode(target); err != nil {
