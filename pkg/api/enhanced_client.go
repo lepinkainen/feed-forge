@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -222,19 +223,43 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 	}
 }
 
-// NewRedditClient creates an enhanced client configured for Reddit API
+// newBrowserTLSTransport creates an HTTP transport with a TLS fingerprint
+// that avoids being blocked by sites that reject Go's default TLS client hello.
+// Reddit in particular uses TLS fingerprinting to block automated clients.
+func newBrowserTLSTransport() *http.Transport {
+	return &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			CipherSuites: []uint16{
+				tls.TLS_AES_128_GCM_SHA256,
+				tls.TLS_AES_256_GCM_SHA384,
+				tls.TLS_CHACHA20_POLY1305_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
+			},
+		},
+		ForceAttemptHTTP2: true,
+	}
+}
+
+// NewRedditClient creates an enhanced client configured for Reddit API.
+// Uses a custom TLS transport to avoid Reddit's TLS fingerprint blocking.
 func NewRedditClient(baseClient *http.Client) *EnhancedClient {
+	if baseClient == nil {
+		baseClient = &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: newBrowserTLSTransport(),
+		}
+	}
 	return NewEnhancedClient(&EnhancedClientConfig{
 		BaseClient:  baseClient,
 		RateLimiter: NewSimpleRateLimiter(2 * time.Second), // Reddit rate limit - generous to avoid 429s
-		RetryPolicy: &RetryPolicy{
-			MaxAttempts:       4,
-			InitialBackoff:    5 * time.Second,
-			MaxBackoff:        60 * time.Second,
-			BackoffMultiplier: 2.0,
-			RetryableErrors:   []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout},
-		},
-		UserAgent: "FeedForge/1.0 by theshrike79",
+		RetryPolicy: DefaultRetryPolicy(),
+		UserAgent:   "FeedForge/1.0 by theshrike79",
 		DefaultHeaders: map[string]string{
 			"Accept": "application/json",
 		},
