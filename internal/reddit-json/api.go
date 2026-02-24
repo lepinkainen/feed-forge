@@ -17,7 +17,7 @@ type RedditAPI struct {
 
 // NewRedditAPI creates a new Reddit API client for JSON feed access
 func NewRedditAPI(feedURL string) *RedditAPI {
-	enhancedClient := api.NewGenericClient()
+	enhancedClient := api.NewRedditClient(nil)
 	enhancedClient.SetUserAgent("feed-forge/1.0 (by /u/feedforge)")
 
 	return &RedditAPI{

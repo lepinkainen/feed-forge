@@ -226,9 +226,15 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 func NewRedditClient(baseClient *http.Client) *EnhancedClient {
 	return NewEnhancedClient(&EnhancedClientConfig{
 		BaseClient:  baseClient,
-		RateLimiter: NewSimpleRateLimiter(1 * time.Second), // Reddit rate limit
-		RetryPolicy: DefaultRetryPolicy(),
-		UserAgent:   "FeedForge/1.0 by theshrike79",
+		RateLimiter: NewSimpleRateLimiter(2 * time.Second), // Reddit rate limit - generous to avoid 429s
+		RetryPolicy: &RetryPolicy{
+			MaxAttempts:       4,
+			InitialBackoff:    5 * time.Second,
+			MaxBackoff:        60 * time.Second,
+			BackoffMultiplier: 2.0,
+			RetryableErrors:   []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout},
+		},
+		UserAgent: "FeedForge/1.0 by theshrike79",
 		DefaultHeaders: map[string]string{
 			"Accept": "application/json",
 		},
