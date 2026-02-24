@@ -1,5 +1,9 @@
 # CLAUDE.md
 
+**Note**: This project uses [bd (beads)](https://github.com/steveyegge/beads)
+for issue tracking. Use `bd` commands instead of markdown TODOs.
+See AGENTS.md for workflow details.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Build and Development Commands
@@ -125,6 +129,7 @@ Never make direct HTTP calls - use these enhanced clients to avoid rate limiting
 ## Important Implementation Details
 
 **Provider Instantiation**: Providers are created using factory functions:
+
 - Reddit: `redditjson.NewRedditProvider()`
 - Hacker News: `hackernews.NewHackerNewsProvider()`
 
@@ -173,6 +178,7 @@ This project follows `llm-shared` conventions:
 - Function analysis: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`
 
 # important-instruction-reminders
+
 Do what has been asked; nothing more, nothing less.
 NEVER create files unless they're absolutely necessary for achieving your goal.
 ALWAYS prefer editing an existing file to creating a new one.

@@ -54,18 +54,20 @@ Create a `config.yaml` file to configure the providers:
 
 ```yaml
 reddit:
-  client_id: "your-reddit-client-id"
-  client_secret: "" # Leave empty for installed apps
-  redirect_uri: "http://localhost:8080/callback"
-  feed_type: "atom"
-  enhanced_atom: true
-  output_path: "reddit.xml"
-  score_filter: 50
-  comment_filter: 10
+  feed-id: ""           # Required: https://www.reddit.com/prefs/feeds/
+  username: ""          # Required: Reddit username
+  min-score: 50          # Minimum post score to include
+  min-comments: 10       # Minimum comment count to include
+  outfile: reddit.xml    # Output file path
 
-hackernews:
-  min_points: 50
-  limit: 30
+hacker-news:
+  min-points: 50         # Minimum points threshold
+  limit: 30              # Maximum number of items
+  outfile: hackernews.xml
+
+fingerpori:
+  limit: 100             # Maximum number of items
+  outfile: fingerpori.xml
 ```
 
 ### Command Line Options
@@ -115,7 +117,7 @@ task run-hackernews
 ## Architecture
 
 - **Provider Interface**: Common interface for all feed providers
-- **Unified Configuration**: Single YAML configuration file using Viper
+- **YAML Configuration**: Single YAML configuration file loaded via Kong + kong-yaml
 - **Modular Design**: Separate packages for each provider
 - **Shared Logic**: Common functionality abstracted to shared packages
 
@@ -125,20 +127,20 @@ task run-hackernews
 feed-forge/
 ├── cmd/feed-forge/          # Main application entry point
 ├── internal/
-│   ├── config/              # Configuration management
+│   ├── fingerpori/          # Fingerpori provider
 │   ├── hackernews/          # Hacker News provider
-│   ├── reddit/              # Reddit provider
-│   └── pkg/providers/       # Provider interface
+│   └── reddit-json/         # Reddit JSON provider
 ├── pkg/                     # Shared packages
-│   ├── opengraph/          # OpenGraph metadata handling
-│   └── feed/               # RSS/Atom feed generation
-└── llm-shared/             # Development guidelines submodule
+│   ├── config/              # Configuration loading helpers
+│   ├── feed/                # RSS/Atom feed generation
+│   ├── opengraph/           # OpenGraph metadata handling
+│   └── providers/           # Provider interface
 ```
 
 ## Requirements
 
 - Go 1.24 or later
-- Reddit API credentials (for Reddit feeds)
+- Reddit feed ID and username (for Reddit feeds)
 - Internet connection for fetching data
 
 ## Contributing
