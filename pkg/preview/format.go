@@ -73,29 +73,29 @@ func FormatDetailedItem(item providers.FeedItem) string {
 	var b strings.Builder
 
 	b.WriteString("═══════════════════════════════════════════════════════════════════════\n")
-	b.WriteString(fmt.Sprintf("Title: %s\n", item.Title()))
-	b.WriteString(fmt.Sprintf("Link: %s\n", item.Link()))
+	fmt.Fprintf(&b, "Title: %s\n", item.Title())
+	fmt.Fprintf(&b, "Link: %s\n", item.Link())
 
 	if commentsLink := item.CommentsLink(); commentsLink != "" {
-		b.WriteString(fmt.Sprintf("Comments: %s\n", commentsLink))
+		fmt.Fprintf(&b, "Comments: %s\n", commentsLink)
 	}
 
 	if author := item.Author(); author != "" {
-		b.WriteString(fmt.Sprintf("Author: %s\n", author))
+		fmt.Fprintf(&b, "Author: %s\n", author)
 	}
 
-	b.WriteString(fmt.Sprintf("Score: %d | Comments: %d\n", item.Score(), item.CommentCount()))
+	fmt.Fprintf(&b, "Score: %d | Comments: %d\n", item.Score(), item.CommentCount())
 
 	if !item.CreatedAt().IsZero() {
-		b.WriteString(fmt.Sprintf("Posted: %s\n", formatTimeAgo(item.CreatedAt())))
+		fmt.Fprintf(&b, "Posted: %s\n", formatTimeAgo(item.CreatedAt()))
 	}
 
 	if categories := item.Categories(); len(categories) > 0 {
-		b.WriteString(fmt.Sprintf("Categories: %s\n", strings.Join(categories, ", ")))
+		fmt.Fprintf(&b, "Categories: %s\n", strings.Join(categories, ", "))
 	}
 
 	if imageURL := item.ImageURL(); imageURL != "" {
-		b.WriteString(fmt.Sprintf("Image: %s\n", imageURL))
+		fmt.Fprintf(&b, "Image: %s\n", imageURL)
 	}
 
 	if content := item.Content(); content != "" {
@@ -106,7 +106,7 @@ func FormatDetailedItem(item providers.FeedItem) string {
 		}
 		// Word-wrap the content for readability
 		wrapped := wrapText(content, 70)
-		b.WriteString(fmt.Sprintf("\nContent:\n%s\n", wrapped))
+		fmt.Fprintf(&b, "\nContent:\n%s\n", wrapped)
 	}
 
 	b.WriteString("═══════════════════════════════════════════════════════════════════════\n")
@@ -140,9 +140,9 @@ func wrapXMLContent(xml string, width int) string {
 	// Simple approach: just ensure lines don't exceed width by adding newlines
 	// This preserves the XML structure while making it readable
 	var result strings.Builder
-	lines := strings.Split(xml, "\n")
+	lines := strings.SplitSeq(xml, "\n")
 
-	for _, line := range lines {
+	for line := range lines {
 		if len(line) <= width {
 			result.WriteString(line)
 			result.WriteString("\n")
