@@ -1,0 +1,7 @@
+id: no-todo-comments
+message: Avoid committing TODO comments; track follow-up work in issues.
+severity: warning
+language: go
+rule:
+  kind: comment
+  regex: '(?i)TODO'

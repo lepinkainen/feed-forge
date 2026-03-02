@@ -81,6 +81,11 @@ tasks:
     deps: [build]
     cmds:
       - ./build/feed-forge preview fingerpori
+  run-oglaf:
+    desc: "Run Oglaf feed generation"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge oglaf
 
   update-golden:
     desc: "Update golden files when tests are in stable state"

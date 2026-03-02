@@ -17,6 +17,7 @@ import (
 	// Import providers to trigger init() self-registration
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
+	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 )
 
@@ -65,6 +66,10 @@ var CLI struct {
 			Index int `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 		} `cmd:"fingerpori" help:"Preview Fingerpori feed items."`
 	} `cmd:"preview" help:"Preview feed items interactively."`
+	Oglaf struct {
+		Outfile string `help:"Output file path" short:"o" default:"oglaf.xml"`
+		FeedURL string `help:"Oglaf RSS feed URL" default:"https://www.oglaf.com/feeds/rss/"`
+	} `cmd:"oglaf" help:"Generate RSS feed from Oglaf comics."`
 }
 
 func resolveConfigPath(args []string, defaultPath string) string {
@@ -326,6 +331,24 @@ func main() {
 		// Run preview TUI with template
 		if err := preview.Run(items, "Fingerpori", "fingerpori-atom", feedConfig); err != nil {
 			slog.Error("Preview failed", "error", err)
+			os.Exit(1)
+		}
+
+	case "oglaf":
+		slog.Debug("Generating Oglaf feed...")
+
+		// Use CLI flag or default feed URL
+		feedURL := CLI.Oglaf.FeedURL
+
+		// Create Oglaf provider
+		provider = oglaf.NewOglafProvider(feedURL)
+		if provider == nil {
+			slog.Error("Failed to create Oglaf provider")
+			os.Exit(1)
+		}
+
+		if err := provider.GenerateFeed(CLI.Oglaf.Outfile, false); err != nil {
+			slog.Error("Failed to generate Oglaf feed", "error", err)
 			os.Exit(1)
 		}
 

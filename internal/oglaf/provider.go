@@ -1,0 +1,431 @@
+package oglaf
+
+import (
+	"fmt"
+	"io"
+	"log/slog"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/api"
+	"github.com/lepinkainen/feed-forge/pkg/database"
+	"github.com/lepinkainen/feed-forge/pkg/feed"
+	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
+	_ "modernc.org/sqlite" // Pure Go SQLite driver
+)
+
+// RSSItem represents a single RSS feed item from Oglaf
+type RSSItem struct {
+	Title       string
+	Link        string
+	Description string
+	PubDate     string
+	GUID        string
+	ImageURL    string
+}
+
+// Item implements the FeedItem interface
+type Item struct {
+	*RSSItem
+	imageURL string
+}
+
+// Title returns the title of the comic
+func (o *Item) Title() string {
+	return o.RSSItem.Title
+}
+
+// Link returns the link to the comic page
+func (o *Item) Link() string {
+	return o.RSSItem.Link
+}
+
+// CommentsLink returns the link as a stable ID for Atom feeds
+func (o *Item) CommentsLink() string {
+	return o.RSSItem.Link
+}
+
+// Author returns the author (Oglaf)
+func (o *Item) Author() string {
+	return "Oglaf"
+}
+
+// Score returns 0 (no scoring system)
+func (o *Item) Score() int {
+	return 0
+}
+
+// CommentCount returns 0 (no comments)
+func (o *Item) CommentCount() int {
+	return 0
+}
+
+// CreatedAt returns the publication date
+func (o *Item) CreatedAt() time.Time {
+	// Parse the pubDate string
+	if parsed, err := time.Parse(time.RFC1123Z, o.PubDate); err == nil {
+		return parsed
+	}
+	return time.Now()
+}
+
+// Categories returns empty categories
+func (o *Item) Categories() []string {
+	return []string{"comics", "oglaf"}
+}
+
+// ImageURL returns the full comic image URL
+func (o *Item) ImageURL() string {
+	return o.imageURL
+}
+
+// Content returns the description
+func (o *Item) Content() string {
+	return o.Description
+}
+
+// Provider implements the FeedProvider interface for Oglaf comics
+type Provider struct {
+	*providers.BaseProvider
+	FeedURL   string
+	databases *database.ProviderDatabases
+}
+
+// NewOglafProvider creates a new Oglaf provider
+func NewOglafProvider(feedURL string) providers.FeedProvider {
+	// Initialize databases
+	databases, err := database.InitializeProviderDatabases("oglaf.db", true)
+	if err != nil {
+		slog.Error("Failed to initialize Oglaf databases", "error", err)
+		return nil
+	}
+
+	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
+		ContentDBName: "oglaf.db",
+		UseContentDB:  true,
+	})
+	if err != nil {
+		slog.Error("Failed to create base provider for Oglaf", "error", err)
+		if closeErr := databases.Close(); closeErr != nil {
+			slog.Error("Failed to close databases", "error", closeErr)
+		}
+		return nil
+	}
+
+	return &Provider{
+		BaseProvider: base,
+		FeedURL:      feedURL,
+		databases:    databases,
+	}
+}
+
+// extractFullComicURL fetches the comic page and finds the actual comic image
+func extractFullComicURL(pageURL string) (string, error) {
+	// Use enhanced HTTP client with proper timeout and retry policy
+	client := api.NewGenericClient()
+	resp, err := client.Get(pageURL, nil)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	bodyStr := string(body)
+
+	// The main comic is typically in an img tag with id="strip"
+	// Example: <img id="strip" src="https://media.oglaf.com/comic/tribute.jpg" ...>
+	re := regexp.MustCompile(`<img[^>]*id="strip"[^>]*src="([^"]+)"`)
+	if matches := re.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		imgURL := matches[1]
+		// Ensure absolute URL
+		if !strings.HasPrefix(imgURL, "http") {
+			if strings.HasPrefix(imgURL, "//") {
+				imgURL = "https:" + imgURL
+			} else if strings.HasPrefix(imgURL, "/") {
+				imgURL = "https://media.oglaf.com" + imgURL
+			}
+		}
+		return imgURL, nil
+	}
+
+	// Fallback: look for images in the /comic/ directory
+	re2 := regexp.MustCompile(`src="([^"]*//media\.oglaf\.com/comic/[^"]+)"`)
+	if matches := re2.FindStringSubmatch(bodyStr); len(matches) > 1 {
+		imgURL := matches[1]
+		if strings.HasPrefix(imgURL, "//") {
+			imgURL = "https:" + imgURL
+		}
+		return imgURL, nil
+	}
+
+	return "", fmt.Errorf("could not find comic image on page")
+}
+
+// fetchRSSFeedIncremental fetches RSS feed and returns only new items
+func (p *Provider) fetchRSSFeedIncremental(contentDB *database.Database) ([]*RSSItem, error) {
+	// 1. Fetch full RSS feed
+	allItems, err := p.fetchRSSFeed()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch RSS feed: %w", err)
+	}
+
+	// 2. Identify new items
+	newItems, err := getNewRSSItems(contentDB, allItems)
+	if err != nil {
+		return nil, fmt.Errorf("failed to identify new RSS items: %w", err)
+	}
+
+	// 3. Cache new RSS items
+	for _, item := range newItems {
+		if err := saveRSSItem(contentDB, item); err != nil {
+			slog.Warn("Failed to cache RSS item", "link", item.Link, "error", err)
+		}
+	}
+
+	slog.Debug("Incremental RSS fetch completed", "totalItems", len(allItems), "newItems", len(newItems))
+	return newItems, nil
+}
+
+// processComicsIncremental processes comics, only extracting images for unprocessed ones
+func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]providers.FeedItem, error) {
+	// 1. Get unprocessed comics (limit for performance)
+	unprocessed, err := getUnprocessedComics(contentDB, 50)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get unprocessed comics: %w", err)
+	}
+
+	// 2. Extract images only for unprocessed comics
+	var transformedItems []providers.FeedItem
+	for _, item := range unprocessed {
+		imageURL, extractErr := extractFullComicURL(item.Link)
+		if extractErr != nil {
+			slog.Warn("Failed to extract comic image", "link", item.Link, "error", extractErr)
+			if markErr := markExtractionError(contentDB, item.Link, extractErr.Error()); markErr != nil {
+				slog.Error("Failed to mark extraction error", "link", item.Link, "error", markErr)
+			}
+			continue
+		}
+
+		if markErr := markImageExtracted(contentDB, item.Link, imageURL); markErr != nil {
+			slog.Warn("Failed to mark image as extracted", "link", item.Link, "error", markErr)
+		}
+
+		item.ImageURL = imageURL
+		transformed := &Item{
+			RSSItem:  item,
+			imageURL: imageURL,
+		}
+
+		// Create enhanced description
+		transformed.Description = fmt.Sprintf(
+			`<div style="text-align: center; padding: 10px;">
+<p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
+<p><a href="%s">View on Oglaf</a></p>
+</div>`,
+			item.Link, imageURL, item.Title, item.Link,
+		)
+
+		transformedItems = append(transformedItems, transformed)
+	}
+
+	// 3. Include already processed cached items
+	cachedItems, err := getProcessedComics(contentDB, 50)
+	if err != nil {
+		slog.Warn("Failed to get processed comics", "error", err)
+	} else {
+		for _, item := range cachedItems {
+			// Ensure description is set for cached items
+			if item.Description == "" {
+				item.Description = fmt.Sprintf(
+					`<div style="text-align: center; padding: 10px;">
+<p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
+<p><a href="%s">View on Oglaf</a></p>
+</div>`,
+					item.Link(), item.imageURL, item.Title(), item.Link(),
+				)
+			}
+			transformedItems = append(transformedItems, item)
+		}
+	}
+
+	slog.Debug("Incremental comic processing completed", "unprocessed", len(unprocessed), "cached", len(cachedItems), "total", len(transformedItems))
+	return transformedItems, nil
+}
+
+// fetchRSSFeed fetches and parses the Oglaf RSS feed
+func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
+	// Use enhanced HTTP client with proper timeout and retry policy
+	client := api.NewGenericClient()
+	resp, err := client.Get(p.FeedURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Simple RSS parsing - look for items
+	bodyStr := string(body)
+
+	// Extract items using regex with DOTALL flag to match across newlines
+	itemRegex := regexp.MustCompile(`(?s)<item[^>]*>(.*?)</item>`)
+	matches := itemRegex.FindAllStringSubmatch(bodyStr, -1)
+
+	var items []*RSSItem
+
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+
+		itemContent := match[1]
+
+		// Extract title - try both CDATA and plain formats
+		titleRegex := regexp.MustCompile(`<title[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</title>`)
+		titleMatches := titleRegex.FindStringSubmatch(itemContent)
+		title := ""
+		if len(titleMatches) > 1 {
+			title = titleMatches[1]
+			if title == "" && len(titleMatches) > 2 {
+				title = titleMatches[2]
+			}
+		}
+
+		// Extract link
+		linkRegex := regexp.MustCompile(`<link[^>]*>(.*?)</link>`)
+		linkMatches := linkRegex.FindStringSubmatch(itemContent)
+		link := ""
+		if len(linkMatches) > 1 {
+			link = linkMatches[1]
+		}
+
+		// Extract description - try both CDATA and plain formats
+		descRegex := regexp.MustCompile(`<description[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</description>`)
+		descMatches := descRegex.FindStringSubmatch(itemContent)
+		description := ""
+		if len(descMatches) > 1 {
+			description = descMatches[1]
+			if description == "" && len(descMatches) > 2 {
+				description = descMatches[2]
+			}
+		}
+
+		// Extract pubDate
+		pubDateRegex := regexp.MustCompile(`<pubDate[^>]*>(.*?)</pubDate>`)
+		pubDateMatches := pubDateRegex.FindStringSubmatch(itemContent)
+		pubDate := ""
+		if len(pubDateMatches) > 1 {
+			pubDate = pubDateMatches[1]
+		}
+
+		// Extract GUID
+		guidRegex := regexp.MustCompile(`<guid[^>]*>(.*?)</guid>`)
+		guidMatches := guidRegex.FindStringSubmatch(itemContent)
+		guid := ""
+		if len(guidMatches) > 1 {
+			guid = guidMatches[1]
+		}
+
+		if title != "" && link != "" {
+			items = append(items, &RSSItem{
+				Title:       title,
+				Link:        link,
+				Description: description,
+				PubDate:     pubDate,
+				GUID:        guid,
+				ImageURL:    "", // Will be populated later
+			})
+		}
+	}
+
+	return items, nil
+}
+
+// FetchItems implements the FeedProvider interface
+func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
+	// Get database connections
+	contentDB := p.databases.ContentDB
+
+	// Initialize database schema
+	if err := initializeSchema(contentDB); err != nil {
+		return nil, err
+	}
+
+	// Clean up old data
+	if err := cleanupOldData(contentDB); err != nil {
+		slog.Warn("Failed to cleanup old data", "error", err)
+	}
+
+	// Incremental RSS fetch
+	_, err := p.fetchRSSFeedIncremental(contentDB)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process comics incrementally
+	feedItems, err := p.processComicsIncremental(contentDB)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply limit if specified
+	if limit > 0 && len(feedItems) > limit {
+		feedItems = feedItems[:limit]
+	}
+
+	return feedItems, nil
+}
+
+// GenerateFeed implements the FeedProvider interface
+func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
+	// reauth parameter is ignored for RSS feeds (no authentication needed)
+
+	// Clean up expired entries using base provider
+	if err := p.CleanupExpired(); err != nil {
+		slog.Warn("Failed to cleanup expired entries", "error", err)
+	}
+
+	// Get database connections
+	ogDB := p.databases.OpenGraphDB
+
+	// Fetch items using the shared FetchItems method
+	feedItems, err := p.FetchItems(0)
+	if err != nil {
+		return err
+	}
+
+	// Ensure output directory exists
+	if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
+		return err
+	}
+
+	// Define feed configuration
+	feedConfig := feed.Config{
+		Title:       "Oglaf Comics",
+		Link:        "https://www.oglaf.com/",
+		Description: "Oglaf comics with full-size images generated by Feed Forge",
+		Author:      "Feed Forge",
+		ID:          "https://www.oglaf.com/",
+	}
+
+	// Generate Atom feed using embedded templates
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "oglaf-atom", outfile, feedConfig, ogDB); err != nil {
+		return err
+	}
+
+	feed.LogFeedGeneration(len(feedItems), outfile)
+	return nil
+}
