@@ -2,6 +2,7 @@ package preview
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,8 +36,28 @@ type Model struct {
 
 // NewModel creates a new preview model
 func NewModel(items []providers.FeedItem, providerName, templateName string, feedConfig feed.Config) Model {
+	type sortableItem struct {
+		item providers.FeedItem
+		time int64
+	}
+
+	sortable := make([]sortableItem, len(items))
+	for i, item := range items {
+		sortable[i] = sortableItem{item: item, time: item.CreatedAt().UnixNano()}
+	}
+
+	// Always show newest items first in preview.
+	sort.SliceStable(sortable, func(i, j int) bool {
+		return sortable[i].time > sortable[j].time
+	})
+
+	sortedItems := make([]providers.FeedItem, len(sortable))
+	for i, s := range sortable {
+		sortedItems[i] = s.item
+	}
+
 	return Model{
-		items:         items,
+		items:         sortedItems,
 		cursor:        0,
 		viewMode:      ListViewMode,
 		providerName:  providerName,

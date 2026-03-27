@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
+	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/alecthomas/kong"
 	kongyaml "github.com/alecthomas/kong-yaml"
+	"gopkg.in/yaml.v3"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
@@ -46,26 +50,10 @@ var CLI struct {
 	} `cmd:"fingerpori" help:"Generate RSS feed from Fingerpori comics."`
 
 	Preview struct {
-		Reddit struct {
-			MinScore    int    `help:"Minimum post score" default:"50"`
-			MinComments int    `help:"Minimum comment count" default:"10"`
-			FeedID      string `help:"Reddit feed ID"`
-			Username    string `help:"Reddit username"`
-			Limit       int    `help:"Maximum number of items to fetch" default:"30"`
-			Index       int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
-		} `cmd:"reddit" help:"Preview Reddit feed items."`
-
-		HackerNews struct {
-			MinPoints int `help:"Minimum points threshold" default:"50"`
-			Limit     int `help:"Maximum number of items" default:"30"`
-			Index     int `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
-		} `cmd:"hacker-news" help:"Preview Hacker News feed items."`
-
-		Fingerpori struct {
-			Limit int `help:"Maximum number of items" default:"10"`
-			Index int `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
-		} `cmd:"fingerpori" help:"Preview Fingerpori feed items."`
-	} `cmd:"preview" help:"Preview feed items interactively."`
+		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf)."`
+		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
+		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
+	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
 	Oglaf struct {
 		Outfile string `help:"Output file path" short:"o" default:"oglaf.xml"`
 		FeedURL string `help:"Oglaf RSS feed URL" default:"https://www.oglaf.com/feeds/rss/"`
@@ -84,6 +72,168 @@ func resolveConfigPath(args []string, defaultPath string) string {
 	}
 
 	return defaultPath
+}
+
+func toKebabCase(name string) string {
+	var b strings.Builder
+	for i, r := range name {
+		if unicode.IsUpper(r) {
+			if i > 0 {
+				b.WriteRune('-')
+			}
+			b.WriteRune(unicode.ToLower(r))
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func normalizeKey(key string) string {
+	key = strings.ToLower(key)
+	key = strings.ReplaceAll(key, "-", "")
+	key = strings.ReplaceAll(key, "_", "")
+	key = strings.ReplaceAll(key, " ", "")
+	return key
+}
+
+func loadProviderConfig(configPath, providerName string, target any) error {
+	if target == nil {
+		return nil
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	var root map[string]any
+	err = yaml.Unmarshal(data, &root)
+	if err != nil {
+		return err
+	}
+
+	sectionRaw, ok := root[providerName]
+	if !ok {
+		return nil
+	}
+
+	section, ok := sectionRaw.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	sectionNormalized := make(map[string]any, len(section))
+	for k, v := range section {
+		sectionNormalized[normalizeKey(k)] = v
+	}
+
+	t := reflect.TypeOf(target)
+	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+		return fmt.Errorf("target must be pointer to struct, got %T", target)
+	}
+
+	mapped := make(map[string]any)
+	structType := t.Elem()
+	for i := range structType.NumField() {
+		field := structType.Field(i)
+		if !field.IsExported() {
+			continue
+		}
+
+		for _, key := range []string{field.Name, strings.ToLower(field.Name), toKebabCase(field.Name)} {
+			if value, ok := sectionNormalized[normalizeKey(key)]; ok {
+				mapped[field.Name] = value
+				break
+			}
+		}
+	}
+
+	if len(mapped) == 0 {
+		return nil
+	}
+
+	encoded, err := yaml.Marshal(mapped)
+	if err != nil {
+		return err
+	}
+
+	return yaml.Unmarshal(encoded, target)
+}
+
+func previewFeed(providerName string, limit, index int, configPath string) error {
+	info, err := providers.DefaultRegistry.Get(providerName)
+	if err != nil {
+		return err
+	}
+	if info.Preview == nil {
+		return fmt.Errorf("provider %q does not expose preview metadata", providerName)
+	}
+
+	var providerConfig any
+	if info.ConfigFactory != nil {
+		providerConfig = info.ConfigFactory()
+		err = loadProviderConfig(configPath, providerName, providerConfig)
+		if err != nil {
+			return fmt.Errorf("failed loading provider config: %w", err)
+		}
+	}
+
+	provider, err := providers.DefaultRegistry.CreateProvider(providerName, providerConfig)
+	if err != nil {
+		return err
+	}
+
+	items, err := provider.FetchItems(limit)
+	if err != nil {
+		return err
+	}
+
+	type sortableItem struct {
+		item providers.FeedItem
+		time int64
+	}
+
+	sortable := make([]sortableItem, len(items))
+	for i, item := range items {
+		sortable[i] = sortableItem{item: item, time: item.CreatedAt().UnixNano()}
+	}
+
+	// Preview should always show newest items first.
+	sort.SliceStable(sortable, func(i, j int) bool {
+		return sortable[i].time > sortable[j].time
+	})
+
+	for i, sorted := range sortable {
+		items[i] = sorted.item
+	}
+
+	feedConfig := feed.Config{
+		Title:       info.Preview.FeedTitle,
+		Link:        info.Preview.FeedLink,
+		Description: info.Preview.Description,
+		Author:      info.Preview.Author,
+		ID:          info.Preview.FeedID,
+	}
+
+	if index >= 0 {
+		if index >= len(items) {
+			return fmt.Errorf("index out of range: index=%d total=%d", index, len(items))
+		}
+		xml := preview.FormatXMLItem(items[index], info.Preview.TemplateName, feedConfig)
+		fmt.Println(xml)
+		return nil
+	}
+
+	providerDisplay := info.Preview.ProviderName
+	if providerDisplay == "" {
+		providerDisplay = info.Name
+	}
+
+	return preview.Run(items, providerDisplay, info.Preview.TemplateName, feedConfig)
 }
 
 func main() {
@@ -177,160 +327,11 @@ func main() {
 			os.Exit(1)
 		}
 
-	case "preview reddit":
-		slog.Debug("Previewing Reddit feed...")
+	case "preview <provider>":
+		slog.Debug("Previewing provider feed...", "provider", CLI.Preview.Provider)
 
-		// Validate required parameters
-		if CLI.Preview.Reddit.FeedID == "" || CLI.Preview.Reddit.Username == "" {
-			slog.Error("Reddit feed requires both feed_id and username to be set via CLI flags or config file")
-			os.Exit(1)
-		}
-
-		// Create provider config from CLI arguments
-		providerConfig := &redditjson.Config{
-			MinScore:    CLI.Preview.Reddit.MinScore,
-			MinComments: CLI.Preview.Reddit.MinComments,
-			FeedID:      CLI.Preview.Reddit.FeedID,
-			Username:    CLI.Preview.Reddit.Username,
-		}
-
-		// Create provider using registry
-		var err error
-		provider, err = providers.DefaultRegistry.CreateProvider("reddit", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Reddit provider", "error", err)
-			os.Exit(1)
-		}
-
-		// Fetch items
-		items, err := provider.FetchItems(CLI.Preview.Reddit.Limit)
-		if err != nil {
-			slog.Error("Failed to fetch Reddit items", "feed_id", CLI.Preview.Reddit.FeedID, "username", CLI.Preview.Reddit.Username, "error", err)
-			os.Exit(1)
-		}
-
-		// Define feed configuration (same as used in GenerateFeed)
-		feedConfig := feed.Config{
-			Title:       "Reddit Homepage",
-			Link:        "https://www.reddit.com/",
-			Description: "Filtered Reddit homepage posts generated by Feed Forge",
-			Author:      "Feed Forge",
-			ID:          "https://www.reddit.com/",
-		}
-
-		// If index is specified, output XML directly to stdout
-		if CLI.Preview.Reddit.Index >= 0 {
-			if CLI.Preview.Reddit.Index >= len(items) {
-				slog.Error("Index out of range", "index", CLI.Preview.Reddit.Index, "total", len(items))
-				os.Exit(1)
-			}
-			xml := preview.FormatXMLItem(items[CLI.Preview.Reddit.Index], "reddit-atom", feedConfig)
-			fmt.Println(xml)
-			return
-		}
-
-		// Run preview TUI with template
-		if err := preview.Run(items, "Reddit", "reddit-atom", feedConfig); err != nil {
-			slog.Error("Preview failed", "error", err)
-			os.Exit(1)
-		}
-
-	case "preview hacker-news":
-		slog.Debug("Previewing Hacker News feed...")
-
-		// Create provider config from CLI arguments
-		providerConfig := &hackernews.Config{
-			MinPoints: CLI.Preview.HackerNews.MinPoints,
-			Limit:     CLI.Preview.HackerNews.Limit,
-		}
-
-		// Create provider using registry
-		var err error
-		provider, err = providers.DefaultRegistry.CreateProvider("hacker-news", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Hacker News provider", "error", err)
-			os.Exit(1)
-		}
-
-		// Fetch items
-		items, err := provider.FetchItems(CLI.Preview.HackerNews.Limit)
-		if err != nil {
-			slog.Error("Failed to fetch Hacker News items", "error", err)
-			os.Exit(1)
-		}
-
-		// Define feed configuration (same as used in GenerateFeed)
-		feedConfig := feed.Config{
-			Title:       "Hacker News Top Stories",
-			Link:        "https://news.ycombinator.com/",
-			Description: "High-quality Hacker News stories, updated regularly",
-			Author:      "Feed Forge",
-			ID:          "https://news.ycombinator.com/",
-		}
-
-		// If index is specified, output XML directly to stdout
-		if CLI.Preview.HackerNews.Index >= 0 {
-			if CLI.Preview.HackerNews.Index >= len(items) {
-				slog.Error("Index out of range", "index", CLI.Preview.HackerNews.Index, "total", len(items))
-				os.Exit(1)
-			}
-			xml := preview.FormatXMLItem(items[CLI.Preview.HackerNews.Index], "hackernews-atom", feedConfig)
-			fmt.Println(xml)
-			return
-		}
-
-		// Run preview TUI with template
-		if err := preview.Run(items, "Hacker News", "hackernews-atom", feedConfig); err != nil {
-			slog.Error("Preview failed", "error", err)
-			os.Exit(1)
-		}
-
-	case "preview fingerpori":
-		slog.Debug("Previewing Fingerpori feed...")
-
-		// Create provider config from CLI arguments
-		providerConfig := &fingerpori.Config{
-			Limit: CLI.Preview.Fingerpori.Limit,
-		}
-
-		// Create provider using registry
-		var err error
-		provider, err = providers.DefaultRegistry.CreateProvider("fingerpori", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Fingerpori provider", "error", err)
-			os.Exit(1)
-		}
-
-		// Fetch items
-		items, err := provider.FetchItems(CLI.Preview.Fingerpori.Limit)
-		if err != nil {
-			slog.Error("Failed to fetch Fingerpori items", "error", err)
-			os.Exit(1)
-		}
-
-		// Define feed configuration (same as used in GenerateFeed)
-		feedConfig := feed.Config{
-			Title:       "Fingerpori Comics",
-			Link:        "https://www.hs.fi/fingerpori/",
-			Description: "Daily Fingerpori comics from Helsingin Sanomat",
-			Author:      "Pertti Jarla",
-			ID:          "https://www.hs.fi/fingerpori/",
-		}
-
-		// If index is specified, output XML directly to stdout
-		if CLI.Preview.Fingerpori.Index >= 0 {
-			if CLI.Preview.Fingerpori.Index >= len(items) {
-				slog.Error("Index out of range", "index", CLI.Preview.Fingerpori.Index, "total", len(items))
-				os.Exit(1)
-			}
-			xml := preview.FormatXMLItem(items[CLI.Preview.Fingerpori.Index], "fingerpori-atom", feedConfig)
-			fmt.Println(xml)
-			return
-		}
-
-		// Run preview TUI with template
-		if err := preview.Run(items, "Fingerpori", "fingerpori-atom", feedConfig); err != nil {
-			slog.Error("Preview failed", "error", err)
+		if err := previewFeed(CLI.Preview.Provider, CLI.Preview.Limit, CLI.Preview.Index, configPath); err != nil {
+			slog.Error("Preview failed", "provider", CLI.Preview.Provider, "error", err)
 			os.Exit(1)
 		}
 
