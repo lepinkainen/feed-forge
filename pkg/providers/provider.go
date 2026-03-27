@@ -29,12 +29,25 @@ type FeedItem interface {
 // ProviderFactory creates a new instance of a provider.
 type ProviderFactory func(config any) (FeedProvider, error)
 
+// PreviewInfo contains provider-specific metadata needed by the generic preview command.
+type PreviewInfo struct {
+	ProviderName string
+	TemplateName string
+	FeedTitle    string
+	FeedLink     string
+	Description  string
+	Author       string
+	FeedID       string
+}
+
 // ProviderInfo contains metadata about a provider.
 type ProviderInfo struct {
-	Name        string
-	Description string
-	Version     string
-	Factory     ProviderFactory
+	Name          string
+	Description   string
+	Version       string
+	Factory       ProviderFactory
+	ConfigFactory func() any
+	Preview       *PreviewInfo
 }
 
 // ProviderRegistry manages registered feed providers.
