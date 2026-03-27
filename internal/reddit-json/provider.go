@@ -2,7 +2,6 @@ package redditjson
 
 import (
 	"fmt"
-	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
@@ -124,11 +123,6 @@ func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
 // GenerateFeed implements the FeedProvider interface
 func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
 	// reauth parameter is ignored for JSON feeds (no authentication needed)
-
-	// Clean up expired entries using base provider
-	if err := p.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
-	}
 
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0) // 0 means no limit

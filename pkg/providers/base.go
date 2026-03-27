@@ -37,6 +37,11 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 		return nil, err
 	}
 
+	// Clean up expired OpenGraph cache entries
+	if err := base.OgDB.CleanupExpired(); err != nil {
+		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", err)
+	}
+
 	// Initialize content database if needed
 	if dbConfig.UseContentDB && dbConfig.ContentDBName != "" {
 		contentDBPath, err := filesystem.GetDefaultPath(dbConfig.ContentDBName)

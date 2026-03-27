@@ -5,7 +5,6 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
@@ -17,7 +16,6 @@ type Provider struct {
 	MinPoints      int
 	Limit          int
 	CategoryMapper *CategoryMapper
-	databases      *database.ProviderDatabases
 }
 
 // Config holds HackerNews provider configuration for the factory
@@ -33,22 +31,12 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		categoryMapper = LoadConfig("") // Use default configuration
 	}
 
-	// Initialize databases
-	databases, err := database.InitializeProviderDatabases("hackernews.db", true)
-	if err != nil {
-		slog.Error("Failed to initialize Hacker News databases", "error", err)
-		return nil
-	}
-
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "hackernews.db",
 		UseContentDB:  true,
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Hacker News base provider", "error", err)
-		if closeErr := databases.Close(); closeErr != nil {
-			slog.Error("Failed to close databases", "error", closeErr)
-		}
 		return nil
 	}
 
@@ -57,7 +45,6 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		MinPoints:      minPoints,
 		Limit:          limit,
 		CategoryMapper: categoryMapper,
-		databases:      databases,
 	}
 }
 
@@ -102,8 +89,7 @@ func init() {
 
 // FetchItems implements the FeedProvider interface
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
-	// Get database connection
-	contentDB := p.databases.ContentDB
+	contentDB := p.ContentDB
 
 	// Fetch current front page items
 	newItems := fetchItems()
@@ -146,10 +132,6 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 
 // GenerateFeed implements the FeedProvider interface
 func (p *Provider) GenerateFeed(outfile string, _ bool) error {
-	// Clean up expired entries using base provider
-	if err := p.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
-	}
 
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
@@ -172,7 +154,7 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 	}
 
 	// Generate and save the feed using embedded templates with local override
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, p.databases.OpenGraphDB); err != nil {
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, p.OgDB); err != nil {
 		return err
 	}
 

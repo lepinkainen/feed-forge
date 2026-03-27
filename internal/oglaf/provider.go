@@ -89,8 +89,7 @@ func (o *Item) Content() string {
 // Provider implements the FeedProvider interface for Oglaf comics
 type Provider struct {
 	*providers.BaseProvider
-	FeedURL   string
-	databases *database.ProviderDatabases
+	FeedURL string
 }
 
 // Config holds Oglaf provider configuration for the factory.
@@ -141,29 +140,18 @@ func init() {
 
 // NewOglafProvider creates a new Oglaf provider
 func NewOglafProvider(feedURL string) providers.FeedProvider {
-	// Initialize databases
-	databases, err := database.InitializeProviderDatabases("oglaf.db", true)
-	if err != nil {
-		slog.Error("Failed to initialize Oglaf databases", "error", err)
-		return nil
-	}
-
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "oglaf.db",
 		UseContentDB:  true,
 	})
 	if err != nil {
 		slog.Error("Failed to create base provider for Oglaf", "error", err)
-		if closeErr := databases.Close(); closeErr != nil {
-			slog.Error("Failed to close databases", "error", closeErr)
-		}
 		return nil
 	}
 
 	return &Provider{
 		BaseProvider: base,
 		FeedURL:      feedURL,
-		databases:    databases,
 	}
 }
 
@@ -402,8 +390,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 
 // FetchItems implements the FeedProvider interface
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
-	// Get database connections
-	contentDB := p.databases.ContentDB
+	contentDB := p.ContentDB
 
 	// Initialize database schema
 	if err := initializeSchema(contentDB); err != nil {
@@ -439,14 +426,6 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 	// reauth parameter is ignored for RSS feeds (no authentication needed)
 
-	// Clean up expired entries using base provider
-	if err := p.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired entries", "error", err)
-	}
-
-	// Get database connections
-	ogDB := p.databases.OpenGraphDB
-
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0)
 	if err != nil {
@@ -468,7 +447,7 @@ func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
 	}
 
 	// Generate Atom feed using embedded templates
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "oglaf-atom", outfile, feedConfig, ogDB); err != nil {
+	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "oglaf-atom", outfile, feedConfig, p.OgDB); err != nil {
 		return err
 	}
 
