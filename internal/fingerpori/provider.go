@@ -59,6 +59,20 @@ func init() {
 		Description: "Generate RSS feeds from Fingerpori comics",
 		Version:     "1.0.0",
 		Factory:     factory,
+		ConfigFactory: func() any {
+			return &Config{
+				Limit: 100,
+			}
+		},
+		Preview: &providers.PreviewInfo{
+			ProviderName: "Fingerpori",
+			TemplateName: "fingerpori-atom",
+			FeedTitle:    "Fingerpori Comics",
+			FeedLink:     "https://www.hs.fi/fingerpori/",
+			Description:  "Daily Fingerpori comics from Helsingin Sanomat",
+			Author:       "Pertti Jarla",
+			FeedID:       "https://www.hs.fi/fingerpori/",
+		},
 	})
 }
 

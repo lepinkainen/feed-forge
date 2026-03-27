@@ -82,6 +82,21 @@ func init() {
 		Description: "Generate RSS feeds from Hacker News top stories",
 		Version:     "1.0.0",
 		Factory:     factory,
+		ConfigFactory: func() any {
+			return &Config{
+				MinPoints: 50,
+				Limit:     30,
+			}
+		},
+		Preview: &providers.PreviewInfo{
+			ProviderName: "Hacker News",
+			TemplateName: "hackernews-atom",
+			FeedTitle:    "Hacker News Top Stories",
+			FeedLink:     "https://news.ycombinator.com/",
+			Description:  "High-quality Hacker News stories, updated regularly",
+			Author:       "Feed Forge",
+			FeedID:       "https://news.ycombinator.com/",
+		},
 	})
 }
 
