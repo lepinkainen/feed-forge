@@ -1,6 +1,6 @@
 module github.com/lepinkainen/feed-forge
 
-go 1.25.3
+go 1.26.1
 
 require (
 	github.com/alecthomas/kong v1.12.0
