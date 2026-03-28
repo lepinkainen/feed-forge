@@ -2,6 +2,7 @@ package oglaf
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -92,7 +93,7 @@ func getRSSItemByLink(db *database.Database, link string) (*RSSItem, error) {
 		WHERE link = ?`, link).Scan(
 		&item.GUID, &item.Link, &item.Title, &item.Description, &item.PubDate, &imageURL)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
