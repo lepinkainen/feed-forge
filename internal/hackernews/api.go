@@ -106,11 +106,14 @@ func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) 
 	resultChan := make(chan statsUpdate, len(itemsToUpdate))
 	var wg sync.WaitGroup
 
+	// Shared client for all workers — single rate limiter across goroutines
+	client := api.NewHackerNewsClient()
+
 	// Start workers
 	for range numWorkers {
 		wg.Go(func() {
 			for item := range workChan {
-				update := fetchItemStats(item.ItemID)
+				update := fetchItemStats(client, item.ItemID)
 				resultChan <- update
 			}
 		})
@@ -170,10 +173,8 @@ func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) 
 }
 
 // fetchItemStats retrieves current statistics for a single item from Algolia API
-func fetchItemStats(itemID string) statsUpdate {
-	// Fetch current stats from Algolia API using enhanced client
+func fetchItemStats(client *api.EnhancedClient, itemID string) statsUpdate {
 	url := fmt.Sprintf("https://hn.algolia.com/api/v1/items/%s", itemID)
-	client := api.NewHackerNewsClient() // Use enhanced client with rate limiting and retries
 	var algoliaItem AlgoliaHit
 	err := client.GetAndDecode(url, &algoliaItem, nil)
 	if err != nil {
