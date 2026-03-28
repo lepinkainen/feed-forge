@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"os"
 	"reflect"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -190,25 +189,6 @@ func previewFeed(providerName string, limit, index int, configPath string) error
 	items, err := provider.FetchItems(limit)
 	if err != nil {
 		return err
-	}
-
-	type sortableItem struct {
-		item providers.FeedItem
-		time int64
-	}
-
-	sortable := make([]sortableItem, len(items))
-	for i, item := range items {
-		sortable[i] = sortableItem{item: item, time: item.CreatedAt().UnixNano()}
-	}
-
-	// Preview should always show newest items first.
-	sort.SliceStable(sortable, func(i, j int) bool {
-		return sortable[i].time > sortable[j].time
-	})
-
-	for i, sorted := range sortable {
-		items[i] = sorted.item
 	}
 
 	feedConfig := feed.Config{
