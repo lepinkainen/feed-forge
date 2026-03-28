@@ -4,7 +4,6 @@ package redditjson
 import (
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 )
@@ -40,12 +39,6 @@ func (r *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 	return listing.Data.Children, nil
 }
 
-// FetchConcurrentHomepage fetches posts (single page for JSON feed)
-func (r *RedditAPI) FetchConcurrentHomepage(_ int) ([]RedditPost, error) {
-	// JSON feed is a single page, so just return the main fetch
-	return r.FetchRedditHomepage()
-}
-
 // FilterPosts applies score and comment count filters to a list of Reddit posts
 func FilterPosts(posts []RedditPost, minScore, minComments int) []RedditPost {
 	var filtered []RedditPost
@@ -57,31 +50,4 @@ func FilterPosts(posts []RedditPost, minScore, minComments int) []RedditPost {
 
 	slog.Debug("Filtered posts", "original", len(posts), "filtered", len(filtered), "minScore", minScore, "minComments", minComments)
 	return filtered
-}
-
-// ValidateAPIResponse validates the structure of Reddit API responses
-func ValidateAPIResponse(listing *RedditListing) error {
-	if listing == nil {
-		return fmt.Errorf("nil listing received")
-	}
-
-	if listing.Data.Children == nil {
-		return fmt.Errorf("nil children in listing")
-	}
-
-	return nil
-}
-
-// UpdateStats updates API call statistics (placeholder for future implementation)
-func UpdateStats(endpoint string, duration time.Duration, success bool) {
-	status := "success"
-	if !success {
-		status = "failure"
-	}
-
-	slog.Debug("API call completed",
-		"endpoint", endpoint,
-		"duration", duration,
-		"status", status,
-	)
 }
