@@ -10,6 +10,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
+var domainRegex = regexp.MustCompile(`^https?://([^/]+)`)
+
 // Provider implements the FeedProvider interface for Hacker News
 type Provider struct {
 	*providers.BaseProvider
@@ -164,7 +166,6 @@ func (p *Provider) GenerateFeed(outfile string, _ bool) error {
 
 // preprocessItems applies HackerNews-specific categorization and metadata
 func preprocessItems(items []Item, minPoints int, categoryMapper *CategoryMapper) []Item {
-	domainRegex := regexp.MustCompile(`^https?://([^/]+)`)
 
 	for i := range items {
 		item := &items[i]

@@ -16,6 +16,18 @@ import (
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
+// Compiled regexes for RSS parsing and comic image extraction.
+var (
+	rssItemRegex  = regexp.MustCompile(`(?s)<item[^>]*>(.*?)</item>`)
+	rssTitleRegex = regexp.MustCompile(`<title[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</title>`)
+	rssLinkRegex  = regexp.MustCompile(`<link[^>]*>(.*?)</link>`)
+	rssDescRegex  = regexp.MustCompile(`<description[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</description>`)
+	rssPubRegex   = regexp.MustCompile(`<pubDate[^>]*>(.*?)</pubDate>`)
+	rssGUIDRegex  = regexp.MustCompile(`<guid[^>]*>(.*?)</guid>`)
+	stripImgRegex = regexp.MustCompile(`<img[^>]*id="strip"[^>]*src="([^"]+)"`)
+	mediaRegex    = regexp.MustCompile(`src="([^"]*//media\.oglaf\.com/comic/[^"]+)"`)
+)
+
 // RSSItem represents a single RSS feed item from Oglaf
 type RSSItem struct {
 	Title       string
@@ -138,6 +150,16 @@ func init() {
 	})
 }
 
+func comicDescription(link, imageURL, title string) string {
+	return fmt.Sprintf(
+		`<div style="text-align: center; padding: 10px;">
+<p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
+<p><a href="%s">View on Oglaf</a></p>
+</div>`,
+		link, imageURL, title, link,
+	)
+}
+
 // NewOglafProvider creates a new Oglaf provider
 func NewOglafProvider(feedURL string) providers.FeedProvider {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
@@ -174,10 +196,7 @@ func extractFullComicURL(pageURL string) (string, error) {
 
 	bodyStr := string(body)
 
-	// The main comic is typically in an img tag with id="strip"
-	// Example: <img id="strip" src="https://media.oglaf.com/comic/tribute.jpg" ...>
-	re := regexp.MustCompile(`<img[^>]*id="strip"[^>]*src="([^"]+)"`)
-	if matches := re.FindStringSubmatch(bodyStr); len(matches) > 1 {
+	if matches := stripImgRegex.FindStringSubmatch(bodyStr); len(matches) > 1 {
 		imgURL := matches[1]
 		// Ensure absolute URL
 		if !strings.HasPrefix(imgURL, "http") {
@@ -190,9 +209,7 @@ func extractFullComicURL(pageURL string) (string, error) {
 		return imgURL, nil
 	}
 
-	// Fallback: look for images in the /comic/ directory
-	re2 := regexp.MustCompile(`src="([^"]*//media\.oglaf\.com/comic/[^"]+)"`)
-	if matches := re2.FindStringSubmatch(bodyStr); len(matches) > 1 {
+	if matches := mediaRegex.FindStringSubmatch(bodyStr); len(matches) > 1 {
 		imgURL := matches[1]
 		if strings.HasPrefix(imgURL, "//") {
 			imgURL = "https:" + imgURL
@@ -258,14 +275,7 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 			imageURL: imageURL,
 		}
 
-		// Create enhanced description
-		transformed.Description = fmt.Sprintf(
-			`<div style="text-align: center; padding: 10px;">
-<p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
-<p><a href="%s">View on Oglaf</a></p>
-</div>`,
-			item.Link, imageURL, item.Title, item.Link,
-		)
+		transformed.Description = comicDescription(item.Link, imageURL, item.Title)
 
 		transformedItems = append(transformedItems, transformed)
 	}
@@ -278,13 +288,7 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 		for _, item := range cachedItems {
 			// Ensure description is set for cached items
 			if item.Description == "" {
-				item.Description = fmt.Sprintf(
-					`<div style="text-align: center; padding: 10px;">
-<p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
-<p><a href="%s">View on Oglaf</a></p>
-</div>`,
-					item.Link(), item.imageURL, item.Title(), item.Link(),
-				)
+				item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
 			}
 			transformedItems = append(transformedItems, item)
 		}
@@ -314,9 +318,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 	// Simple RSS parsing - look for items
 	bodyStr := string(body)
 
-	// Extract items using regex with DOTALL flag to match across newlines
-	itemRegex := regexp.MustCompile(`(?s)<item[^>]*>(.*?)</item>`)
-	matches := itemRegex.FindAllStringSubmatch(bodyStr, -1)
+	matches := rssItemRegex.FindAllStringSubmatch(bodyStr, -1)
 
 	var items []*RSSItem
 
@@ -327,9 +329,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 
 		itemContent := match[1]
 
-		// Extract title - try both CDATA and plain formats
-		titleRegex := regexp.MustCompile(`<title[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</title>`)
-		titleMatches := titleRegex.FindStringSubmatch(itemContent)
+		titleMatches := rssTitleRegex.FindStringSubmatch(itemContent)
 		title := ""
 		if len(titleMatches) > 1 {
 			title = titleMatches[1]
@@ -338,17 +338,13 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			}
 		}
 
-		// Extract link
-		linkRegex := regexp.MustCompile(`<link[^>]*>(.*?)</link>`)
-		linkMatches := linkRegex.FindStringSubmatch(itemContent)
+		linkMatches := rssLinkRegex.FindStringSubmatch(itemContent)
 		link := ""
 		if len(linkMatches) > 1 {
 			link = linkMatches[1]
 		}
 
-		// Extract description - try both CDATA and plain formats
-		descRegex := regexp.MustCompile(`<description[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</description>`)
-		descMatches := descRegex.FindStringSubmatch(itemContent)
+		descMatches := rssDescRegex.FindStringSubmatch(itemContent)
 		description := ""
 		if len(descMatches) > 1 {
 			description = descMatches[1]
@@ -357,17 +353,13 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			}
 		}
 
-		// Extract pubDate
-		pubDateRegex := regexp.MustCompile(`<pubDate[^>]*>(.*?)</pubDate>`)
-		pubDateMatches := pubDateRegex.FindStringSubmatch(itemContent)
+		pubDateMatches := rssPubRegex.FindStringSubmatch(itemContent)
 		pubDate := ""
 		if len(pubDateMatches) > 1 {
 			pubDate = pubDateMatches[1]
 		}
 
-		// Extract GUID
-		guidRegex := regexp.MustCompile(`<guid[^>]*>(.*?)</guid>`)
-		guidMatches := guidRegex.FindStringSubmatch(itemContent)
+		guidMatches := rssGUIDRegex.FindStringSubmatch(itemContent)
 		guid := ""
 		if len(guidMatches) > 1 {
 			guid = guidMatches[1]
