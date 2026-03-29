@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	httputil "github.com/lepinkainen/feed-forge/pkg/http"
 )
 
 // EnhancedClientConfig configures the enhanced HTTP client
@@ -94,7 +92,7 @@ func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders
 		defer func() { _ = res.Body.Close() }()
 
 		// Check status code
-		if err := httputil.EnsureStatusOK(res); err != nil {
+		if err := ensureStatusOK(res); err != nil {
 			ec.logAPICall(url, duration, false, err)
 			// Convert to our HTTPError type for retry logic
 			return &HTTPError{
@@ -154,7 +152,7 @@ func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (
 		}
 
 		// Check status code
-		if err := httputil.EnsureStatusOK(res); err != nil {
+		if err := ensureStatusOK(res); err != nil {
 			ec.logAPICall(url, duration, false, err)
 			if closeErr := res.Body.Close(); closeErr != nil {
 				slog.Error("Failed to close response body", "error", closeErr)
@@ -197,6 +195,14 @@ func (ec *EnhancedClient) SetDefaultHeader(key, value string) {
 // RemoveDefaultHeader removes a default header
 func (ec *EnhancedClient) RemoveDefaultHeader(key string) {
 	delete(ec.defaultHeaders, key)
+}
+
+// ensureStatusOK checks if the response status is 200 OK
+func ensureStatusOK(resp *http.Response) error {
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d %s", resp.StatusCode, resp.Status)
+	}
+	return nil
 }
 
 // logAPICall logs API call statistics

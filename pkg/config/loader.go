@@ -2,17 +2,16 @@
 package config
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
-	httputil "github.com/lepinkainen/feed-forge/pkg/http"
+	"github.com/lepinkainen/feed-forge/pkg/api"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,28 +73,14 @@ func LoadFromURLWithFallback(config *LoaderConfig, target any) error {
 	return nil
 }
 
-// loadFromURL loads configuration from a remote URL using shared HTTP utilities
+// loadFromURL loads configuration from a remote URL using the shared API client
 func loadFromURL(url string, timeout time.Duration, target any) error {
-	httpConfig := httputil.DefaultConfig()
-	httpConfig.Timeout = timeout
+	client := api.NewEnhancedClient(&api.EnhancedClientConfig{
+		BaseClient: &http.Client{Timeout: timeout},
+	})
 
-	client := httputil.NewClient(httpConfig)
-	resp, err := client.GetWithContext(context.Background(), url)
-	if err != nil {
+	if err := client.GetAndDecode(url, target, nil); err != nil {
 		return fmt.Errorf("failed to fetch config from URL: %w", err)
-	}
-	defer func() {
-		if closeErr := resp.Body.Close(); closeErr != nil {
-			slog.Error("Failed to close response body", "error", closeErr)
-		}
-	}()
-
-	if err := httputil.EnsureStatusOK(resp); err != nil {
-		return fmt.Errorf("HTTP error fetching config: %w", err)
-	}
-
-	if err := json.NewDecoder(resp.Body).Decode(target); err != nil {
-		return fmt.Errorf("failed to decode configuration: %w", err)
 	}
 
 	return nil

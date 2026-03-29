@@ -320,7 +320,7 @@ func TestLoadFromURL_Errors(t *testing.T) {
 				}))
 			},
 			wantErr:     true,
-			errorSubstr: "HTTP error",
+			errorSubstr: "HTTP 404",
 		},
 		{
 			name: "invalid JSON response",
@@ -332,7 +332,7 @@ func TestLoadFromURL_Errors(t *testing.T) {
 				}))
 			},
 			wantErr:     true,
-			errorSubstr: "failed to decode configuration",
+			errorSubstr: "failed to decode json response",
 		},
 	}
 

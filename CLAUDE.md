@@ -63,7 +63,6 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - `pkg/config/` - Configuration loading utilities with URL/file fallback support
 - `pkg/database/` - SQLite caching, provider utilities, and database interfaces
 - `pkg/feed/` - Template-based Atom feed generation and feed helpers
-- `pkg/http/` - HTTP client utilities and response handling
 - `pkg/opengraph/` - OpenGraph metadata fetching and caching
 - `pkg/filesystem/` - File system utilities and path management
 - `pkg/providers/` - Provider interfaces and base implementations
@@ -152,7 +151,6 @@ feed-forge/
 │   ├── database/                # SQLite caching and database interfaces
 │   ├── feed/                    # Template-based Atom generation and feed helpers
 │   ├── filesystem/              # File system utilities
-│   ├── http/                    # HTTP client utilities and response handling
 │   ├── interfaces/              # Shared interface definitions
 │   ├── opengraph/               # OpenGraph metadata fetching and caching
 │   ├── providers/               # Provider interfaces and base implementations
