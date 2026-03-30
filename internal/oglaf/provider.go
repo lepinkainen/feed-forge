@@ -106,7 +106,8 @@ type Provider struct {
 
 // Config holds Oglaf provider configuration for the factory.
 type Config struct {
-	FeedURL string
+	providers.GenerateConfig `yaml:",inline"`
+	FeedURL                  string `yaml:"feed-url"`
 }
 
 // factory creates an Oglaf provider from configuration.

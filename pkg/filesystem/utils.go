@@ -14,16 +14,41 @@ var (
 	ErrDirNotFound  = errors.New("directory not found")
 )
 
-// GetDefaultPath returns a default file path in the executable directory
-func GetDefaultPath(filename string) (string, error) {
-	// Get the directory of the executable
-	exePath, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("failed to get executable path: %w", err)
+// cacheDir holds the configured cache directory.
+// Set via SetCacheDir before any provider is created.
+var cacheDir string
+
+// SetCacheDir configures the directory used for cache databases.
+func SetCacheDir(dir string) {
+	cacheDir = dir
+}
+
+// getCacheDir returns the cache directory, defaulting to XDG_CACHE_HOME/feed-forge.
+func getCacheDir() (string, error) {
+	if cacheDir != "" {
+		return cacheDir, nil
 	}
 
-	exeDir := filepath.Dir(exePath)
-	return filepath.Join(exeDir, filename), nil
+	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+		return filepath.Join(xdg, "feed-forge"), nil
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+
+	return filepath.Join(home, ".cache", "feed-forge"), nil
+}
+
+// GetDefaultPath returns a file path in the cache directory.
+func GetDefaultPath(filename string) (string, error) {
+	dir, err := getCacheDir()
+	if err != nil {
+		return "", err
+	}
+
+	return filepath.Join(dir, filename), nil
 }
 
 // EnsureDirectoryExists creates the directory for the given file path if it doesn't exist

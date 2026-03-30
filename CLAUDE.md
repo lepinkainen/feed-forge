@@ -45,6 +45,7 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - Uses Kong for command-line parsing
 - Supports `reddit` and `hacker-news` subcommands
 - Handles configuration loading and provider instantiation
+- **IMPORTANT**: Kong only populates CLI sub-struct fields for the active command. When running `generate` or `preview`, the provider-specific sub-structs (e.g., `CLI.Reddit.*`) are NOT populated. The `generate` and `preview` commands use `loadProviderConfigFromYAML()` to load provider config directly from YAML instead. Provider Config structs must have `yaml` tags for this to work.
 
 **Configuration System** (`internal/config/config.go` and `pkg/config/loader.go`):
 

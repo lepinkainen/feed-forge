@@ -2,6 +2,7 @@ package providers
 
 import (
 	"fmt"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -38,6 +39,37 @@ type PreviewInfo struct {
 	Description  string
 	Author       string
 	FeedID       string
+}
+
+// GenerateConfig holds common fields used by the generate command.
+// Embed this in provider Config structs to get outfile and interval support.
+type GenerateConfig struct {
+	Outfile  string `yaml:"outfile"`
+	Interval string `yaml:"interval"`
+}
+
+// GetGenerateConfig extracts GenerateConfig from a provider config struct.
+// Returns zero value if the config doesn't embed GenerateConfig.
+func GetGenerateConfig(config any) GenerateConfig {
+	if config == nil {
+		return GenerateConfig{}
+	}
+	v := reflect.ValueOf(config)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return GenerateConfig{}
+	}
+	f := v.FieldByName("GenerateConfig")
+	if !f.IsValid() {
+		return GenerateConfig{}
+	}
+	gc, ok := f.Interface().(GenerateConfig)
+	if !ok {
+		return GenerateConfig{}
+	}
+	return gc
 }
 
 // ProviderInfo contains metadata about a provider.

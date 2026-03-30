@@ -17,7 +17,8 @@ type Provider struct {
 
 // Config holds Fingerpori provider configuration for the factory
 type Config struct {
-	Limit int
+	providers.GenerateConfig `yaml:",inline"`
+	Limit                    int `yaml:"limit"`
 }
 
 // NewProvider creates a new Fingerpori provider

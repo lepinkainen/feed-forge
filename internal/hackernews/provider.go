@@ -22,8 +22,9 @@ type Provider struct {
 
 // Config holds HackerNews provider configuration for the factory
 type Config struct {
-	MinPoints int
-	Limit     int
+	providers.GenerateConfig `yaml:",inline"`
+	MinPoints                int `yaml:"min-points"`
+	Limit                    int `yaml:"limit"`
 }
 
 // NewProvider creates a new HackerNews provider
@@ -66,8 +67,8 @@ func factory(config any) (providers.FeedProvider, error) {
 }
 
 func init() {
-	providers.MustRegister("hacker-news", &providers.ProviderInfo{
-		Name:        "hacker-news",
+	providers.MustRegister("hackernews", &providers.ProviderInfo{
+		Name:        "hackernews",
 		Description: "Generate RSS feeds from Hacker News top stories",
 		Version:     "1.0.0",
 		Factory:     factory,

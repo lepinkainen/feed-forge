@@ -13,6 +13,7 @@ func TemplateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"xmlEscape":   xmlEscape,
 		"formatTime":  formatTime,
+		"formatDate":  formatDate,
 		"formatScore": formatScore,
 		"joinStrings": strings.Join,
 		"contains":    strings.Contains,
@@ -32,6 +33,15 @@ func xmlEscape(s string) string {
 // formatTime formats time in RFC3339 format for Atom feeds
 func formatTime(t time.Time) string {
 	return t.Format(time.RFC3339)
+}
+
+// formatDate parses an RFC3339 timestamp and returns a human-readable date
+func formatDate(s string) string {
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return s
+	}
+	return t.Format("2 January 2006")
 }
 
 // formatScore formats score and comment count for display
