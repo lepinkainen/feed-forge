@@ -17,10 +17,17 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
+// ProxyConfig configures a proxy for fetching URLs from blocked domains
+type ProxyConfig struct {
+	URL    string // Proxy endpoint URL
+	Secret string // Shared secret for authentication
+}
+
 // Fetcher handles OpenGraph metadata fetching with rate limiting and caching
 type Fetcher struct {
 	client      *http.Client
 	db          *Database
+	proxy       *ProxyConfig
 	cache       map[string]*Data
 	domainMutex sync.Mutex
 	lastFetch   map[string]time.Time
@@ -30,6 +37,15 @@ type Fetcher struct {
 
 // NewFetcher creates a new OpenGraph fetcher
 func NewFetcher(db *Database) *Fetcher {
+	return newFetcher(db, nil)
+}
+
+// NewFetcherWithProxy creates a new OpenGraph fetcher that routes reddit URLs through a proxy
+func NewFetcherWithProxy(db *Database, proxy *ProxyConfig) *Fetcher {
+	return newFetcher(db, proxy)
+}
+
+func newFetcher(db *Database, proxy *ProxyConfig) *Fetcher {
 	return &Fetcher{
 		client: &http.Client{
 			Timeout: 10 * time.Second,
@@ -41,6 +57,7 @@ func NewFetcher(db *Database) *Fetcher {
 			},
 		},
 		db:        db,
+		proxy:     proxy,
 		cache:     make(map[string]*Data),
 		lastFetch: make(map[string]time.Time),
 		semaphore: make(chan struct{}, 5), // Max 5 concurrent fetches
@@ -160,8 +177,19 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	f.lastFetch[domain] = time.Now()
 	f.domainMutex.Unlock()
 
+	// Determine request URL and headers based on proxy availability
+	requestURL := targetURL
+	useProxy := f.proxy != nil && isProxiableRedditURL(targetURL)
+
+	if useProxy {
+		requestURL = f.proxy.URL
+		slog.Debug("Fetching OpenGraph data via proxy", "url", targetURL, "proxy", f.proxy.URL)
+	} else {
+		slog.Debug("Fetching OpenGraph data", "url", targetURL)
+	}
+
 	// Create HTTP request
-	req, err := http.NewRequestWithContext(ctx, "GET", targetURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, "GET", requestURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -173,7 +201,10 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	req.Header.Set("Connection", "keep-alive")
 
-	slog.Debug("Fetching OpenGraph data", "url", targetURL)
+	if useProxy {
+		req.Header.Set("X-Proxy-Secret", f.proxy.Secret)
+		req.Header.Set("X-Target-URL", targetURL)
+	}
 
 	// Make the request
 	resp, err := f.client.Do(req)
@@ -382,6 +413,13 @@ func (f *Fetcher) convertToUTF8(body []byte, contentType string) (string, error)
 	return string(utf8Bytes), nil
 }
 
+// isProxiableRedditURL checks if a URL is from a reddit domain worth proxying for OG data.
+// Only reddit.com pages (galleries, posts) have useful metadata.
+// Media hosts (i.redd.it, v.redd.it) just return generic "Reddit" titles.
+func isProxiableRedditURL(targetURL string) bool {
+	return strings.Contains(targetURL, "reddit.com")
+}
+
 // isBlockedURL checks if a URL is from a domain that blocks external access
 func (f *Fetcher) isBlockedURL(targetURL string) bool {
 	blockedDomains := []string{
@@ -390,10 +428,8 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 		"facebook.com",
 		"instagram.com",
 		"linkedin.com",
-		"reddit.com",
 		"i.redd.it",
 		"v.redd.it",
-		"redd.it",
 	}
 
 	for _, domain := range blockedDomains {
@@ -401,6 +437,12 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 			return true
 		}
 	}
+
+	// Reddit page URLs are blocked unless we have a proxy configured
+	if isProxiableRedditURL(targetURL) && f.proxy == nil {
+		return true
+	}
+
 	return false
 }
 

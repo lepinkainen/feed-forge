@@ -14,10 +14,18 @@ type RedditAPI struct {
 	feedURL string
 }
 
-// NewRedditAPI creates a new Reddit API client for JSON feed access
-func NewRedditAPI(feedURL string) *RedditAPI {
+// NewRedditAPI creates a new Reddit API client for JSON feed access.
+// If proxySecret is non-empty, it is sent as an X-Proxy-Secret header
+// along with X-Feed-ID and X-Feed-User to avoid leaking credentials in query params.
+func NewRedditAPI(feedURL, proxySecret, feedID, username string) *RedditAPI {
 	enhancedClient := api.NewRedditClient(nil)
 	enhancedClient.SetUserAgent("feed-forge/1.0 (by /u/feedforge)")
+
+	if proxySecret != "" {
+		enhancedClient.SetDefaultHeader("X-Proxy-Secret", proxySecret)
+		enhancedClient.SetDefaultHeader("X-Feed-ID", feedID)
+		enhancedClient.SetDefaultHeader("X-Feed-User", username)
+	}
 
 	return &RedditAPI{
 		client:  enhancedClient,

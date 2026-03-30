@@ -19,6 +19,8 @@ type Config struct {
 	Description string
 	Author      string
 	ID          string
+	ProxyURL    string // Optional proxy URL for fetching OG data from blocked domains
+	ProxySecret string // Shared secret for proxy authentication
 }
 
 // GenerateAtomFeed creates an Atom RSS feed using template-based generation
@@ -47,7 +49,7 @@ func GenerateAtomFeed(items []providers.FeedItem, templateName, templatePath str
 	// Fetch OpenGraph data concurrently
 	var ogData map[string]*opengraph.Data
 	if ogDB != nil {
-		ogFetcher := opengraph.NewFetcher(ogDB)
+		ogFetcher := createOGFetcher(ogDB, config)
 		slog.Debug("Fetching OpenGraph data for unified feed", "url_count", len(urls))
 		ogData = ogFetcher.FetchConcurrent(urls)
 	}
@@ -105,7 +107,7 @@ func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateNa
 	// Fetch OpenGraph data concurrently
 	var ogData map[string]*opengraph.Data
 	if ogDB != nil {
-		ogFetcher := opengraph.NewFetcher(ogDB)
+		ogFetcher := createOGFetcher(ogDB, config)
 		slog.Debug("Fetching OpenGraph data for unified feed", "url_count", len(urls))
 		ogData = ogFetcher.FetchConcurrent(urls)
 	}
@@ -136,6 +138,17 @@ func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, template
 	}
 
 	return os.WriteFile(outputPath, []byte(atomContent), 0o644)
+}
+
+// createOGFetcher creates an OpenGraph fetcher, optionally with proxy support
+func createOGFetcher(ogDB *opengraph.Database, config Config) *opengraph.Fetcher {
+	if config.ProxyURL != "" && config.ProxySecret != "" {
+		return opengraph.NewFetcherWithProxy(ogDB, &opengraph.ProxyConfig{
+			URL:    config.ProxyURL,
+			Secret: config.ProxySecret,
+		})
+	}
+	return opengraph.NewFetcher(ogDB)
 }
 
 // createGenericFeedData converts FeedItems to template data structure
