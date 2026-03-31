@@ -40,6 +40,11 @@ fingerpori:
   outfile: fingerpori.xml
   interval: 24h         # Daily comic, no need to check often
 
+# Feissarimokat provider configuration
+feissarimokat:
+  outfile: feissarimokat.xml
+  interval: 24h           # Weekly updates, daily check is plenty
+
 # Oglaf provider configuration
 oglaf:
   outfile: oglaf.xml

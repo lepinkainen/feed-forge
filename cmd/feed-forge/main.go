@@ -19,6 +19,7 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 
 	// Import providers to trigger init() self-registration
+	"github.com/lepinkainen/feed-forge/internal/feissarimokat"
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
@@ -57,8 +58,13 @@ var CLI struct {
 		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"fingerpori" help:"Generate RSS feed from Fingerpori comics."`
 
+	Feissarimokat struct {
+		Outfile  string `help:"Output file path" short:"o" default:"feissarimokat.xml"`
+		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"feissarimokat" help:"Generate RSS feed from Feissarimokat comics."`
+
 	Preview struct {
-		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf)."`
+		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf, feissarimokat)."`
 		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
 		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
@@ -155,6 +161,13 @@ func buildProviderConfig(name string) any {
 				Interval: CLI.Fingerpori.Interval,
 			},
 			Limit: CLI.Fingerpori.Limit,
+		}
+	case "feissarimokat":
+		return &feissarimokat.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.Feissarimokat.Outfile,
+				Interval: CLI.Feissarimokat.Interval,
+			},
 		}
 	case "oglaf":
 		return &oglaf.Config{
@@ -429,6 +442,22 @@ func main() {
 		outfile := resolveOutfile(CLI.Fingerpori.Outfile)
 		if err := provider.GenerateFeed(outfile, false); err != nil {
 			slog.Error("Failed to generate Fingerpori feed", "output_file", outfile, "error", err)
+			os.Exit(1)
+		}
+
+	case "feissarimokat":
+		slog.Debug("Generating Feissarimokat feed...")
+
+		providerConfig := buildProviderConfig("feissarimokat")
+		provider, err := providers.DefaultRegistry.CreateProvider("feissarimokat", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Feissarimokat provider", "error", err)
+			os.Exit(1)
+		}
+
+		outfile := resolveOutfile(CLI.Feissarimokat.Outfile)
+		if err := provider.GenerateFeed(outfile, false); err != nil {
+			slog.Error("Failed to generate Feissarimokat feed", "error", err)
 			os.Exit(1)
 		}
 

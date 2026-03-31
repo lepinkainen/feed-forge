@@ -81,6 +81,18 @@ tasks:
     deps: [build]
     cmds:
       - ./build/feed-forge preview fingerpori
+  run-feissarimokat:
+    desc: "Run Feissarimokat feed generation"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge feissarimokat
+
+  preview-feissarimokat:
+    desc: "Preview Feissarimokat feed items interactively"
+    deps: [build]
+    cmds:
+      - ./build/feed-forge preview feissarimokat
+
   run-oglaf:
     desc: "Run Oglaf feed generation"
     deps: [build]
