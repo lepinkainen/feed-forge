@@ -3,10 +3,14 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -301,6 +305,12 @@ func shouldSkipProvider(outfile string, interval time.Duration) (bool, time.Dura
 	return age < interval, age
 }
 
+type feedResult struct {
+	Provider string
+	Filename string // e.g. "reddit.xml"
+	Status   string // "generated", "skipped", "failed"
+}
+
 func generateAll(configPath string) error {
 	names, err := configuredProviders(configPath)
 	if err != nil {
@@ -312,58 +322,134 @@ func generateAll(configPath string) error {
 		return nil
 	}
 
-	var failed int
-	for _, name := range names {
-		info, err := providers.DefaultRegistry.Get(name)
-		if err != nil {
-			slog.Error("Provider not found", "provider", name, "error", err)
-			failed++
-			continue
-		}
+	var (
+		wg      sync.WaitGroup
+		results = make([]feedResult, len(names))
+		failed  atomic.Int32
+	)
 
-		var providerConfig any
-		if info.ConfigFactory != nil {
-			providerConfig = info.ConfigFactory()
-			if loadErr := loadProviderConfigFromYAML(configPath, name, providerConfig); loadErr != nil {
-				slog.Error("Failed to load config", "provider", name, "error", loadErr)
-				failed++
-				continue
+	for i, name := range names {
+		wg.Add(1)
+		go func(i int, name string) {
+			defer wg.Done()
+			results[i] = generateProvider(configPath, name)
+			if results[i].Status == "failed" {
+				failed.Add(1)
 			}
-		}
+		}(i, name)
+	}
 
-		gc := providers.GetGenerateConfig(providerConfig)
+	wg.Wait()
 
-		outfile := gc.Outfile
-		if outfile == "" {
-			outfile = name + ".xml"
-		}
-		outfile = resolveOutfile(outfile)
+	if err := generateFeedIndex(results); err != nil {
+		slog.Error("Failed to generate feed index", "error", err)
+	}
 
-		interval := parseInterval(gc.Interval)
-		if skip, age := shouldSkipProvider(outfile, interval); skip {
-			slog.Info("Skipping provider", "provider", name, "age", age.Truncate(time.Second), "interval", interval)
-			continue
-		}
+	if f := failed.Load(); f > 0 {
+		return fmt.Errorf("%d provider(s) failed", f)
+	}
 
-		provider, err := providers.DefaultRegistry.CreateProvider(name, providerConfig)
-		if err != nil {
-			slog.Error("Failed to create provider", "provider", name, "error", err)
-			failed++
-			continue
-		}
+	return nil
+}
 
-		slog.Info("Generating feed", "provider", name, "outfile", outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
-			slog.Error("Failed to generate feed", "provider", name, "error", err)
-			failed++
-			continue
+func generateProvider(configPath, name string) feedResult {
+	result := feedResult{Provider: name, Status: "failed"}
+
+	info, err := providers.DefaultRegistry.Get(name)
+	if err != nil {
+		slog.Error("Provider not found", "provider", name, "error", err)
+		return result
+	}
+
+	var providerConfig any
+	if info.ConfigFactory != nil {
+		providerConfig = info.ConfigFactory()
+		if loadErr := loadProviderConfigFromYAML(configPath, name, providerConfig); loadErr != nil {
+			slog.Error("Failed to load provider config", "provider", name, "error", loadErr)
+			return result
 		}
 	}
 
-	if failed > 0 {
-		return fmt.Errorf("%d provider(s) failed", failed)
+	gc := providers.GetGenerateConfig(providerConfig)
+
+	outfile := gc.Outfile
+	if outfile == "" {
+		outfile = name + ".xml"
+	}
+	result.Filename = outfile
+	outfile = resolveOutfile(outfile)
+
+	interval := parseInterval(gc.Interval)
+	if skip, age := shouldSkipProvider(outfile, interval); skip {
+		slog.Info("Skipping provider", "provider", name, "age", age.Truncate(time.Second), "interval", interval)
+		result.Status = "skipped"
+		return result
 	}
 
+	provider, err := providers.DefaultRegistry.CreateProvider(name, providerConfig)
+	if err != nil {
+		slog.Error("Failed to create provider", "provider", name, "error", err)
+		return result
+	}
+
+	if closer, ok := provider.(interface{ Close() error }); ok {
+		defer func() {
+			if err := closer.Close(); err != nil {
+				slog.Error("Failed to close provider", "provider", name, "error", err)
+			}
+		}()
+	}
+
+	slog.Info("Generating feed", "provider", name, "outfile", outfile)
+	if err := provider.GenerateFeed(outfile, false); err != nil {
+		slog.Error("Failed to generate feed", "provider", name, "error", err)
+		return result
+	}
+
+	result.Status = "generated"
+	return result
+}
+
+func generateFeedIndex(results []feedResult) error {
+	if CLI.OutputDir == "" {
+		slog.Info("Skipping feed index generation: output-dir not configured")
+		return nil
+	}
+
+	var feeds []feedResult
+	for _, r := range results {
+		if r.Status != "failed" && r.Filename != "" {
+			feeds = append(feeds, r)
+		}
+	}
+
+	sort.Slice(feeds, func(i, j int) bool {
+		return feeds[i].Provider < feeds[j].Provider
+	})
+
+	tmplContent, err := feed.ReadTemplateContent("feed-index.html.tmpl")
+	if err != nil {
+		return err
+	}
+
+	htmlTmpl, err := template.New("feed-index").Parse(tmplContent)
+	if err != nil {
+		return fmt.Errorf("failed to parse index template: %w", err)
+	}
+
+	indexPath := filepath.Join(CLI.OutputDir, "index.html")
+	file, err := os.Create(indexPath)
+	if err != nil {
+		return fmt.Errorf("failed to create index file: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	data := struct{ Feeds []feedResult }{Feeds: feeds}
+	if err := htmlTmpl.Execute(file, data); err != nil {
+		return fmt.Errorf("failed to execute index template: %w", err)
+	}
+
+	slog.Info("Generated feed index", "path", indexPath)
 	return nil
 }
 

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Feed Forge - Available Feeds</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; }
+        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+        .feed { margin-bottom: 1rem; }
+        .feed-name { font-weight: 600; margin-bottom: 0.25rem; }
+        .feed-url { display: flex; gap: 0.5rem; align-items: center; }
+        .feed-url input {
+            flex: 1; padding: 0.4rem 0.6rem; font-family: monospace; font-size: 0.875rem;
+            border: 1px solid #ccc; border-radius: 4px; background: #f8f8f8; color: #333;
+            transition: background 0.3s, border-color 0.3s;
+        }
+        .feed-url input.copied {
+            background: #e6f9e6; border-color: #4caf50;
+        }
+        .feed-url button {
+            padding: 0.4rem 0.75rem; font-size: 0.875rem; cursor: pointer;
+            border: 1px solid #ccc; border-radius: 4px; background: #fff;
+        }
+        .feed-url button:hover { background: #f0f0f0; }
+        .feed-url a { font-size: 0.875rem; white-space: nowrap; }
+        .empty { color: #666; font-style: italic; }
+    </style>
+    <script>
+    function resolveURLs() {
+        var base = window.location.href.replace(/\/[^/]*$/, '/');
+        document.querySelectorAll('input[data-filename]').forEach(function(input) {
+            input.value = base + input.getAttribute('data-filename');
+        });
+    }
+    function copyFeedURL(btn) {
+        var input = btn.previousElementSibling;
+        navigator.clipboard.writeText(input.value);
+        input.classList.add('copied');
+        setTimeout(function() { input.classList.remove('copied'); }, 1000);
+    }
+    </script>
+</head>
+<body onload="resolveURLs()">
+    <h1>Available Feeds</h1>
+    {{if .Feeds}}
+    {{range .Feeds}}
+    <div class="feed">
+        <div class="feed-name">{{.Provider}}</div>
+        <div class="feed-url">
+            <input type="text" data-filename="{{.Filename}}" value="{{.Filename}}" readonly onclick="this.select()">
+            <button onclick="copyFeedURL(this)">Copy</button>
+            <a href="{{.Filename}}">open</a>
+        </div>
+    </div>
+    {{end}}
+    {{else}}
+    <p class="empty">No feeds available.</p>
+    {{end}}
+</body>
+</html>
