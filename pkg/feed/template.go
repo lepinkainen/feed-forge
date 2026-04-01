@@ -98,7 +98,7 @@ func (tg *TemplateGenerator) LoadTemplate(name, filePath string) error {
 func (tg *TemplateGenerator) LoadTemplateWithFallback(name string) error {
 	filename := name + ".tmpl"
 
-	if overrideFS := getTemplateOverrideFS(); overrideFS != nil {
+	if overrideFS := GetTemplateOverrideFS(); overrideFS != nil {
 		content, err := fs.ReadFile(overrideFS, filename)
 		if err == nil {
 			slog.Debug("Loading override template", "name", name, "source", "override_fs")
@@ -109,7 +109,7 @@ func (tg *TemplateGenerator) LoadTemplateWithFallback(name string) error {
 		}
 	}
 
-	if fallbackFS := getTemplateFallbackFS(); fallbackFS != nil {
+	if fallbackFS := GetTemplateFallbackFS(); fallbackFS != nil {
 		content, err := fs.ReadFile(fallbackFS, filename)
 		if err == nil {
 			slog.Debug("Loading embedded template", "name", name, "source", "embedded_fs")

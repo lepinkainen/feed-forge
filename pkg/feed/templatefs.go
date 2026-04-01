@@ -1,6 +1,7 @@
 package feed
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 
@@ -24,10 +25,29 @@ func SetTemplateFallbackFS(f fs.FS) {
 	templateFallbackFS = f
 }
 
-func getTemplateOverrideFS() fs.FS {
+// GetTemplateOverrideFS returns the primary template filesystem.
+func GetTemplateOverrideFS() fs.FS {
 	return templateOverrideFS
 }
 
-func getTemplateFallbackFS() fs.FS {
+// GetTemplateFallbackFS returns the embedded fallback template filesystem.
+func GetTemplateFallbackFS() fs.FS {
 	return templateFallbackFS
+}
+
+// ReadTemplateContent reads raw template file content using the override/fallback pattern.
+func ReadTemplateContent(filename string) (string, error) {
+	if overrideFS := GetTemplateOverrideFS(); overrideFS != nil {
+		content, err := fs.ReadFile(overrideFS, filename)
+		if err == nil {
+			return string(content), nil
+		}
+	}
+	if fallbackFS := GetTemplateFallbackFS(); fallbackFS != nil {
+		content, err := fs.ReadFile(fallbackFS, filename)
+		if err == nil {
+			return string(content), nil
+		}
+	}
+	return "", fmt.Errorf("%w: %s", ErrTemplateNotFound, filename)
 }
