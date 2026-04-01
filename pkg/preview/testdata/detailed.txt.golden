@@ -1,0 +1,13 @@
+═══════════════════════════════════════════════════════════════════════
+Title: Preview title
+Link: https://example.com/post
+Comments: https://example.com/post/comments
+Author: alice
+Score: 123 | Comments: 45
+Categories: cats, dogs
+Image: https://example.com/image.jpg
+
+Content:
+This content should be wrapped nicely across multiple lines so the
+preview output stays readable in terminal snapshots.
+═══════════════════════════════════════════════════════════════════════
