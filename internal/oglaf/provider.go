@@ -255,6 +255,8 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 	}
 
 	// 2. Extract images only for unprocessed comics
+	// Track which links were just processed to avoid duplicates with cached items
+	justProcessed := make(map[string]bool)
 	var transformedItems []providers.FeedItem
 	for _, item := range unprocessed {
 		imageURL, extractErr := extractFullComicURL(item.Link)
@@ -279,18 +281,20 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 		transformed.Description = comicDescription(item.Link, imageURL, item.Title)
 
 		transformedItems = append(transformedItems, transformed)
+		justProcessed[item.Link] = true
 	}
 
-	// 3. Include already processed cached items
+	// 3. Include already processed cached items, skipping any just processed above
 	cachedItems, err := getProcessedComics(contentDB, 50)
 	if err != nil {
 		slog.Warn("Failed to get processed comics", "error", err)
 	} else {
 		for _, item := range cachedItems {
-			// Ensure description is set for cached items
-			if item.Description == "" {
-				item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
+			if justProcessed[item.Link()] {
+				continue
 			}
+			// Always set description for cached items to ensure consistent content
+			item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
 			transformedItems = append(transformedItems, item)
 		}
 	}
