@@ -100,6 +100,8 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 
 **Error Handling**: Use `log/slog` for structured logging throughout the codebase. Enhanced HTTP client provides standardized error handling with retry logic and structured error types.
 
+**Database Timestamps**: **CRITICAL** - Use `time.Time` fields in Go structs and `TIMESTAMP` column affinity in SQLite. Let the `modernc.org/sqlite` driver handle serialization — it round-trips `time.Time` as RFC3339Nano text, which is lexicographically sortable so `ORDER BY ... DESC` equals chronological DESC. Never store raw upstream date strings (RFC1123Z, custom formats, day-first locales) in a sortable column: string-sort on non-ISO formats silently disagrees with chronological order and breaks feed ordering. Parse source timestamps into `time.Time` at the API/RSS boundary, never later. The `TIMESTAMP`/`DATETIME` column declaration is what triggers the driver's auto-scan back into `time.Time`; `TEXT` columns will not auto-convert on `rows.Scan`.
+
 **HTTP Client Usage**: **CRITICAL** - Always use `pkg/api` enhanced clients for API calls. Provider-specific clients with built-in rate limiting and retry policies:
 
 - `api.NewRedditClient(baseClient)` - Reddit-optimized with 1-second rate limiting
