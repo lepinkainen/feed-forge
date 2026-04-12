@@ -28,12 +28,17 @@ var (
 	mediaRegex    = regexp.MustCompile(`src="([^"]*//media\.oglaf\.com/comic/[^"]+)"`)
 )
 
-// RSSItem represents a single RSS feed item from Oglaf
+// RSSItem represents a single RSS feed item from Oglaf.
+//
+// PublishedAt is parsed from Oglaf's RFC1123Z pubDate at ingestion (see
+// fetchRSSFeed) and flows through the SQLite driver as time.Time. The driver
+// serializes to an RFC3339Nano string, so ORDER BY published_at DESC is
+// chronological.
 type RSSItem struct {
 	Title       string
 	Link        string
 	Description string
-	PubDate     string
+	PublishedAt time.Time
 	GUID        string
 	ImageURL    string
 }
@@ -74,13 +79,9 @@ func (o *Item) CommentCount() int {
 	return 0
 }
 
-// CreatedAt returns the publication date
+// CreatedAt returns the publication date.
 func (o *Item) CreatedAt() time.Time {
-	// Parse the pubDate string
-	if parsed, err := time.Parse(time.RFC1123Z, o.PubDate); err == nil {
-		return parsed
-	}
-	return time.Now()
+	return o.PublishedAt
 }
 
 // Categories returns empty categories
@@ -246,18 +247,23 @@ func (p *Provider) fetchRSSFeedIncremental(contentDB *database.Database) ([]*RSS
 	return newItems, nil
 }
 
-// processComicsIncremental processes comics, only extracting images for unprocessed ones
+// feedItemLimit caps how many comics appear in the generated feed. Keeping
+// this small and stable is what lets RSS readers (e.g. FreshRSS) dedupe
+// correctly across runs — items only leave the window when older comics are
+// bumped off by newer ones, never because an arbitrary rolling batch changed.
+const feedItemLimit = 25
+
+// processComicsIncremental backfills image URLs for any unprocessed comics,
+// then returns the most recent processed comics for the feed. Unprocessed
+// backfill work is intentionally not returned directly: mixing freshly
+// processed items into the feed caused duplicate-entry churn in readers.
 func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]providers.FeedItem, error) {
-	// 1. Get unprocessed comics (limit for performance)
+	// 1. Backfill images for unprocessed comics (bounded per run for performance).
 	unprocessed, err := getUnprocessedComics(contentDB, 50)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get unprocessed comics: %w", err)
 	}
 
-	// 2. Extract images only for unprocessed comics
-	// Track which links were just processed to avoid duplicates with cached items
-	justProcessed := make(map[string]bool)
-	var transformedItems []providers.FeedItem
 	for _, item := range unprocessed {
 		imageURL, extractErr := extractFullComicURL(item.Link)
 		if extractErr != nil {
@@ -271,35 +277,22 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 		if markErr := markImageExtracted(contentDB, item.Link, imageURL); markErr != nil {
 			slog.Warn("Failed to mark image as extracted", "link", item.Link, "error", markErr)
 		}
-
-		item.ImageURL = imageURL
-		transformed := &Item{
-			RSSItem:  item,
-			imageURL: imageURL,
-		}
-
-		transformed.Description = comicDescription(item.Link, imageURL, item.Title)
-
-		transformedItems = append(transformedItems, transformed)
-		justProcessed[item.Link] = true
 	}
 
-	// 3. Include already processed cached items, skipping any just processed above
-	cachedItems, err := getProcessedComics(contentDB, 50)
+	// 2. Return the most recent processed comics. After the backfill above,
+	// any item just processed that is recent enough will appear here.
+	cachedItems, err := getProcessedComics(contentDB, feedItemLimit)
 	if err != nil {
-		slog.Warn("Failed to get processed comics", "error", err)
-	} else {
-		for _, item := range cachedItems {
-			if justProcessed[item.Link()] {
-				continue
-			}
-			// Always set description for cached items to ensure consistent content
-			item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
-			transformedItems = append(transformedItems, item)
-		}
+		return nil, fmt.Errorf("failed to get processed comics: %w", err)
 	}
 
-	slog.Debug("Incremental comic processing completed", "unprocessed", len(unprocessed), "cached", len(cachedItems), "total", len(transformedItems))
+	transformedItems := make([]providers.FeedItem, 0, len(cachedItems))
+	for _, item := range cachedItems {
+		item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
+		transformedItems = append(transformedItems, item)
+	}
+
+	slog.Debug("Incremental comic processing completed", "backfilled", len(unprocessed), "feedItems", len(transformedItems))
 	return transformedItems, nil
 }
 
@@ -359,9 +352,22 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 		}
 
 		pubDateMatches := rssPubRegex.FindStringSubmatch(itemContent)
-		pubDate := ""
+		rawPubDate := ""
 		if len(pubDateMatches) > 1 {
-			pubDate = pubDateMatches[1]
+			rawPubDate = pubDateMatches[1]
+		}
+
+		// Parse Oglaf's RFC1123Z pubDate into time.Time at the boundary.
+		// Everything downstream operates on time.Time; we rely on the SQLite
+		// driver to serialize consistently for sort purposes.
+		if rawPubDate == "" {
+			slog.Warn("Skipping RSS item with missing pubDate", "link", link)
+			continue
+		}
+		publishedAt, err := parsePubDate(rawPubDate)
+		if err != nil {
+			slog.Warn("Skipping RSS item with unparseable pubDate", "link", link, "pubDate", rawPubDate, "error", err)
+			continue
 		}
 
 		guidMatches := rssGUIDRegex.FindStringSubmatch(itemContent)
@@ -375,7 +381,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 				Title:       title,
 				Link:        link,
 				Description: description,
-				PubDate:     pubDate,
+				PublishedAt: publishedAt.UTC(),
 				GUID:        guid,
 				ImageURL:    "", // Will be populated later
 			})

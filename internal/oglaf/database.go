@@ -12,17 +12,19 @@ import (
 
 // initializeSchema initializes the database schema for Oglaf provider
 func initializeSchema(db *database.Database) error {
-	// Create RSS items table
+	// Create RSS items table. published_at uses TIMESTAMP affinity so the
+	// modernc.org/sqlite driver round-trips time.Time values; the serialized
+	// form is RFC3339Nano which sorts chronologically as a string.
 	createRSSItemsTable := `
 	CREATE TABLE IF NOT EXISTS oglaf_rss_items (
 		guid TEXT PRIMARY KEY,
 		link TEXT UNIQUE NOT NULL,
 		title TEXT NOT NULL,
 		description TEXT,
-		pub_date TEXT NOT NULL,
+		published_at TIMESTAMP NOT NULL,
 		image_url TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`
 	if err := db.ExecuteSchema(createRSSItemsTable); err != nil {
 		return fmt.Errorf("failed to create oglaf_rss_items table: %w", err)
@@ -44,7 +46,7 @@ func initializeSchema(db *database.Database) error {
 	// Create indexes for performance
 	indexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_oglaf_rss_items_link ON oglaf_rss_items(link)",
-		"CREATE INDEX IF NOT EXISTS idx_oglaf_rss_items_pub_date ON oglaf_rss_items(pub_date)",
+		"CREATE INDEX IF NOT EXISTS idx_oglaf_rss_items_published_at ON oglaf_rss_items(published_at)",
 		"CREATE INDEX IF NOT EXISTS idx_oglaf_comic_status_processed ON oglaf_comic_status(image_extracted, last_processed)",
 	}
 
@@ -58,18 +60,37 @@ func initializeSchema(db *database.Database) error {
 	return nil
 }
 
-// saveRSSItem saves or updates an RSS item in the database
+// parsePubDate parses the pubDate string Oglaf's feed serves. RFC1123Z is the
+// primary format; the looser RFC1123 fallback handles occasional quirks.
+// Callers in this package only invoke this during RSS ingestion — once
+// parsed, timestamps are stored as RFC3339 everywhere else.
+func parsePubDate(s string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC1123Z, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse(time.RFC1123, s); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("unrecognized pub_date format: %q", s)
+}
+
+// saveRSSItem saves or updates an RSS item in the database. RSSItem.PublishedAt
+// must be a non-zero time.Time (parsed at ingestion in fetchRSSFeed).
 func saveRSSItem(db *database.Database, item *RSSItem) error {
+	if item.PublishedAt.IsZero() {
+		return fmt.Errorf("refusing to save RSS item %s with zero PublishedAt", item.Link)
+	}
+
 	_, err := db.DB().Exec(`
-		INSERT INTO oglaf_rss_items (guid, link, title, description, pub_date, created_at, updated_at)
+		INSERT INTO oglaf_rss_items (guid, link, title, description, published_at, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(link) DO UPDATE SET
 			guid = excluded.guid,
 			title = excluded.title,
 			description = excluded.description,
-			pub_date = excluded.pub_date,
+			published_at = excluded.published_at,
 			updated_at = excluded.updated_at`,
-		item.GUID, item.Link, item.Title, item.Description, item.PubDate, time.Now(), time.Now())
+		item.GUID, item.Link, item.Title, item.Description, item.PublishedAt, time.Now(), time.Now())
 
 	if err != nil {
 		return fmt.Errorf("failed to save RSS item %s: %w", item.Link, err)
@@ -88,10 +109,10 @@ func getRSSItemByLink(db *database.Database, link string) (*RSSItem, error) {
 	var item RSSItem
 	var imageURL sql.NullString
 	err := db.DB().QueryRow(`
-		SELECT guid, link, title, description, pub_date, image_url 
-		FROM oglaf_rss_items 
+		SELECT guid, link, title, description, published_at, image_url
+		FROM oglaf_rss_items
 		WHERE link = ?`, link).Scan(
-		&item.GUID, &item.Link, &item.Title, &item.Description, &item.PubDate, &imageURL)
+		&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -167,11 +188,11 @@ func markExtractionError(db *database.Database, link, errorMsg string) error {
 // getUnprocessedComics retrieves comics that haven't had their images extracted yet
 func getUnprocessedComics(db *database.Database, limit int) ([]*RSSItem, error) {
 	rows, err := db.DB().Query(`
-		SELECT r.guid, r.link, r.title, r.description, r.pub_date, r.image_url
+		SELECT r.guid, r.link, r.title, r.description, r.published_at, r.image_url
 		FROM oglaf_rss_items r
 		JOIN oglaf_comic_status s ON r.link = s.link
 		WHERE s.image_extracted = FALSE OR s.image_extracted IS NULL
-		ORDER BY r.pub_date DESC
+		ORDER BY r.published_at DESC
 		LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query unprocessed comics: %w", err)
@@ -186,7 +207,7 @@ func getUnprocessedComics(db *database.Database, limit int) ([]*RSSItem, error) 
 	for rows.Next() {
 		var item RSSItem
 		var imageURL sql.NullString
-		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PubDate, &imageURL)
+		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL)
 		if err != nil {
 			slog.Error("Error scanning unprocessed comic row", "error", err)
 			continue
@@ -207,10 +228,10 @@ func getUnprocessedComics(db *database.Database, limit int) ([]*RSSItem, error) 
 // getProcessedComics retrieves comics that have been processed (have image URLs)
 func getProcessedComics(db *database.Database, limit int) ([]*Item, error) {
 	rows, err := db.DB().Query(`
-		SELECT r.guid, r.link, r.title, r.description, r.pub_date, r.image_url
+		SELECT r.guid, r.link, r.title, r.description, r.published_at, r.image_url
 		FROM oglaf_rss_items r
 		WHERE r.image_url IS NOT NULL
-		ORDER BY r.pub_date DESC
+		ORDER BY r.published_at DESC
 		LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query processed comics: %w", err)
@@ -225,7 +246,7 @@ func getProcessedComics(db *database.Database, limit int) ([]*Item, error) {
 	for rows.Next() {
 		var item RSSItem
 		var imageURL sql.NullString
-		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PubDate, &imageURL)
+		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL)
 		if err != nil {
 			slog.Error("Error scanning processed comic row", "error", err)
 			continue
