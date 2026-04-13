@@ -28,7 +28,7 @@ type Config struct {
 }
 
 // NewProvider creates a new HackerNews provider
-func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers.FeedProvider {
+func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) (providers.FeedProvider, error) {
 	// Initialize CategoryMapper if not provided
 	if categoryMapper == nil {
 		categoryMapper = LoadConfig("") // Use default configuration
@@ -40,7 +40,7 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Hacker News base provider", "error", err)
-		return nil
+		return nil, fmt.Errorf("initialize hackernews base provider: %w", err)
 	}
 
 	return &Provider{
@@ -48,7 +48,7 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) providers
 		MinPoints:      minPoints,
 		Limit:          limit,
 		CategoryMapper: categoryMapper,
-	}
+	}, nil
 }
 
 // factory creates a HackerNews provider from configuration
@@ -58,9 +58,9 @@ func factory(config any) (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("invalid config type for hackernews provider: expected *hackernews.Config")
 	}
 
-	provider := NewProvider(cfg.MinPoints, cfg.Limit, nil)
-	if provider == nil {
-		return nil, fmt.Errorf("failed to create hackernews provider")
+	provider, err := NewProvider(cfg.MinPoints, cfg.Limit, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create hackernews provider: %w", err)
 	}
 
 	return provider, nil

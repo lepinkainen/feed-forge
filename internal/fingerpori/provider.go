@@ -22,7 +22,7 @@ type Config struct {
 }
 
 // NewProvider creates a new Fingerpori provider
-func NewProvider(limit int) providers.FeedProvider {
+func NewProvider(limit int) (providers.FeedProvider, error) {
 	// Fingerpori doesn't need a database (no caching required)
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "",
@@ -30,13 +30,13 @@ func NewProvider(limit int) providers.FeedProvider {
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Fingerpori base provider", "error", err)
-		return nil
+		return nil, fmt.Errorf("initialize fingerpori base provider: %w", err)
 	}
 
 	return &Provider{
 		BaseProvider: base,
 		Limit:        limit,
-	}
+	}, nil
 }
 
 // factory creates a Fingerpori provider from configuration
@@ -46,9 +46,9 @@ func factory(config any) (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("invalid config type for fingerpori provider: expected *fingerpori.Config")
 	}
 
-	provider := NewProvider(cfg.Limit)
-	if provider == nil {
-		return nil, fmt.Errorf("failed to create fingerpori provider")
+	provider, err := NewProvider(cfg.Limit)
+	if err != nil {
+		return nil, fmt.Errorf("create fingerpori provider: %w", err)
 	}
 
 	return provider, nil

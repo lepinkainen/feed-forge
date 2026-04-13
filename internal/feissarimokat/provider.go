@@ -20,19 +20,19 @@ type Config struct {
 }
 
 // NewProvider creates a new Feissarimokat provider
-func NewProvider() providers.FeedProvider {
+func NewProvider() (providers.FeedProvider, error) {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "",
 		UseContentDB:  false,
 	})
 	if err != nil {
 		slog.Error("Failed to initialize Feissarimokat base provider", "error", err)
-		return nil
+		return nil, fmt.Errorf("initialize feissarimokat base provider: %w", err)
 	}
 
 	return &Provider{
 		BaseProvider: base,
-	}
+	}, nil
 }
 
 // factory creates a Feissarimokat provider from configuration
@@ -42,9 +42,9 @@ func factory(config any) (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("invalid config type for feissarimokat provider: expected *feissarimokat.Config")
 	}
 
-	provider := NewProvider()
-	if provider == nil {
-		return nil, fmt.Errorf("failed to create feissarimokat provider")
+	provider, err := NewProvider()
+	if err != nil {
+		return nil, fmt.Errorf("create feissarimokat provider: %w", err)
 	}
 
 	return provider, nil

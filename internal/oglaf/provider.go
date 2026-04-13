@@ -29,11 +29,6 @@ var (
 )
 
 // RSSItem represents a single RSS feed item from Oglaf.
-//
-// PublishedAt is parsed from Oglaf's RFC1123Z pubDate at ingestion (see
-// fetchRSSFeed) and flows through the SQLite driver as time.Time. The driver
-// serializes to an RFC3339Nano string, so ORDER BY published_at DESC is
-// chronological.
 type RSSItem struct {
 	Title       string
 	Link        string
@@ -46,7 +41,6 @@ type RSSItem struct {
 // Item implements the FeedItem interface
 type Item struct {
 	*RSSItem
-	imageURL string
 }
 
 // Title returns the title of the comic
@@ -91,7 +85,7 @@ func (o *Item) Categories() []string {
 
 // ImageURL returns the full comic image URL
 func (o *Item) ImageURL() string {
-	return o.imageURL
+	return o.RSSItem.ImageURL
 }
 
 // Content returns the description
@@ -123,9 +117,9 @@ func factory(config any) (providers.FeedProvider, error) {
 		feedURL = "https://www.oglaf.com/feeds/rss/"
 	}
 
-	provider := NewOglafProvider(feedURL)
-	if provider == nil {
-		return nil, fmt.Errorf("failed to create oglaf provider")
+	provider, err := NewOglafProvider(feedURL)
+	if err != nil {
+		return nil, fmt.Errorf("create oglaf provider: %w", err)
 	}
 
 	return provider, nil
@@ -163,20 +157,20 @@ func comicDescription(link, imageURL, title string) string {
 }
 
 // NewOglafProvider creates a new Oglaf provider
-func NewOglafProvider(feedURL string) providers.FeedProvider {
+func NewOglafProvider(feedURL string) (providers.FeedProvider, error) {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "oglaf.db",
 		UseContentDB:  true,
 	})
 	if err != nil {
 		slog.Error("Failed to create base provider for Oglaf", "error", err)
-		return nil
+		return nil, fmt.Errorf("initialize oglaf base provider: %w", err)
 	}
 
 	return &Provider{
 		BaseProvider: base,
 		FeedURL:      feedURL,
-	}
+	}, nil
 }
 
 // extractFullComicURL fetches the comic page and finds the actual comic image
@@ -288,7 +282,7 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 
 	transformedItems := make([]providers.FeedItem, 0, len(cachedItems))
 	for _, item := range cachedItems {
-		item.Description = comicDescription(item.Link(), item.imageURL, item.Title())
+		item.Description = comicDescription(item.Link(), item.ImageURL(), item.Title())
 		transformedItems = append(transformedItems, item)
 	}
 
@@ -357,9 +351,6 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			rawPubDate = pubDateMatches[1]
 		}
 
-		// Parse Oglaf's RFC1123Z pubDate into time.Time at the boundary.
-		// Everything downstream operates on time.Time; we rely on the SQLite
-		// driver to serialize consistently for sort purposes.
 		if rawPubDate == "" {
 			slog.Warn("Skipping RSS item with missing pubDate", "link", link)
 			continue

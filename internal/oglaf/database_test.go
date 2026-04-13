@@ -9,17 +9,7 @@ import (
 )
 
 func TestDatabaseSchema(t *testing.T) {
-	// Create a temporary database for testing
-	db, err := database.NewDatabase(database.Config{Path: ":memory:"})
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	defer db.Close()
-
-	// Test schema initialization
-	if err := initializeSchema(db); err != nil {
-		t.Fatalf("Failed to initialize schema: %v", err)
-	}
+	db := newTestDB(t)
 
 	// Test saving an RSS item
 	item := &RSSItem{
@@ -74,17 +64,7 @@ func TestDatabaseSchema(t *testing.T) {
 }
 
 func TestNewRSSItemsDetection(t *testing.T) {
-	// Create a temporary database for testing
-	db, err := database.NewDatabase(database.Config{Path: ":memory:"})
-	if err != nil {
-		t.Fatalf("Failed to create test database: %v", err)
-	}
-	defer db.Close()
-
-	// Initialize schema
-	if err := initializeSchema(db); err != nil {
-		t.Fatalf("Failed to initialize schema: %v", err)
-	}
+	db := newTestDB(t)
 
 	// Create test items
 	existingItem := &RSSItem{

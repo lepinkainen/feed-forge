@@ -42,14 +42,13 @@ type Config struct {
 }
 
 // NewRedditProvider creates a new Reddit JSON provider
-func NewRedditProvider(minScore, minComments int, feedID, username, proxyURL, proxySecret, ogProxyURL string) providers.FeedProvider {
+func NewRedditProvider(minScore, minComments int, feedID, username, proxyURL, proxySecret, ogProxyURL string) (providers.FeedProvider, error) {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
 		ContentDBName: "", // Reddit JSON doesn't use content DB
 		UseContentDB:  false,
 	})
 	if err != nil {
-		// TODO: Handle error properly - for now return nil
-		return nil
+		return nil, fmt.Errorf("initialize reddit base provider: %w", err)
 	}
 
 	return &RedditProvider{
@@ -61,7 +60,7 @@ func NewRedditProvider(minScore, minComments int, feedID, username, proxyURL, pr
 		ProxyURL:     proxyURL,
 		ProxySecret:  proxySecret,
 		OGProxyURL:   ogProxyURL,
-	}
+	}, nil
 }
 
 // factory creates a Reddit provider from configuration
@@ -71,9 +70,9 @@ func factory(config any) (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("invalid config type for reddit provider: expected *redditjson.Config")
 	}
 
-	provider := NewRedditProvider(cfg.MinScore, cfg.MinComments, cfg.FeedID, cfg.Username, cfg.ProxyURL, cfg.ProxySecret, cfg.OGProxyURL)
-	if provider == nil {
-		return nil, fmt.Errorf("failed to create reddit provider")
+	provider, err := NewRedditProvider(cfg.MinScore, cfg.MinComments, cfg.FeedID, cfg.Username, cfg.ProxyURL, cfg.ProxySecret, cfg.OGProxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("create reddit provider: %w", err)
 	}
 
 	return provider, nil

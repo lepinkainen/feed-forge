@@ -60,10 +60,8 @@ func initializeSchema(db *database.Database) error {
 	return nil
 }
 
-// parsePubDate parses the pubDate string Oglaf's feed serves. RFC1123Z is the
-// primary format; the looser RFC1123 fallback handles occasional quirks.
-// Callers in this package only invoke this during RSS ingestion — once
-// parsed, timestamps are stored as RFC3339 everywhere else.
+// parsePubDate parses Oglaf's pubDate. RFC1123Z is the primary format; the
+// looser RFC1123 fallback handles occasional quirks.
 func parsePubDate(s string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC1123Z, s); err == nil {
 		return t, nil
@@ -185,6 +183,20 @@ func markExtractionError(db *database.Database, link, errorMsg string) error {
 	return nil
 }
 
+// scanRSSRow scans a row from a SELECT over oglaf_rss_items' standard
+// column order (guid, link, title, description, published_at, image_url).
+func scanRSSRow(rows *sql.Rows) (*RSSItem, error) {
+	var item RSSItem
+	var imageURL sql.NullString
+	if err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL); err != nil {
+		return nil, err
+	}
+	if imageURL.Valid {
+		item.ImageURL = imageURL.String
+	}
+	return &item, nil
+}
+
 // getUnprocessedComics retrieves comics that haven't had their images extracted yet
 func getUnprocessedComics(db *database.Database, limit int) ([]*RSSItem, error) {
 	rows, err := db.DB().Query(`
@@ -205,21 +217,12 @@ func getUnprocessedComics(db *database.Database, limit int) ([]*RSSItem, error) 
 
 	var items []*RSSItem
 	for rows.Next() {
-		var item RSSItem
-		var imageURL sql.NullString
-		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL)
+		item, err := scanRSSRow(rows)
 		if err != nil {
 			slog.Error("Error scanning unprocessed comic row", "error", err)
 			continue
 		}
-
-		if imageURL.Valid {
-			item.ImageURL = imageURL.String
-		} else {
-			item.ImageURL = ""
-		}
-
-		items = append(items, &item)
+		items = append(items, item)
 	}
 
 	return items, nil
@@ -244,25 +247,12 @@ func getProcessedComics(db *database.Database, limit int) ([]*Item, error) {
 
 	var items []*Item
 	for rows.Next() {
-		var item RSSItem
-		var imageURL sql.NullString
-		err := rows.Scan(&item.GUID, &item.Link, &item.Title, &item.Description, &item.PublishedAt, &imageURL)
+		item, err := scanRSSRow(rows)
 		if err != nil {
 			slog.Error("Error scanning processed comic row", "error", err)
 			continue
 		}
-
-		if imageURL.Valid {
-			item.ImageURL = imageURL.String
-		} else {
-			item.ImageURL = ""
-		}
-
-		oglafItem := &Item{
-			RSSItem:  &item,
-			imageURL: item.ImageURL,
-		}
-		items = append(items, oglafItem)
+		items = append(items, &Item{RSSItem: item})
 	}
 
 	return items, nil
