@@ -5,12 +5,25 @@ import (
 	"log/slog"
 	"regexp"
 
-	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-var domainRegex = regexp.MustCompile(`^https?://([^/]+)`)
+var (
+	domainRegex = regexp.MustCompile(`^https?://([^/]+)`)
+	previewInfo = &providers.PreviewInfo{
+		Config: feedmeta.Config{
+			Title:       "Hacker News Top Stories",
+			Link:        "https://news.ycombinator.com/",
+			Description: "High-quality Hacker News stories, updated regularly",
+			Author:      "Feed Forge",
+			ID:          "https://news.ycombinator.com/",
+		},
+		ProviderName: "Hacker News",
+		TemplateName: "hackernews-atom",
+	}
+)
 
 // Provider implements the FeedProvider interface for Hacker News
 type Provider struct {
@@ -43,12 +56,15 @@ func NewProvider(minPoints, limit int, categoryMapper *CategoryMapper) (provider
 		return nil, fmt.Errorf("initialize hackernews base provider: %w", err)
 	}
 
-	return &Provider{
+	provider := &Provider{
 		BaseProvider:   base,
 		MinPoints:      minPoints,
 		Limit:          limit,
 		CategoryMapper: categoryMapper,
-	}, nil
+	}
+	provider.SetGenerateFeedFunc(providerfeed.BuildGenerator(provider.FetchItems, previewInfo, nil, provider.OgDB))
+
+	return provider, nil
 }
 
 // factory creates a HackerNews provider from configuration
@@ -78,15 +94,7 @@ func init() {
 				Limit:     30,
 			}
 		},
-		Preview: &providers.PreviewInfo{
-			ProviderName: "Hacker News",
-			TemplateName: "hackernews-atom",
-			FeedTitle:    "Hacker News Top Stories",
-			FeedLink:     "https://news.ycombinator.com/",
-			Description:  "High-quality Hacker News stories, updated regularly",
-			Author:       "Feed Forge",
-			FeedID:       "https://news.ycombinator.com/",
-		},
+		Preview: previewInfo,
 	})
 }
 
@@ -131,38 +139,6 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 
 	// Convert to FeedItem interface
 	return convertToFeedItems(preprocessedItems), nil
-}
-
-// GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string) error {
-
-	// Fetch items using the shared FetchItems method
-	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
-	if err != nil {
-		return err
-	}
-
-	// Ensure output directory exists
-	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
-		return dirErr
-	}
-
-	// Define feed configuration
-	feedConfig := feed.Config{
-		Title:       "Hacker News Top Stories",
-		Link:        "https://news.ycombinator.com/",
-		Description: "High-quality Hacker News stories, updated regularly",
-		Author:      "Feed Forge",
-		ID:          "https://news.ycombinator.com/",
-	}
-
-	// Generate and save the feed using embedded templates with local override
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "hackernews-atom", outfile, feedConfig, p.OgDB); err != nil {
-		return err
-	}
-
-	feed.LogFeedGeneration(len(feedItems), outfile)
-	return nil
 }
 
 // preprocessItems applies HackerNews-specific categorization and metadata

@@ -4,10 +4,22 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
+
+var previewInfo = &providers.PreviewInfo{
+	Config: feedmeta.Config{
+		Title:       "Fingerpori Comics",
+		Link:        "https://www.hs.fi/fingerpori/",
+		Description: "Daily Fingerpori comics from Helsingin Sanomat",
+		Author:      "Pertti Jarla",
+		ID:          "https://www.hs.fi/fingerpori/",
+	},
+	ProviderName: "Fingerpori",
+	TemplateName: "fingerpori-atom",
+}
 
 // Provider implements the FeedProvider interface for Fingerpori comics
 type Provider struct {
@@ -33,10 +45,13 @@ func NewProvider(limit int) (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("initialize fingerpori base provider: %w", err)
 	}
 
-	return &Provider{
+	provider := &Provider{
 		BaseProvider: base,
 		Limit:        limit,
-	}, nil
+	}
+	provider.SetGenerateFeedFunc(providerfeed.BuildGenerator(provider.FetchItems, previewInfo, nil, nil))
+
+	return provider, nil
 }
 
 // factory creates a Fingerpori provider from configuration
@@ -65,15 +80,7 @@ func init() {
 				Limit: 100,
 			}
 		},
-		Preview: &providers.PreviewInfo{
-			ProviderName: "Fingerpori",
-			TemplateName: "fingerpori-atom",
-			FeedTitle:    "Fingerpori Comics",
-			FeedLink:     "https://www.hs.fi/fingerpori/",
-			Description:  "Daily Fingerpori comics from Helsingin Sanomat",
-			Author:       "Pertti Jarla",
-			FeedID:       "https://www.hs.fi/fingerpori/",
-		},
+		Preview: previewInfo,
 	})
 }
 
@@ -103,40 +110,6 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 
 	// Convert to FeedItem interface
 	return convertToFeedItems(items), nil
-}
-
-// GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string) error {
-	slog.Debug("Generating Fingerpori feed")
-
-	// Fetch items using the shared FetchItems method
-	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit
-	if err != nil {
-		return err
-	}
-
-	// Ensure output directory exists
-	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
-		return dirErr
-	}
-
-	// Define feed configuration
-	feedConfig := feed.Config{
-		Title:       "Fingerpori Comics",
-		Link:        "https://www.hs.fi/fingerpori/",
-		Description: "Daily Fingerpori comics from Helsingin Sanomat",
-		Author:      "Pertti Jarla",
-		ID:          "https://www.hs.fi/fingerpori/",
-	}
-
-	// Generate and save the feed using embedded templates
-	// Note: We don't use OpenGraph DB for comic images
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "fingerpori-atom", outfile, feedConfig, nil); err != nil {
-		return err
-	}
-
-	feed.LogFeedGeneration(len(feedItems), outfile)
-	return nil
 }
 
 // convertToFeedItems wraps Fingerpori items with the FeedItem interface

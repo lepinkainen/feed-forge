@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -109,7 +110,7 @@ func TestPreviewFeed_PrintsXMLForIndexedItem(t *testing.T) {
 		if err := r.Register("stubpreview", &providers.ProviderInfo{
 			Name:    "stubpreview",
 			Factory: func(config any) (providers.FeedProvider, error) { return provider, nil },
-			Preview: &providers.PreviewInfo{ProviderName: "Stub Preview", TemplateName: "preview", FeedTitle: "Stub Feed", FeedLink: "https://example.com", Description: "desc", Author: "author", FeedID: "feed-id"},
+			Preview: &providers.PreviewInfo{Config: feedmeta.Config{Title: "Stub Feed", Link: "https://example.com", Description: "desc", Author: "author", ID: "feed-id"}, ProviderName: "Stub Preview", TemplateName: "preview"},
 		}); err != nil {
 			t.Fatalf("Register() error = %v", err)
 		}

@@ -8,20 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
-// Config contains metadata for feed generation
-type Config struct {
-	Title       string
-	Link        string
-	Description string
-	Author      string
-	ID          string
-	ProxyURL    string // Optional proxy URL for fetching OG data from blocked domains
-	ProxySecret string // Shared secret for proxy authentication
-}
+// Config contains metadata for feed generation.
+type Config = feedmeta.Config
 
 // GenerateAtomFeed creates an Atom RSS feed using template-based generation
 // This is the unified function that replaces provider-specific generation logic

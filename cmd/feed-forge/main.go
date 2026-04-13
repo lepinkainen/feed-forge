@@ -213,13 +213,7 @@ func previewFeed(providerName string, limit, index int, configPath string) error
 		return err
 	}
 
-	feedConfig := feed.Config{
-		Title:       info.Preview.FeedTitle,
-		Link:        info.Preview.FeedLink,
-		Description: info.Preview.Description,
-		Author:      info.Preview.Author,
-		ID:          info.Preview.FeedID,
-	}
+	feedConfig := feed.Config(info.Preview.Config)
 
 	if index >= 0 {
 		if index >= len(items) {

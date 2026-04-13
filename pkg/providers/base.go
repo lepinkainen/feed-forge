@@ -2,6 +2,7 @@
 package providers
 
 import (
+	"fmt"
 	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
@@ -14,6 +15,8 @@ type BaseProvider struct {
 	// Database connections
 	ContentDB *database.Database
 	OgDB      *opengraph.Database
+
+	generateFeed func(outfile string) error
 }
 
 // DatabaseConfig holds database configuration for providers
@@ -62,6 +65,19 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	}
 
 	return base, nil
+}
+
+// SetGenerateFeedFunc configures the shared GenerateFeed implementation for the provider.
+func (b *BaseProvider) SetGenerateFeedFunc(fn func(outfile string) error) {
+	b.generateFeed = fn
+}
+
+// GenerateFeed runs the configured shared feed generation logic.
+func (b *BaseProvider) GenerateFeed(outfile string) error {
+	if b.generateFeed == nil {
+		return fmt.Errorf("generate feed is not configured")
+	}
+	return b.generateFeed(outfile)
 }
 
 // Close cleans up database connections

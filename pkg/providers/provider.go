@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"sync"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
 )
 
 // FeedProvider defines the interface for a feed source.
@@ -30,15 +32,11 @@ type FeedItem interface {
 // ProviderFactory creates a new instance of a provider.
 type ProviderFactory func(config any) (FeedProvider, error)
 
-// PreviewInfo contains provider-specific metadata needed by the generic preview command.
+// PreviewInfo contains provider-specific metadata needed by preview and feed generation.
 type PreviewInfo struct {
+	feedmeta.Config
 	ProviderName string
 	TemplateName string
-	FeedTitle    string
-	FeedLink     string
-	Description  string
-	Author       string
-	FeedID       string
 }
 
 // GenerateConfig holds common fields used by the generate command.

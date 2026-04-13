@@ -4,10 +4,22 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/lepinkainen/feed-forge/pkg/feed"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
+
+var previewInfo = &providers.PreviewInfo{
+	Config: feedmeta.Config{
+		Title:       "Feissarimokat",
+		Link:        "https://www.feissarimokat.com/",
+		Description: "Feissarimokat comics with embedded images",
+		Author:      "Feissarimokat",
+		ID:          "https://www.feissarimokat.com/",
+	},
+	ProviderName: "Feissarimokat",
+	TemplateName: "feissarimokat-atom",
+}
 
 // Provider implements the FeedProvider interface for Feissarimokat
 type Provider struct {
@@ -30,9 +42,12 @@ func NewProvider() (providers.FeedProvider, error) {
 		return nil, fmt.Errorf("initialize feissarimokat base provider: %w", err)
 	}
 
-	return &Provider{
+	provider := &Provider{
 		BaseProvider: base,
-	}, nil
+	}
+	provider.SetGenerateFeedFunc(providerfeed.BuildGenerator(provider.FetchItems, previewInfo, nil, nil))
+
+	return provider, nil
 }
 
 // factory creates a Feissarimokat provider from configuration
@@ -59,15 +74,7 @@ func init() {
 		ConfigFactory: func() any {
 			return &Config{}
 		},
-		Preview: &providers.PreviewInfo{
-			ProviderName: "Feissarimokat",
-			TemplateName: "feissarimokat-atom",
-			FeedTitle:    "Feissarimokat",
-			FeedLink:     "https://www.feissarimokat.com/",
-			Description:  "Feissarimokat comics with embedded images",
-			Author:       "Feissarimokat",
-			FeedID:       "https://www.feissarimokat.com/",
-		},
+		Preview: previewInfo,
 	})
 }
 
@@ -87,35 +94,6 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	}
 
 	return convertToFeedItems(items), nil
-}
-
-// GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string) error {
-	slog.Debug("Generating Feissarimokat feed")
-
-	feedItems, err := p.FetchItems(0)
-	if err != nil {
-		return err
-	}
-
-	if dirErr := filesystem.EnsureDirectoryExists(outfile); dirErr != nil {
-		return dirErr
-	}
-
-	feedConfig := feed.Config{
-		Title:       "Feissarimokat",
-		Link:        "https://www.feissarimokat.com/",
-		Description: "Feissarimokat comics with embedded images",
-		Author:      "Feissarimokat",
-		ID:          "https://www.feissarimokat.com/",
-	}
-
-	if err := feed.SaveAtomFeedToFileWithEmbeddedTemplate(feedItems, "feissarimokat-atom", outfile, feedConfig, nil); err != nil {
-		return err
-	}
-
-	feed.LogFeedGeneration(len(feedItems), outfile)
-	return nil
 }
 
 // convertToFeedItems wraps items with the FeedItem interface
