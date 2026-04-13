@@ -401,7 +401,7 @@ func generateProvider(configPath, name string) feedResult {
 	}
 
 	slog.Info("Generating feed", "provider", name, "outfile", outfile)
-	if err := provider.GenerateFeed(outfile, false); err != nil {
+	if err := provider.GenerateFeed(outfile); err != nil {
 		slog.Error("Failed to generate feed", "provider", name, "error", err)
 		return result
 	}
@@ -489,7 +489,7 @@ func main() {
 		}
 
 		outfile := resolveOutfile(CLI.HackerNews.Outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
+		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Hacker News feed", "output_file", outfile, "error", err)
 			os.Exit(1)
 		}
@@ -510,7 +510,7 @@ func main() {
 		}
 
 		outfile := resolveOutfile(CLI.Reddit.Outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
+		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Reddit feed", "output_file", outfile, "feed_id", CLI.Reddit.FeedID, "username", CLI.Reddit.Username, "error", err)
 			os.Exit(1)
 		}
@@ -526,7 +526,7 @@ func main() {
 		}
 
 		outfile := resolveOutfile(CLI.Fingerpori.Outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
+		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Fingerpori feed", "output_file", outfile, "error", err)
 			os.Exit(1)
 		}
@@ -542,7 +542,7 @@ func main() {
 		}
 
 		outfile := resolveOutfile(CLI.Feissarimokat.Outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
+		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Feissarimokat feed", "error", err)
 			os.Exit(1)
 		}
@@ -566,7 +566,7 @@ func main() {
 		}
 
 		outfile := resolveOutfile(CLI.Oglaf.Outfile)
-		if err := provider.GenerateFeed(outfile, false); err != nil {
+		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Oglaf feed", "error", err)
 			os.Exit(1)
 		}

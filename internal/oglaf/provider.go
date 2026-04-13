@@ -417,9 +417,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string, reauth bool) error {
-	// reauth parameter is ignored for RSS feeds (no authentication needed)
-
+func (p *Provider) GenerateFeed(outfile string) error {
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0)
 	if err != nil {

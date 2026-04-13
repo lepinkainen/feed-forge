@@ -173,7 +173,7 @@ type testProvider struct {
 	*BaseProvider
 }
 
-func (tp *testProvider) GenerateFeed(outfile string, reauth bool) error {
+func (tp *testProvider) GenerateFeed(outfile string) error {
 	return nil
 }
 

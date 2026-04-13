@@ -10,13 +10,13 @@ import (
 
 // Mock implementations for testing
 type mockFeedProvider struct {
-	generateFeedFunc func(outfile string, reauth bool) error
+	generateFeedFunc func(outfile string) error
 	fetchItemsFunc   func(limit int) ([]FeedItem, error)
 }
 
-func (m *mockFeedProvider) GenerateFeed(outfile string, reauth bool) error {
+func (m *mockFeedProvider) GenerateFeed(outfile string) error {
 	if m.generateFeedFunc != nil {
-		return m.generateFeedFunc(outfile, reauth)
+		return m.generateFeedFunc(outfile)
 	}
 	return nil
 }
@@ -391,7 +391,7 @@ func TestFeedItemInterface(t *testing.T) {
 
 func TestFeedProviderInterface(t *testing.T) {
 	provider := &mockFeedProvider{
-		generateFeedFunc: func(outfile string, reauth bool) error {
+		generateFeedFunc: func(outfile string) error {
 			if outfile == "" {
 				return errors.New("outfile cannot be empty")
 			}
@@ -400,13 +400,13 @@ func TestFeedProviderInterface(t *testing.T) {
 	}
 
 	// Test successful call
-	err := provider.GenerateFeed("output.xml", false)
+	err := provider.GenerateFeed("output.xml")
 	if err != nil {
 		t.Errorf("GenerateFeed() with valid params should not error, got %v", err)
 	}
 
 	// Test error case
-	err = provider.GenerateFeed("", false)
+	err = provider.GenerateFeed("")
 	if err == nil {
 		t.Errorf("GenerateFeed() with empty outfile should error")
 	}

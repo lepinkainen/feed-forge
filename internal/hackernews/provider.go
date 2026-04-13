@@ -134,7 +134,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *Provider) GenerateFeed(outfile string, _ bool) error {
+func (p *Provider) GenerateFeed(outfile string) error {
 
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0) // 0 means use provider's default limit

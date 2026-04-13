@@ -9,7 +9,7 @@ import (
 
 // FeedProvider defines the interface for a feed source.
 type FeedProvider interface {
-	GenerateFeed(outfile string, reauth bool) error
+	GenerateFeed(outfile string) error
 	FetchItems(limit int) ([]FeedItem, error)
 }
 

@@ -169,7 +169,7 @@ func TestRedditProviderGenerateFeed(t *testing.T) {
 	defer func() { _ = provider.Close() }()
 
 	outfile := filepath.Join(t.TempDir(), "feeds", "reddit.xml")
-	if err := provider.GenerateFeed(outfile, false); err != nil {
+	if err := provider.GenerateFeed(outfile); err != nil {
 		t.Fatalf("GenerateFeed() error = %v", err)
 	}
 

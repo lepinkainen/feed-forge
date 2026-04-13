@@ -134,9 +134,7 @@ func (p *RedditProvider) FetchItems(limit int) ([]providers.FeedItem, error) {
 }
 
 // GenerateFeed implements the FeedProvider interface
-func (p *RedditProvider) GenerateFeed(outfile string, _ bool) error {
-	// reauth parameter is ignored for JSON feeds (no authentication needed)
-
+func (p *RedditProvider) GenerateFeed(outfile string) error {
 	// Fetch items using the shared FetchItems method
 	feedItems, err := p.FetchItems(0) // 0 means no limit
 	if err != nil {

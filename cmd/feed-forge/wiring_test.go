@@ -44,7 +44,7 @@ type stubProvider struct {
 	closeCalls    int
 }
 
-func (s *stubProvider) GenerateFeed(outfile string, _ bool) error {
+func (s *stubProvider) GenerateFeed(outfile string) error {
 	s.generateCalls++
 	if err := os.MkdirAll(filepath.Dir(outfile), 0o755); err != nil {
 		return err
