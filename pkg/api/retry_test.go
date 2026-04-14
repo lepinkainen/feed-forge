@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"slices"
@@ -324,6 +325,73 @@ func TestExecuteWithRetry(t *testing.T) {
 			// Skip timing checks for fast tests to avoid flakiness
 			_ = elapsed
 		})
+	}
+}
+
+func TestExecuteWithRetry_RateLimitUsesSingleExtendedBackoff(t *testing.T) {
+	policy := &RetryPolicy{
+		MaxAttempts:       2,
+		InitialBackoff:    40 * time.Millisecond,
+		MaxBackoff:        200 * time.Millisecond,
+		BackoffMultiplier: 2,
+		RetryableErrors:   []int{http.StatusTooManyRequests},
+	}
+
+	attempts := 0
+	operation := func() error {
+		attempts++
+		if attempts == 1 {
+			return &HTTPError{StatusCode: http.StatusTooManyRequests, Message: "Rate Limited"}
+		}
+		return nil
+	}
+
+	start := time.Now()
+	if err := ExecuteWithRetry(operation, policy, "rate-limit-test"); err != nil {
+		t.Fatalf("ExecuteWithRetry() error = %v", err)
+	}
+	elapsed := time.Since(start)
+
+	if attempts != 2 {
+		t.Fatalf("attempts = %d, want 2", attempts)
+	}
+	if elapsed < 80*time.Millisecond || elapsed > 130*time.Millisecond {
+		t.Fatalf("elapsed = %v, want roughly one extended backoff", elapsed)
+	}
+}
+
+func TestExecuteWithRetryContext_CancelledDuringBackoff(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+
+	policy := &RetryPolicy{
+		MaxAttempts:       3,
+		InitialBackoff:    200 * time.Millisecond,
+		MaxBackoff:        500 * time.Millisecond,
+		BackoffMultiplier: 2,
+		RetryableErrors:   []int{http.StatusInternalServerError},
+	}
+
+	attempts := 0
+	operation := func() error {
+		attempts++
+		return &HTTPError{StatusCode: http.StatusInternalServerError, Message: "Server Error"}
+	}
+
+	start := time.Now()
+	err := ExecuteWithRetryContext(ctx, operation, policy, "cancel-test")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("ExecuteWithRetryContext() error = nil, want cancellation")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("ExecuteWithRetryContext() error = %v, want deadline exceeded", err)
+	}
+	if attempts != 1 {
+		t.Fatalf("attempts = %d, want 1", attempts)
+	}
+	if elapsed > 150*time.Millisecond {
+		t.Fatalf("elapsed = %v, want prompt cancellation", elapsed)
 	}
 }
 

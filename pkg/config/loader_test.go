@@ -162,6 +162,26 @@ func TestLoadFromFile_JSON(t *testing.T) {
 	}
 }
 
+func TestLoadFromFile_YAML_UnknownFieldFails(t *testing.T) {
+	tempDir := t.TempDir()
+	yamlContent := `name: strict-config
+version: 1.0.0
+unknown: true`
+	yamlFile := filepath.Join(tempDir, "config.yaml")
+	if err := os.WriteFile(yamlFile, []byte(yamlContent), 0o644); err != nil {
+		t.Fatalf("Failed to create test YAML file: %v", err)
+	}
+
+	var config testConfig
+	err := loadFromFile(yamlFile, &config)
+	if err == nil {
+		t.Fatal("loadFromFile() error = nil, want strict unknown-field failure")
+	}
+	if !containsString(err.Error(), "field unknown not found") {
+		t.Fatalf("loadFromFile() error = %v, want unknown field detail", err)
+	}
+}
+
 func TestLoadFromFile_YAML(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -377,6 +397,22 @@ func TestLoadFromURL_Timeout(t *testing.T) {
 	}
 }
 
+func TestLoadFromURLWithFallback_ResetsTargetOnDefaultFallback(t *testing.T) {
+	cfg := testConfig{Name: "stale", Version: "old", Debug: true, Timeout: 99}
+	err := LoadFromURLWithFallback(&LoaderConfig{
+		RemoteURL:         "http://invalid-url.example.com",
+		LocalPath:         "/nonexistent/path",
+		Timeout:           1 * time.Second,
+		FallbackToDefault: true,
+	}, &cfg)
+	if err != nil {
+		t.Fatalf("LoadFromURLWithFallback() error = %v", err)
+	}
+	if cfg != (testConfig{}) {
+		t.Fatalf("LoadFromURLWithFallback() fallback cfg = %#v, want zero-value default", cfg)
+	}
+}
+
 func TestLoadFromURLWithFallback(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -486,9 +522,8 @@ func TestLoadFromURLWithFallback(t *testing.T) {
 						t.Errorf("Expected local config, got name = %q", config.Name)
 					}
 				case "default":
-					// With fallback enabled and both sources failing, config should remain empty/default
-					if config.Name != "" {
-						t.Errorf("Expected default/empty config with fallback, got name = %q", config.Name)
+					if config != (testConfig{}) {
+						t.Errorf("Expected zero-value default config with fallback, got %#v", config)
 					}
 				}
 			}

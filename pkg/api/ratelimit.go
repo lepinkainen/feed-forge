@@ -1,45 +1,53 @@
 package api
 
 import (
+	"context"
 	"sync"
 	"time"
 )
 
-// RateLimiter defines the interface for rate limiting implementations
+// RateLimiter defines the interface for rate limiting implementations.
 type RateLimiter interface {
-	// Wait blocks until it's safe to make another API call
+	// Wait blocks until it's safe to make another API call.
 	Wait()
-	// CanProceed returns true if a request can be made without waiting
+	// WaitContext blocks until it's safe to make another API call or the context is cancelled.
+	WaitContext(ctx context.Context) error
+	// CanProceed returns true if a request can be made without waiting.
 	CanProceed() bool
 }
 
-// SimpleRateLimiter implements basic rate limiting with minimum delay between calls
+// SimpleRateLimiter implements basic rate limiting with minimum delay between calls.
 type SimpleRateLimiter struct {
 	mu       sync.Mutex
 	lastCall time.Time
 	minDelay time.Duration
 }
 
-// NewSimpleRateLimiter creates a new simple rate limiter with minimum delay between calls
+// NewSimpleRateLimiter creates a new simple rate limiter with minimum delay between calls.
 func NewSimpleRateLimiter(minDelay time.Duration) *SimpleRateLimiter {
-	return &SimpleRateLimiter{
-		minDelay: minDelay,
-	}
+	return &SimpleRateLimiter{minDelay: minDelay}
 }
 
-// Wait blocks until it's safe to make another API call
+// Wait blocks until it's safe to make another API call.
 func (rl *SimpleRateLimiter) Wait() {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	elapsed := time.Since(rl.lastCall)
-	if elapsed < rl.minDelay {
-		time.Sleep(rl.minDelay - elapsed)
-	}
-	rl.lastCall = time.Now()
+	_ = rl.WaitContext(context.Background())
 }
 
-// CanProceed returns true if a request can be made without waiting
+// WaitContext blocks until it's safe to make another API call or the context is cancelled.
+func (rl *SimpleRateLimiter) WaitContext(ctx context.Context) error {
+	rl.mu.Lock()
+	waitFor := rl.minDelay - time.Since(rl.lastCall)
+	if waitFor < 0 {
+		waitFor = 0
+	}
+	nextCall := time.Now().Add(waitFor)
+	rl.lastCall = nextCall
+	rl.mu.Unlock()
+
+	return waitWithContext(ctx, waitFor)
+}
+
+// CanProceed returns true if a request can be made without waiting.
 func (rl *SimpleRateLimiter) CanProceed() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -48,7 +56,7 @@ func (rl *SimpleRateLimiter) CanProceed() bool {
 	return elapsed >= rl.minDelay
 }
 
-// TokenBucketRateLimiter implements token bucket algorithm for rate limiting
+// TokenBucketRateLimiter implements token bucket algorithm for rate limiting.
 type TokenBucketRateLimiter struct {
 	mu         sync.Mutex
 	tokens     int
@@ -57,7 +65,7 @@ type TokenBucketRateLimiter struct {
 	lastRefill time.Time
 }
 
-// NewTokenBucketRateLimiter creates a new token bucket rate limiter
+// NewTokenBucketRateLimiter creates a new token bucket rate limiter.
 func NewTokenBucketRateLimiter(maxTokens int, refillRate time.Duration) *TokenBucketRateLimiter {
 	return &TokenBucketRateLimiter{
 		tokens:     maxTokens,
@@ -67,27 +75,34 @@ func NewTokenBucketRateLimiter(maxTokens int, refillRate time.Duration) *TokenBu
 	}
 }
 
-// Wait blocks until a token is available
+// Wait blocks until a token is available.
 func (rl *TokenBucketRateLimiter) Wait() {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	// Refill tokens based on elapsed time
-	rl.refillTokens()
-
-	// If no tokens available, wait until one is refilled
-	for rl.tokens <= 0 {
-		rl.mu.Unlock()
-		time.Sleep(rl.refillRate)
-		rl.mu.Lock()
-		rl.refillTokens()
-	}
-
-	// Consume a token
-	rl.tokens--
+	_ = rl.WaitContext(context.Background())
 }
 
-// CanProceed returns true if a token is available
+// WaitContext blocks until a token is available or the context is cancelled.
+func (rl *TokenBucketRateLimiter) WaitContext(ctx context.Context) error {
+	for {
+		rl.mu.Lock()
+		rl.refillTokens()
+		if rl.tokens > 0 {
+			rl.tokens--
+			rl.mu.Unlock()
+			return nil
+		}
+		waitFor := rl.refillRate - time.Since(rl.lastRefill)
+		if waitFor <= 0 {
+			waitFor = rl.refillRate
+		}
+		rl.mu.Unlock()
+
+		if err := waitWithContext(ctx, waitFor); err != nil {
+			return err
+		}
+	}
+}
+
+// CanProceed returns true if a token is available.
 func (rl *TokenBucketRateLimiter) CanProceed() bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
@@ -96,7 +111,7 @@ func (rl *TokenBucketRateLimiter) CanProceed() bool {
 	return rl.tokens > 0
 }
 
-// refillTokens adds tokens based on elapsed time (internal method)
+// refillTokens adds tokens based on elapsed time (internal method).
 func (rl *TokenBucketRateLimiter) refillTokens() {
 	now := time.Now()
 	elapsed := now.Sub(rl.lastRefill)
@@ -107,24 +122,29 @@ func (rl *TokenBucketRateLimiter) refillTokens() {
 		if rl.tokens > rl.maxTokens {
 			rl.tokens = rl.maxTokens
 		}
-		rl.lastRefill = now
+		rl.lastRefill = rl.lastRefill.Add(time.Duration(tokensToAdd) * rl.refillRate)
 	}
 }
 
-// NoOpRateLimiter implements the RateLimiter interface but performs no rate limiting
+// NoOpRateLimiter implements the RateLimiter interface but performs no rate limiting.
 type NoOpRateLimiter struct{}
 
-// NewNoOpRateLimiter creates a rate limiter that performs no limiting
+// NewNoOpRateLimiter creates a rate limiter that performs no limiting.
 func NewNoOpRateLimiter() *NoOpRateLimiter {
 	return &NoOpRateLimiter{}
 }
 
-// Wait does nothing (no rate limiting)
+// Wait does nothing (no rate limiting).
 func (rl *NoOpRateLimiter) Wait() {
-	// No operation
+	_ = rl.WaitContext(context.Background())
 }
 
-// CanProceed always returns true (no rate limiting)
+// WaitContext does nothing (no rate limiting).
+func (rl *NoOpRateLimiter) WaitContext(context.Context) error {
+	return nil
+}
+
+// CanProceed always returns true (no rate limiting).
 func (rl *NoOpRateLimiter) CanProceed() bool {
 	return true
 }

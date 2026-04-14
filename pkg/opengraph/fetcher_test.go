@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -12,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/testutil"
 	"golang.org/x/net/html"
 )
 
@@ -32,7 +35,7 @@ func TestNewFetcherVariants(t *testing.T) {
 	if plain == nil || plain.db != db || plain.proxy != nil {
 		t.Fatalf("NewFetcher() = %#v", plain)
 	}
-	if plain.client == nil || plain.semaphore == nil || plain.cache == nil || plain.lastFetch == nil {
+	if plain.client == nil || plain.semaphore == nil || plain.lastFetch == nil {
 		t.Fatalf("NewFetcher() did not initialize internals: %#v", plain)
 	}
 
@@ -50,8 +53,16 @@ func TestFetchData_InvalidAndBlockedURLs(t *testing.T) {
 		t.Fatalf("FetchData(invalid) = (%#v, %v), want error", data, err)
 	}
 
+	if data, err := fetcher.FetchData("http://127.0.0.1:8080"); err == nil || data != nil {
+		t.Fatalf("FetchData(loopback) = (%#v, %v), want error", data, err)
+	}
+
 	if data, err := fetcher.FetchData("https://twitter.com/example/status/1"); err != nil || data != nil {
 		t.Fatalf("FetchData(blocked) = (%#v, %v), want (nil, nil)", data, err)
+	}
+
+	if fetcher.isBlockedURL("https://evil.example/?next=twitter.com") {
+		t.Fatal("isBlockedURL(query containing blocked hostname) = true, want false")
 	}
 
 	proxied := NewFetcherWithProxy(nil, &ProxyConfig{URL: "https://proxy.example", Secret: "secret"})
@@ -113,10 +124,15 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
+	targetURL := "http://example.invalid/post"
 	db := newTestOGDB(t)
 	fetcher := NewFetcher(db)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
 
-	fresh, err := fetcher.fetchFreshData(context.Background(), server.URL)
+	fresh, err := fetcher.fetchFreshData(context.Background(), targetURL)
 	if err != nil {
 		t.Fatalf("fetchFreshData() error = %v", err)
 	}
@@ -124,15 +140,15 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 		t.Fatalf("fetchFreshData() = %#v", fresh)
 	}
 
-	data, err := fetcher.FetchData(server.URL)
+	data, err := fetcher.FetchData(targetURL)
 	if err != nil {
 		t.Fatalf("FetchData() error = %v", err)
 	}
 	if data == nil {
 		t.Fatal("FetchData() = nil, want data")
 	}
-	if data.Image != server.URL+"/img.png" {
-		t.Fatalf("resolved image = %q, want %q", data.Image, server.URL+"/img.png")
+	if data.Image != "http://example.invalid/img.png" {
+		t.Fatalf("resolved image = %q, want %q", data.Image, "http://example.invalid/img.png")
 	}
 	if data.SiteName != "Example Site" {
 		t.Fatalf("SiteName = %q, want %q", data.SiteName, "Example Site")
@@ -141,7 +157,7 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 		t.Fatalf("server hits = %d, want at least 2", hits.Load())
 	}
 
-	cached, err := fetcher.FetchData(server.URL)
+	cached, err := fetcher.FetchData(targetURL)
 	if err != nil {
 		t.Fatalf("FetchData(cached after save) error = %v", err)
 	}
@@ -193,14 +209,19 @@ func TestFetchData_CachesFailures(t *testing.T) {
 	}))
 	defer server.Close()
 
+	targetURL := "http://example.invalid/failure"
 	db := newTestOGDB(t)
 	fetcher := NewFetcher(db)
-	data, err := fetcher.FetchData(server.URL)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+	data, err := fetcher.FetchData(targetURL)
 	if err == nil || data != nil {
 		t.Fatalf("FetchData(failure) = (%#v, %v), want error", data, err)
 	}
 
-	hasFailure, err := db.HasRecentFailure(server.URL)
+	hasFailure, err := db.HasRecentFailure(targetURL)
 	if err != nil {
 		t.Fatalf("HasRecentFailure() error = %v", err)
 	}
@@ -291,6 +312,61 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 	}
 }
 
+func rewriteHostTransport(server *httptest.Server) *http.Transport {
+	serverAddr := server.Listener.Addr().String()
+
+	return &http.Transport{
+		DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, serverAddr)
+		},
+	}
+}
+
+func TestSafeDialContextRejectsDirectAndResolvedPrivateIPs(t *testing.T) {
+	baseDialer := &net.Dialer{}
+
+	directDial := safeDialContext(nil, nil, baseDialer)
+	if _, err := directDial(context.Background(), "tcp", "8.8.8.8:80"); err == nil {
+		t.Fatal("safeDialContext(direct public ip) error = nil, want rejection")
+	}
+
+	resolver := testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("10.0.0.1")}}, nil
+	}}
+	resolvedDial := safeDialContext(resolver, nil, baseDialer)
+	if _, err := resolvedDial(context.Background(), "tcp", "example.com:80"); err == nil {
+		t.Fatal("safeDialContext(resolved private ip) error = nil, want rejection")
+	}
+
+	errorResolver := testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return nil, errors.New("dns failure")
+	}}
+	failedDial := safeDialContext(errorResolver, nil, baseDialer)
+	if _, err := failedDial(context.Background(), "tcp", "example.com:80"); err == nil {
+		t.Fatal("safeDialContext(dns failure) error = nil, want rejection")
+	}
+}
+
+func TestFetchConcurrentWithContext_Cancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	fetcher := NewFetcher(nil)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+
+	start := time.Now()
+	results := fetcher.FetchConcurrentWithContext(ctx, []string{"http://example.invalid/one", "http://example.invalid/two"})
+	if len(results) != 0 {
+		t.Fatalf("len(FetchConcurrentWithContext(cancelled)) = %d, want 0", len(results))
+	}
+	if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+		t.Fatalf("FetchConcurrentWithContext(cancelled) took %v, want prompt return", elapsed)
+	}
+}
+
 func TestFetchConcurrent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -299,11 +375,17 @@ func TestFetchConcurrent(t *testing.T) {
 	defer server.Close()
 
 	fetcher := NewFetcher(nil)
-	results := fetcher.FetchConcurrent([]string{"", server.URL + "/one", server.URL + "/two"})
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+	oneURL := "http://example.invalid/one"
+	twoURL := "http://example.invalid/two"
+	results := fetcher.FetchConcurrent([]string{"", oneURL, twoURL})
 	if len(results) != 2 {
 		t.Fatalf("len(FetchConcurrent()) = %d, want 2", len(results))
 	}
-	if results[server.URL+"/one"].Title != "/one" || results[server.URL+"/two"].Title != "/two" {
+	if results[oneURL].Title != "/one" || results[twoURL].Title != "/two" {
 		t.Fatalf("FetchConcurrent() = %#v", results)
 	}
 

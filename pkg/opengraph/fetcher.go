@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -26,9 +28,9 @@ type ProxyConfig struct {
 // Fetcher handles OpenGraph metadata fetching with rate limiting and caching
 type Fetcher struct {
 	client      *http.Client
+	resolver    urlutils.LookupIPAddrsResolver
 	db          *Database
 	proxy       *ProxyConfig
-	cache       map[string]*Data
 	domainMutex sync.Mutex
 	lastFetch   map[string]time.Time
 	semaphore   chan struct{}
@@ -46,9 +48,13 @@ func NewFetcherWithProxy(db *Database, proxy *ProxyConfig) *Fetcher {
 }
 
 func newFetcher(db *Database, proxy *ProxyConfig) *Fetcher {
+	resolver := net.DefaultResolver
+	transport := newSafeFetchTransport(resolver, allowedDialHosts(proxy), nil)
+
 	return &Fetcher{
 		client: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
+			Transport: transport,
 			CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
 					return fmt.Errorf("too many redirects")
@@ -56,19 +62,24 @@ func newFetcher(db *Database, proxy *ProxyConfig) *Fetcher {
 				return nil
 			},
 		},
+		resolver:  resolver,
 		db:        db,
 		proxy:     proxy,
-		cache:     make(map[string]*Data),
 		lastFetch: make(map[string]time.Time),
 		semaphore: make(chan struct{}, 5), // Max 5 concurrent fetches
 	}
 }
 
-// FetchData fetches OpenGraph data from a URL with caching
+// FetchData fetches OpenGraph data from a URL with caching.
 func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
+	return f.FetchDataWithContext(context.Background(), targetURL)
+}
+
+// FetchDataWithContext fetches OpenGraph data from a URL with caching.
+func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*Data, error) {
 	// Validate URL format
-	if !urlutils.IsValidURL(targetURL) {
-		return nil, fmt.Errorf("invalid URL format: %s", targetURL)
+	if !urlutils.IsFetchableURLWithContext(ctx, f.resolver, targetURL) {
+		return nil, fmt.Errorf("invalid or disallowed fetch URL: %s", targetURL)
 	}
 
 	// Check if it's a blocked URL
@@ -100,10 +111,10 @@ func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 	}
 
 	// Fetch fresh data
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	data, err := f.fetchFreshData(ctx, targetURL)
+	data, err := f.fetchFreshData(fetchCtx, targetURL)
 	fetchSuccess := err == nil && data != nil
 
 	if err != nil {
@@ -417,11 +428,21 @@ func (f *Fetcher) convertToUTF8(body []byte, contentType string) (string, error)
 // Only reddit.com pages (galleries, posts) have useful metadata.
 // Media hosts (i.redd.it, v.redd.it) just return generic "Reddit" titles.
 func isProxiableRedditURL(targetURL string) bool {
-	return strings.Contains(targetURL, "reddit.com")
+	host, err := hostnameFromURL(targetURL)
+	if err != nil {
+		return false
+	}
+
+	return host == "reddit.com" || strings.HasSuffix(host, ".reddit.com")
 }
 
 // isBlockedURL checks if a URL is from a domain that blocks external access
 func (f *Fetcher) isBlockedURL(targetURL string) bool {
+	host, err := hostnameFromURL(targetURL)
+	if err != nil {
+		return false
+	}
+
 	blockedDomains := []string{
 		"x.com",
 		"twitter.com",
@@ -433,12 +454,12 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 	}
 
 	for _, domain := range blockedDomains {
-		if strings.Contains(targetURL, domain) {
+		if host == domain || strings.HasSuffix(host, "."+domain) {
 			return true
 		}
 	}
 
-	// Reddit page URLs are blocked unless we have a proxy configured
+	// Reddit page URLs are blocked unless we have a proxy configured.
 	if isProxiableRedditURL(targetURL) && f.proxy == nil {
 		return true
 	}
@@ -446,8 +467,104 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 	return false
 }
 
-// FetchConcurrent fetches OpenGraph data for multiple URLs concurrently
+func hostnameFromURL(targetURL string) (string, error) {
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.ToLower(parsedURL.Hostname()), nil
+}
+
+func allowedDialHosts(proxy *ProxyConfig) map[string]struct{} {
+	if proxy == nil || proxy.URL == "" {
+		return nil
+	}
+
+	host, err := hostnameFromURL(proxy.URL)
+	if err != nil || host == "" {
+		return nil
+	}
+
+	return map[string]struct{}{host: {}}
+}
+
+func newSafeFetchTransport(resolver urlutils.LookupIPAddrsResolver, allowedHosts map[string]struct{}, baseDialer *net.Dialer) *http.Transport {
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	if baseDialer == nil {
+		baseDialer = &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}
+	}
+
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = safeDialContext(resolver, allowedHosts, baseDialer)
+	return transport
+}
+
+func safeDialContext(resolver urlutils.LookupIPAddrsResolver, allowedHosts map[string]struct{}, baseDialer *net.Dialer) func(context.Context, string, string) (net.Conn, error) {
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	if baseDialer == nil {
+		baseDialer = &net.Dialer{}
+	}
+
+	return func(ctx context.Context, network, addr string) (net.Conn, error) {
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, err
+		}
+
+		host = strings.ToLower(host)
+		if _, ok := allowedHosts[host]; ok {
+			return baseDialer.DialContext(ctx, network, addr)
+		}
+
+		if _, parseErr := netip.ParseAddr(host); parseErr == nil {
+			return nil, fmt.Errorf("refusing direct IP fetch for host %q", host)
+		}
+
+		ipAddrs, err := resolver.LookupIPAddr(ctx, host)
+		if err != nil || len(ipAddrs) == 0 {
+			return nil, fmt.Errorf("resolve host %q: %w", host, err)
+		}
+
+		var lastErr error
+		for _, ipAddr := range ipAddrs {
+			addr, ok := netip.AddrFromSlice(ipAddr.IP)
+			if !ok {
+				lastErr = fmt.Errorf("invalid resolved IP for host %q", host)
+				continue
+			}
+			addr = addr.Unmap()
+			if urlutils.IsBlockedFetchAddr(addr) {
+				lastErr = fmt.Errorf("resolved disallowed IP %s for host %q", addr, host)
+				continue
+			}
+
+			conn, dialErr := baseDialer.DialContext(ctx, network, net.JoinHostPort(addr.String(), port))
+			if dialErr == nil {
+				return conn, nil
+			}
+			lastErr = dialErr
+		}
+
+		if lastErr == nil {
+			lastErr = fmt.Errorf("no allowed IP addresses for host %q", host)
+		}
+
+		return nil, lastErr
+	}
+}
+
+// FetchConcurrent fetches OpenGraph data for multiple URLs concurrently.
 func (f *Fetcher) FetchConcurrent(urls []string) map[string]*Data {
+	return f.FetchConcurrentWithContext(context.Background(), urls)
+}
+
+// FetchConcurrentWithContext fetches OpenGraph data for multiple URLs concurrently.
+func (f *Fetcher) FetchConcurrentWithContext(ctx context.Context, urls []string) map[string]*Data {
 	if len(urls) == 0 {
 		return make(map[string]*Data)
 	}
@@ -475,11 +592,15 @@ func (f *Fetcher) FetchConcurrent(urls []string) map[string]*Data {
 		go func(url string) {
 			defer wg.Done()
 
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
+			select {
+			case semaphore <- struct{}{}:
+				defer func() { <-semaphore }()
+			case <-ctx.Done():
+				return
+			}
 
 			slog.Debug("Processing URL for OpenGraph", "url", url)
-			data, err := f.FetchData(url)
+			data, err := f.FetchDataWithContext(ctx, url)
 			if err != nil {
 				slog.Debug("Failed to fetch OpenGraph data for URL", "url", url, "error", err)
 				data = nil

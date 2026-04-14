@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -122,27 +123,24 @@ func (e *HTTPError) Unwrap() error {
 // RetryableOperation represents an operation that can be retried
 type RetryableOperation func() error
 
-// ExecuteWithRetry executes an operation with retry logic
+// ExecuteWithRetry executes an operation with retry logic.
 func ExecuteWithRetry(operation RetryableOperation, policy *RetryPolicy, operationName string) error {
+	return ExecuteWithRetryContext(context.Background(), operation, policy, operationName)
+}
+
+// ExecuteWithRetryContext executes an operation with retry logic that can be cancelled.
+func ExecuteWithRetryContext(ctx context.Context, operation RetryableOperation, policy *RetryPolicy, operationName string) error {
 	var lastErr error
 
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
-		// Log retry attempts
 		if attempt > 1 {
-			backoff := policy.CalculateBackoff(attempt - 1)
-			slog.Warn("Retrying operation",
-				"operation", operationName,
-				"attempt", attempt,
-				"maxAttempts", policy.MaxAttempts,
-				"backoff", backoff,
-				"lastError", lastErr)
-			time.Sleep(backoff)
+			if err := waitBeforeAttempt(ctx, policy, attempt, lastErr, operationName); err != nil {
+				return fmt.Errorf("operation %s cancelled before attempt %d: %w", operationName, attempt, err)
+			}
 		}
 
-		// Execute the operation
 		err := operation()
 		if err == nil {
-			// Success
 			if attempt > 1 {
 				slog.Info("Operation succeeded after retry",
 					"operation", operationName,
@@ -153,7 +151,6 @@ func ExecuteWithRetry(operation RetryableOperation, policy *RetryPolicy, operati
 
 		lastErr = err
 
-		// Check if we should retry this error
 		if !policy.IsRetryableError(err) {
 			slog.Debug("Error is not retryable, stopping",
 				"operation", operationName,
@@ -161,17 +158,27 @@ func ExecuteWithRetry(operation RetryableOperation, policy *RetryPolicy, operati
 				"error", err)
 			break
 		}
-
-		// Special handling for rate limit errors
-		if policy.IsRateLimitError(err) {
-			rateLimitBackoff := policy.CalculateBackoff(attempt) * 2 // Longer backoff for rate limits
-			slog.Warn("Rate limited, using longer backoff",
-				"operation", operationName,
-				"attempt", attempt,
-				"backoff", rateLimitBackoff)
-			time.Sleep(rateLimitBackoff)
-		}
 	}
 
 	return fmt.Errorf("operation %s failed after %d attempts: %w", operationName, policy.MaxAttempts, lastErr)
+}
+
+func waitBeforeAttempt(ctx context.Context, policy *RetryPolicy, attempt int, lastErr error, operationName string) error {
+	backoff := policy.CalculateBackoff(attempt - 1)
+	if policy.IsRateLimitError(lastErr) {
+		backoff *= 2
+		slog.Warn("Rate limited, using longer backoff",
+			"operation", operationName,
+			"attempt", attempt,
+			"backoff", backoff)
+	}
+
+	slog.Warn("Retrying operation",
+		"operation", operationName,
+		"attempt", attempt,
+		"maxAttempts", policy.MaxAttempts,
+		"backoff", backoff,
+		"lastError", lastErr)
+
+	return waitWithContext(ctx, backoff)
 }

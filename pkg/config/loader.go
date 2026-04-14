@@ -2,12 +2,14 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -70,6 +72,7 @@ func LoadFromURLWithFallback(config *LoaderConfig, target any) error {
 		return fmt.Errorf("%w: tried URL and local file", ErrConfigNotFound)
 	}
 
+	resetTargetToZero(target)
 	return nil
 }
 
@@ -88,6 +91,7 @@ func loadFromURL(url string, timeout time.Duration, target any) error {
 
 // loadFromFile loads configuration from a local file with automatic format detection
 func loadFromFile(path string, target any) error {
+	// #nosec G304 -- configuration path is an explicit CLI/app input and intentionally read from disk.
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -102,11 +106,11 @@ func loadFromFile(path string, target any) error {
 	switch format {
 	case "json":
 		if err := json.Unmarshal(data, target); err != nil {
-			return fmt.Errorf("%w: failed to parse JSON from %s: %v", ErrConfigInvalid, path, err)
+			return fmt.Errorf("%w: failed to parse JSON from %s: %w", ErrConfigInvalid, path, err)
 		}
 	case "yaml":
-		if err := yaml.Unmarshal(data, target); err != nil {
-			return fmt.Errorf("%w: failed to parse YAML from %s: %v", ErrConfigInvalid, path, err)
+		if err := decodeYAMLStrict(data, target); err != nil {
+			return fmt.Errorf("%w: failed to parse YAML from %s: %w", ErrConfigInvalid, path, err)
 		}
 	default:
 		return fmt.Errorf("%w: %s (detected: %s)", ErrUnsupportedFormat, path, format)
@@ -134,4 +138,28 @@ func detectFormat(path string, data []byte) string {
 
 	// Assume YAML for other cases (YAML is more permissive)
 	return "yaml"
+}
+
+func decodeYAMLStrict(data []byte, target any) error {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	dec.KnownFields(true)
+	return dec.Decode(target)
+}
+
+func resetTargetToZero(target any) {
+	if target == nil {
+		return
+	}
+
+	v := reflect.ValueOf(target)
+	if v.Kind() != reflect.Pointer || v.IsNil() {
+		return
+	}
+
+	v = v.Elem()
+	if !v.CanSet() {
+		return
+	}
+
+	v.Set(reflect.Zero(v.Type()))
 }

@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -255,6 +257,44 @@ func TestNoOpRateLimiter(t *testing.T) {
 	if elapsed > 10*time.Millisecond {
 		t.Errorf("NoOpRateLimiter.Wait() took %v, expected near-instant", elapsed)
 	}
+}
+
+func TestRateLimiterWaitContextCancellation(t *testing.T) {
+	t.Run("simple limiter", func(t *testing.T) {
+		rl := NewSimpleRateLimiter(200 * time.Millisecond)
+		rl.Wait()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err := rl.WaitContext(ctx)
+		elapsed := time.Since(start)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("WaitContext() error = %v, want deadline exceeded", err)
+		}
+		if elapsed > 120*time.Millisecond {
+			t.Fatalf("WaitContext() elapsed = %v, want prompt cancellation", elapsed)
+		}
+	})
+
+	t.Run("token bucket", func(t *testing.T) {
+		rl := NewTokenBucketRateLimiter(1, 200*time.Millisecond)
+		rl.Wait()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		err := rl.WaitContext(ctx)
+		elapsed := time.Since(start)
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("WaitContext() error = %v, want deadline exceeded", err)
+		}
+		if elapsed > 120*time.Millisecond {
+			t.Fatalf("WaitContext() elapsed = %v, want prompt cancellation", elapsed)
+		}
+	})
 }
 
 func TestRateLimiterInterface(t *testing.T) {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -55,32 +56,25 @@ func NewEnhancedClient(config *EnhancedClientConfig) *EnhancedClient {
 	}
 }
 
-// GetAndDecode performs an HTTP GET request with rate limiting, retries, and JSON decoding
+// GetAndDecode performs an HTTP GET request with rate limiting, retries, and JSON decoding.
 func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders map[string]string) error {
-	operation := func() error {
-		// Apply rate limiting
-		ec.rateLimiter.Wait()
+	return ec.GetAndDecodeWithContext(context.Background(), url, target, additionalHeaders)
+}
 
-		// Create request
-		req, err := http.NewRequest("GET", url, http.NoBody)
+// GetAndDecodeWithContext performs an HTTP GET request with cancellation support.
+func (ec *EnhancedClient) GetAndDecodeWithContext(ctx context.Context, url string, target any, additionalHeaders map[string]string) error {
+	operation := func() error {
+		if err := ec.rateLimiter.WaitContext(ctx); err != nil {
+			return fmt.Errorf("rate limiter wait: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Set User-Agent
-		req.Header.Set("User-Agent", ec.userAgent)
+		ec.applyHeaders(req, additionalHeaders)
 
-		// Set default headers
-		for key, value := range ec.defaultHeaders {
-			req.Header.Set(key, value)
-		}
-
-		// Set additional headers (these override defaults)
-		for key, value := range additionalHeaders {
-			req.Header.Set(key, value)
-		}
-
-		// Perform request
 		start := time.Now()
 		res, err := ec.client.Do(req)
 		duration := time.Since(start)
@@ -91,17 +85,11 @@ func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders
 		}
 		defer func() { _ = res.Body.Close() }()
 
-		// Check status code
 		if err := ensureStatusOK(res); err != nil {
 			ec.logAPICall(url, duration, false, err)
-			// Convert to our HTTPError type for retry logic
-			return &HTTPError{
-				StatusCode: res.StatusCode,
-				Message:    err.Error(),
-			}
+			return &HTTPError{StatusCode: res.StatusCode, Message: err.Error(), Err: err}
 		}
 
-		// Decode JSON
 		if err := json.NewDecoder(res.Body).Decode(target); err != nil {
 			ec.logAPICall(url, duration, false, err)
 			return fmt.Errorf("failed to decode json response: %w", err)
@@ -111,37 +99,30 @@ func (ec *EnhancedClient) GetAndDecode(url string, target any, additionalHeaders
 		return nil
 	}
 
-	return ExecuteWithRetry(operation, ec.retryPolicy, fmt.Sprintf("GET %s", url))
+	return ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url))
 }
 
-// Get performs an HTTP GET request with rate limiting and retries, returning the response
+// Get performs an HTTP GET request with rate limiting and retries, returning the response.
 func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (*http.Response, error) {
+	return ec.GetWithContext(context.Background(), url, additionalHeaders)
+}
+
+// GetWithContext performs an HTTP GET request with cancellation support.
+func (ec *EnhancedClient) GetWithContext(ctx context.Context, url string, additionalHeaders map[string]string) (*http.Response, error) {
 	var response *http.Response
 
 	operation := func() error {
-		// Apply rate limiting
-		ec.rateLimiter.Wait()
+		if err := ec.rateLimiter.WaitContext(ctx); err != nil {
+			return fmt.Errorf("rate limiter wait: %w", err)
+		}
 
-		// Create request
-		req, err := http.NewRequest("GET", url, http.NoBody)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
 
-		// Set User-Agent
-		req.Header.Set("User-Agent", ec.userAgent)
+		ec.applyHeaders(req, additionalHeaders)
 
-		// Set default headers
-		for key, value := range ec.defaultHeaders {
-			req.Header.Set(key, value)
-		}
-
-		// Set additional headers (these override defaults)
-		for key, value := range additionalHeaders {
-			req.Header.Set(key, value)
-		}
-
-		// Perform request
 		start := time.Now()
 		res, err := ec.client.Do(req)
 		duration := time.Since(start)
@@ -151,17 +132,12 @@ func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (
 			return fmt.Errorf("failed to perform GET request: %w", err)
 		}
 
-		// Check status code
 		if err := ensureStatusOK(res); err != nil {
 			ec.logAPICall(url, duration, false, err)
 			if closeErr := res.Body.Close(); closeErr != nil {
 				slog.Error("Failed to close response body", "error", closeErr)
 			}
-			// Convert to our HTTPError type for retry logic
-			return &HTTPError{
-				StatusCode: res.StatusCode,
-				Message:    err.Error(),
-			}
+			return &HTTPError{StatusCode: res.StatusCode, Message: err.Error(), Err: err}
 		}
 
 		response = res
@@ -169,12 +145,23 @@ func (ec *EnhancedClient) Get(url string, additionalHeaders map[string]string) (
 		return nil
 	}
 
-	err := ExecuteWithRetry(operation, ec.retryPolicy, fmt.Sprintf("GET %s", url))
-	if err != nil {
+	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url)); err != nil {
 		return nil, err
 	}
 
 	return response, nil
+}
+
+func (ec *EnhancedClient) applyHeaders(req *http.Request, additionalHeaders map[string]string) {
+	req.Header.Set("User-Agent", ec.userAgent)
+
+	for key, value := range ec.defaultHeaders {
+		req.Header.Set(key, value)
+	}
+
+	for key, value := range additionalHeaders {
+		req.Header.Set(key, value)
+	}
 }
 
 // CanProceed returns true if a request can be made without rate limiting delay
