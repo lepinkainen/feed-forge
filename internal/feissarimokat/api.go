@@ -3,6 +3,7 @@ package feissarimokat
 import (
 	"encoding/xml"
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"regexp"
@@ -11,7 +12,9 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/api"
 )
 
-const (
+// FeedURL and ImageBaseURL are vars (not consts) so tests can redirect them
+// at an httptest server without refactoring call sites.
+var (
 	// FeedURL is the RSS feed endpoint for feissarimokat.com
 	FeedURL = "https://static.feissarimokat.com/dynamic/latest/posts.rss"
 
@@ -97,18 +100,23 @@ func processItems(rssItems []RSSItem) []Item {
 		}
 
 		// Build HTML content with description and embedded images
-		var html strings.Builder
-		html.WriteString(rssItem.Description)
+		var htmlContent strings.Builder
+		htmlContent.WriteString(rssItem.Description)
 		for _, img := range images {
-			fmt.Fprintf(&html, "\n<img src=%q alt=%q>", img, rssItem.ItemTitle)
+			htmlContent.WriteString("\n")
+			htmlContent.WriteString(renderImageTag(img, rssItem.ItemTitle))
 		}
 
 		items = append(items, Item{
 			RSSItem:     rssItem,
 			Images:      images,
-			ContentHTML: html.String(),
+			ContentHTML: htmlContent.String(),
 		})
 	}
 
 	return items
+}
+
+func renderImageTag(imageURL, title string) string {
+	return `<img src="` + html.EscapeString(imageURL) + `" alt="` + html.EscapeString(title) + `">`
 }

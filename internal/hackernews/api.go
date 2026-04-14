@@ -12,13 +12,21 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/api"
 )
 
+// Algolia endpoint URLs. Kept as vars (not consts) so tests can point them at
+// an httptest server. algoliaItemURLFmt must contain exactly one %s for the
+// item ID.
+var (
+	algoliaSearchURL  = "https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100"
+	algoliaItemURLFmt = "https://hn.algolia.com/api/v1/items/%s"
+)
+
 // fetchItems retrieves current front page items from Algolia API
 func fetchItems() []Item {
 	slog.Debug("Fetching Hacker News items from Algolia API")
 
 	var algoliaResp AlgoliaResponse
 	client := api.NewHackerNewsClient() // Use enhanced client with rate limiting
-	err := client.GetAndDecode("https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100", &algoliaResp, nil)
+	err := client.GetAndDecode(algoliaSearchURL, &algoliaResp, nil)
 	if err != nil {
 		slog.Error("Failed to fetch or decode Hacker News items", "error", err)
 		return nil
@@ -174,7 +182,7 @@ func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) 
 
 // fetchItemStats retrieves current statistics for a single item from Algolia API
 func fetchItemStats(client *api.EnhancedClient, itemID string) statsUpdate {
-	url := fmt.Sprintf("https://hn.algolia.com/api/v1/items/%s", itemID)
+	url := fmt.Sprintf(algoliaItemURLFmt, itemID)
 	var algoliaItem AlgoliaHit
 	err := client.GetAndDecode(url, &algoliaItem, nil)
 	if err != nil {

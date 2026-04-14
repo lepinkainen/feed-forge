@@ -2,6 +2,7 @@ package oglaf
 
 import (
 	"fmt"
+	"html"
 	"io"
 	"log/slog"
 	"regexp"
@@ -151,12 +152,16 @@ func init() {
 }
 
 func comicDescription(link, imageURL, title string) string {
+	escapedLink := html.EscapeString(link)
+	escapedImageURL := html.EscapeString(imageURL)
+	escapedTitle := html.EscapeString(title)
+
 	return fmt.Sprintf(
 		`<div style="text-align: center; padding: 10px;">
 <p><a href="%s"><img src="%s" style="max-width: 100%%; height: auto;" alt="%s" /></a></p>
 <p><a href="%s">View on Oglaf</a></p>
 </div>`,
-		link, imageURL, title, link,
+		escapedLink, escapedImageURL, escapedTitle, escapedLink,
 	)
 }
 
@@ -381,7 +386,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 				Description: description,
 				PublishedAt: publishedAt.UTC(),
 				GUID:        guid,
-				ImageURL:    "", // Will be populated later
+				ImageURL:    "",
 			})
 		}
 	}
