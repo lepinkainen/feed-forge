@@ -58,7 +58,7 @@ func EnsureDirectoryExists(filePath string) error {
 		return nil // Current directory
 	}
 
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("%w: %s", ErrDirNotFound, dir)
 		}

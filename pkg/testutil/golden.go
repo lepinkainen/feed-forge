@@ -85,7 +85,7 @@ func updateGoldenSlice(t *testing.T, goldenPath string, actual []string) {
 
 	// Ensure the directory exists
 	dir := filepath.Dir(goldenPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("Failed to create directory %s: %v", dir, err)
 	}
 
@@ -96,7 +96,7 @@ func updateGoldenSlice(t *testing.T, goldenPath string, actual []string) {
 	}
 
 	// Write the JSON to the golden file
-	if err := os.WriteFile(goldenPath, data, 0o644); err != nil {
+	if err := os.WriteFile(goldenPath, data, 0o600); err != nil {
 		t.Fatalf("Failed to update golden file %s: %v", goldenPath, err)
 	}
 	t.Logf("Updated golden file: %s", goldenPath)
@@ -121,12 +121,12 @@ func updateGoldenFile(t *testing.T, goldenPath string, actual string) {
 
 	// Ensure the directory exists
 	dir := filepath.Dir(goldenPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		t.Fatalf("Failed to create directory %s: %v", dir, err)
 	}
 
 	// Write the actual output to the golden file
-	if err := os.WriteFile(goldenPath, []byte(actual), 0o644); err != nil {
+	if err := os.WriteFile(goldenPath, []byte(actual), 0o600); err != nil {
 		t.Fatalf("Failed to update golden file %s: %v", goldenPath, err)
 	}
 	t.Logf("Updated golden file: %s", goldenPath)

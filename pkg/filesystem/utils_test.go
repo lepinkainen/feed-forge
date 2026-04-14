@@ -237,9 +237,9 @@ func TestEnsureDirectoryExists_FilePermissions(t *testing.T) {
 		t.Error("Created path is not a directory")
 	}
 
-	// Check permissions (should be 0755)
+	// Check permissions (should be 0750)
 	perm := info.Mode().Perm()
-	expectedPerm := os.FileMode(0755)
+	expectedPerm := os.FileMode(0750)
 	if perm != expectedPerm {
 		t.Errorf("Directory permissions = %o, expected %o", perm, expectedPerm)
 	}
