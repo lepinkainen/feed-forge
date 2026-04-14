@@ -165,6 +165,13 @@ func comicDescription(link, imageURL, title string) string {
 	)
 }
 
+func unwrapCDATA(value string) string {
+	if strings.HasPrefix(value, "<![CDATA[") && strings.HasSuffix(value, "]]>") {
+		return strings.TrimSuffix(strings.TrimPrefix(value, "<![CDATA["), "]]>")
+	}
+	return value
+}
+
 // NewOglafProvider creates a new Oglaf provider
 func NewOglafProvider(feedURL string) (providers.FeedProvider, error) {
 	base, err := providers.NewBaseProvider(providers.DatabaseConfig{
@@ -340,6 +347,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			if title == "" && len(titleMatches) > 2 {
 				title = titleMatches[2]
 			}
+			title = unwrapCDATA(title)
 		}
 
 		linkMatches := rssLinkRegex.FindStringSubmatch(itemContent)
@@ -355,6 +363,7 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			if description == "" && len(descMatches) > 2 {
 				description = descMatches[2]
 			}
+			description = unwrapCDATA(description)
 		}
 
 		pubDateMatches := rssPubRegex.FindStringSubmatch(itemContent)

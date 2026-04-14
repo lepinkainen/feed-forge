@@ -104,6 +104,36 @@ tasks:
     cmds:
       - go test -v ./... -update
 
+  test-update:
+    desc: "Refresh external test fixtures"
+    cmds:
+      - mkdir -p internal/oglaf/testdata internal/feissarimokat/testdata internal/hackernews/testdata
+      - curl -L --fail --show-error --silent https://www.oglaf.com/feeds/rss/ -o internal/oglaf/testdata/rss_live_snapshot.xml
+      - curl -L --fail --show-error --silent https://static.feissarimokat.com/dynamic/latest/posts.rss -o internal/feissarimokat/testdata/feed_live_snapshot.rss
+      - |
+        post_url=$$(python - <<'PY'
+        import pathlib, re
+        rss = pathlib.Path('internal/feissarimokat/testdata/feed_live_snapshot.rss').read_text()
+        m = re.search(r'<link>(https://www\.feissarimokat\.com/[^<]+)</link>', rss)
+        if not m:
+            raise SystemExit('failed to find feissarimokat post link in RSS fixture')
+        print(m.group(1))
+        PY
+        )
+        curl -L --fail --show-error --silent "$$post_url" -o internal/feissarimokat/testdata/post_live_snapshot.html
+      - curl -L --fail --show-error --silent 'https://hn.algolia.com/api/v1/search_by_date?tags=front_page&hitsPerPage=100' -o internal/hackernews/testdata/frontpage_live_snapshot.json
+      - |
+        item_id=$$(python - <<'PY'
+        import json, pathlib
+        data = json.loads(pathlib.Path('internal/hackernews/testdata/frontpage_live_snapshot.json').read_text())
+        hits = data.get('hits') or []
+        if not hits or 'objectID' not in hits[0]:
+            raise SystemExit('failed to find Hacker News objectID in frontpage fixture')
+        print(hits[0]['objectID'])
+        PY
+        )
+        curl -L --fail --show-error --silent "https://hn.algolia.com/api/v1/items/$$item_id" -o internal/hackernews/testdata/item_live_snapshot.json
+
   publish:
     desc: "Copy binary to remote Linux server"
     deps: [build-linux]

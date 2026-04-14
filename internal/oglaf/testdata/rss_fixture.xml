@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Oglaf</title>
+    <link>https://www.oglaf.com/</link>
+    <description>Representative fixture for Oglaf RSS parsing tests.</description>
+
+    <item>
+      <title><![CDATA[First Comic]]></title>
+      <link>https://example.com/comics/first</link>
+      <description><![CDATA[First desc &amp; details]]></description>
+      <pubDate>Mon, 02 Jan 2006 15:04:05 -0700</pubDate>
+      <guid isPermaLink="false">first-guid</guid>
+    </item>
+
+    <item>
+      <title>Missing Date</title>
+      <link>https://example.com/comics/missing-date</link>
+      <description>skip me</description>
+    </item>
+
+    <item>
+      <title>Bad Date</title>
+      <link>https://example.com/comics/bad-date</link>
+      <description>skip me too</description>
+      <pubDate>definitely not a date</pubDate>
+      <guid>bad-date-guid</guid>
+    </item>
+
+    <item>
+      <title>Second Comic</title>
+      <link>https://example.com/comics/second</link>
+      <description><![CDATA[Second desc]]></description>
+      <pubDate>Tue, 03 Jan 2006 15:04:05 MST</pubDate>
+      <guid>second-guid</guid>
+    </item>
+  </channel>
+</rss>
