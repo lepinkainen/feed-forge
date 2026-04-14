@@ -2,7 +2,6 @@ package feed
 
 import (
 	"fmt"
-	"html"
 	"strings"
 	"text/template"
 	"time"
@@ -22,12 +21,48 @@ func TemplateFuncs() template.FuncMap {
 	}
 }
 
-// xmlEscape escapes XML special characters while avoiding double-encoding
+// xmlEscape escapes XML special characters and strips invalid XML 1.0 code points.
 func xmlEscape(s string) string {
-	// First unescape any existing HTML entities to avoid double-encoding
-	s = html.UnescapeString(s)
-	// Then apply proper HTML escaping
-	return html.EscapeString(s)
+	var b strings.Builder
+	b.Grow(len(s))
+
+	for _, r := range s {
+		if !isValidXMLRune(r) {
+			continue
+		}
+
+		switch r {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&quot;")
+		case '\'':
+			b.WriteString("&#39;")
+		default:
+			b.WriteRune(r)
+		}
+	}
+
+	return b.String()
+}
+
+func isValidXMLRune(r rune) bool {
+	switch {
+	case r == 0x9, r == 0xA, r == 0xD:
+		return true
+	case r >= 0x20 && r <= 0xD7FF:
+		return true
+	case r >= 0xE000 && r <= 0xFFFD:
+		return true
+	case r >= 0x10000 && r <= 0x10FFFF:
+		return true
+	default:
+		return false
+	}
 }
 
 // formatTime formats time in RFC3339 format for Atom feeds
@@ -46,7 +81,7 @@ func formatDate(s string) string {
 
 // formatScore formats score and comment count for display
 func formatScore(score, comments int) string {
-	return sprintf("Score: %d | Comments: %d", score, comments)
+	return fmt.Sprintf("Score: %d | Comments: %d", score, comments)
 }
 
 // truncateText truncates text to a maximum length
@@ -55,9 +90,4 @@ func truncateText(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
-}
-
-// sprintf is a helper for template string formatting
-func sprintf(format string, args ...any) string {
-	return fmt.Sprintf(format, args...)
 }

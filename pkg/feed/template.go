@@ -76,7 +76,8 @@ func NewTemplateGenerator() *TemplateGenerator {
 func (tg *TemplateGenerator) LoadTemplate(name, filePath string) error {
 	slog.Debug("Loading template", "name", name, "path", filePath)
 
-	// Read template content
+	// Read template content.
+	// #nosec G304 -- template overrides are intentionally loaded from user-selected local paths.
 	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to read template file %s: %w", filePath, err)
@@ -85,7 +86,7 @@ func (tg *TemplateGenerator) LoadTemplate(name, filePath string) error {
 	// Parse template with the specified name
 	tmpl, err := template.New(name).Funcs(tg.funcMap).Parse(string(content))
 	if err != nil {
-		return fmt.Errorf("%w: failed to parse template %s: %v", ErrTemplateInvalid, filePath, err)
+		return fmt.Errorf("%w: failed to parse template %s: %w", ErrTemplateInvalid, filePath, err)
 	}
 
 	tg.templates[name] = tmpl
@@ -128,7 +129,7 @@ func (tg *TemplateGenerator) LoadTemplateWithFallback(name string) error {
 func (tg *TemplateGenerator) loadTemplateFromContent(name, content string) error {
 	tmpl, err := template.New(name).Funcs(tg.funcMap).Parse(content)
 	if err != nil {
-		return fmt.Errorf("%w: failed to parse template %s: %v", ErrTemplateInvalid, name, err)
+		return fmt.Errorf("%w: failed to parse template %s: %w", ErrTemplateInvalid, name, err)
 	}
 
 	tg.templates[name] = tmpl

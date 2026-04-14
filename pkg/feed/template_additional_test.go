@@ -18,8 +18,11 @@ import (
 func TestTemplateFuncsHelpers(t *testing.T) {
 	funcs := TemplateFuncs()
 
-	if got := funcs["xmlEscape"].(func(string) string)("Fish &amp; Chips <3"); got != "Fish &amp; Chips &lt;3" {
-		t.Fatalf("xmlEscape() = %q", got)
+	if got := funcs["xmlEscape"].(func(string) string)("Fish &amp; Chips <3"); got != "Fish &amp;amp; Chips &lt;3" {
+		t.Fatalf("xmlEscape() preserved entity text = %q", got)
+	}
+	if got := funcs["xmlEscape"].(func(string) string)("bad\x00chars\x1f and \"quotes\" 'apostrophes'"); got != "badchars and &quot;quotes&quot; &#39;apostrophes&#39;" {
+		t.Fatalf("xmlEscape() strips controls and escapes quotes = %q", got)
 	}
 
 	ts := time.Date(2024, 3, 14, 15, 9, 26, 0, time.UTC)
@@ -170,6 +173,46 @@ func TestGenerateAtomFeedWithEmbeddedTemplate_Golden(t *testing.T) {
 	}
 
 	testutil.CompareGolden(t, filepath.Join("testdata", "generated", "simple-atom.xml.golden"), got)
+}
+
+func TestGenerateFromTemplate_EscapesFeedMetadata(t *testing.T) {
+	tg := NewTemplateGenerator()
+	const templateContent = `<feed><title>{{.FeedTitle | xmlEscape}}</title><link href="{{.FeedLink | xmlEscape}}"/><id>{{.FeedID | xmlEscape}}</id><author>{{.FeedAuthor | xmlEscape}}</author><subtitle>{{.FeedDescription | xmlEscape}}</subtitle><generator>{{.Generator | xmlEscape}}</generator></feed>`
+
+	templatePath := filepath.Join(t.TempDir(), "feed-metadata.tmpl")
+	if err := os.WriteFile(templatePath, []byte(templateContent), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+	if err := tg.LoadTemplate("feed-metadata", templatePath); err != nil {
+		t.Fatalf("LoadTemplate() error = %v", err)
+	}
+
+	var out strings.Builder
+	if err := tg.GenerateFromTemplate("feed-metadata", &TemplateData{
+		FeedTitle:       `Fish &amp; Chips <Feed>`,
+		FeedLink:        `https://example.com/?q=fish&chips=1`,
+		FeedID:          "feed\x00id",
+		FeedAuthor:      `A "B"`,
+		FeedDescription: "Line\x1fbreak",
+		Generator:       `Forge's <gen>`,
+	}, &out); err != nil {
+		t.Fatalf("GenerateFromTemplate() error = %v", err)
+	}
+
+	got := out.String()
+	expected := []string{
+		`<title>Fish &amp;amp; Chips &lt;Feed&gt;</title>`,
+		`<link href="https://example.com/?q=fish&amp;chips=1"/>`,
+		`<id>feedid</id>`,
+		`<author>A &quot;B&quot;</author>`,
+		`<subtitle>Linebreak</subtitle>`,
+		`<generator>Forge&#39;s &lt;gen&gt;</generator>`,
+	}
+	for _, want := range expected {
+		if !strings.Contains(got, want) {
+			t.Fatalf("generated output missing %q in %s", want, got)
+		}
+	}
 }
 
 func TestGenerateFromTemplate_MissingTemplate(t *testing.T) {
