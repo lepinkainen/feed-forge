@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+    <title>~tech - Tildes</title>
+    <id>https://tildes.net/~tech/topics.atom</id>
+    <link rel="self" href="https://tildes.net/~tech/topics.atom" />
+    <updated>2026-05-18T19:32:36Z</updated>
+
+
+        <entry>
+            <title><![CDATA[MP3 player recommendations]]></title>
+            <id>https://tildes.net/~tech/1u7a/mp3_player_recommendations</id>
+                <link rel="alternate" href="https://tildes.net/~tech/1u7a/mp3_player_recommendations"/>
+            <content type="html"><![CDATA[
+                    <p>Hey all, I'm looking for some recommendations for mp3 players.  Specifically though I'm looking for two different recommendations.  I have a seventh grader I teach who is really interested in getting started with mp3 files (that she has yet to acquire), so a cheaper device if possible.  I, on the other hand, have a solid yet growing collection of FLAC files I would love to listen to not on my phone, so I'm willing to splurge a little more for this.  I tried searching tildes for it but couldn't find anything that suit my need.  I know about the tangara (I think thats how it is spelled?) but I can't seem to find if I can even buy it anymore :/  Thanks!!!</p>
+
+                    <hr/>
+                <p>Comments URL: <a href="https://tildes.net/~tech/1u7a/mp3_player_recommendations">https://tildes.net/~tech/1u7a/mp3_player_recommendations</a></p>
+                <p>Votes: 22</p>
+                <p>Comments: 29</p>
+            ]]></content>
+            <author><name>eggy</name></author>
+                <updated>2026-05-15T18:03:03Z</updated>
+        </entry>
+        <entry>
+            <title><![CDATA[Energy supplier abandons Lake Tahoe residents to serve data centers]]></title>
+            <id>https://tildes.net/~tech/1u79/energy_supplier_abandons_lake_tahoe_residents_to_serve_data_centers</id>
+                <link rel="alternate" href="https://arstechnica.com/ai/2026/05/energy-supplier-abandons-lake-tahoe-residents-to-serve-data-centers/"/>
+            <content type="html"><![CDATA[
+                    <p>Link URL: <a href="https://arstechnica.com/ai/2026/05/energy-supplier-abandons-lake-tahoe-residents-to-serve-data-centers/">https://arstechnica.com/ai/2026/05/energy-supplier-abandons-lake-tahoe-residents-to-serve-data-centers/</a></p>
+                <p>Comments URL: <a href="https://tildes.net/~tech/1u79/energy_supplier_abandons_lake_tahoe_residents_to_serve_data_centers">https://tildes.net/~tech/1u79/energy_supplier_abandons_lake_tahoe_residents_to_serve_data_centers</a></p>
+                <p>Votes: 20</p>
+                <p>Comments: 7</p>
+            ]]></content>
+            <author><name>redwall_hp</name></author>
+                <updated>2026-05-15T17:44:14Z</updated>
+        </entry>
+        <entry>
+            <title><![CDATA[Moving from Cinnamon to Xfce fixed my video playback stutter on Linux Mint]]></title>
+            <id>https://tildes.net/~tech/1u71/moving_from_cinnamon_to_xfce_fixed_my_video_playback_stutter_on_linux_mint</id>
+                <link rel="alternate" href="https://tildes.net/~tech/1u71/moving_from_cinnamon_to_xfce_fixed_my_video_playback_stutter_on_linux_mint"/>
+            <content type="html"><![CDATA[
+                    <p>I have an old PC that I put Linux Mint on around Windows 10 end of life. It's been pretty decent except I noticed at some point <strong>videos started stuttering</strong> a lot. The stutter would happen every 10 to 30 seconds on every video. Didn't matter if it was Firefox or Celluloid (the mpv wrapper that comes with Linux Mint), didn't matter which streaming site I tried, or what codec was used on a local file.</p>
+<p>I tried everything: different kernels, different GPU drivers, bunch of Firefox about:config media settings, Celluloid/mpv buffer sizes and video acceleration configurations. Even messed with pipewire (audio) config to see if its priority was too high.</p>
+<p>This is apparently a really common problem if you search for "linux mint video stutter". All sorts of different varied solutions out there that work for some users and not others.</p>
+<p>One thread suggested removing Cinnamon applets. I don't have any custom applets on that PC, and was afraid to disable any built-in ones. So I went one step further and replaced Cinnamon with Xfce using:</p>
+<pre><code>sudo apt install mint-meta-xfce
+</code></pre>
+<p>Which is Mint's meta-package for Xfce desktop environment and other stuff that works well with it.</p>
+<p>It worked right away with no further configuration! Xfce to the rescue! (Sure, maybe uglier and fewer options for display scaling, but I'd rather have basic things like videos working smoothly.)</p>
+<p>Long time ago Xfce was the right choice for an even more ancient PC back in the day. Funny how it circles back to being the solution again.</p>
+<p>So if I ever want to move any older PCs to Linux, I think I'll be skipping Cinnamon and reaching for other lighter desktop environments instead.</p>
+
+                    <hr/>
+                <p>Comments URL: <a href="https://tildes.net/~tech/1u71/moving_from_cinnamon_to_xfce_fixed_my_video_playback_stutter_on_linux_mint">https://tildes.net/~tech/1u71/moving_from_cinnamon_to_xfce_fixed_my_video_playback_stutter_on_linux_mint</a></p>
+                <p>Votes: 24</p>
+                <p>Comments: 8</p>
+            ]]></content>
+            <author><name>talklittle</name></author>
+                <updated>2026-05-15T06:34:02Z</updated>
+        </entry>
+</feed>

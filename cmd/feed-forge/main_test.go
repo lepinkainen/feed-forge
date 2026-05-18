@@ -49,6 +49,11 @@ oglaf:
   feed-url: "https://custom.oglaf.com/rss/"
   outfile: oglaf.xml
   interval: 36h
+
+tildes:
+  topic: "tech"
+  outfile: tildes.xml
+  interval: 30m
 `
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {

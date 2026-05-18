@@ -28,6 +28,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
+	"github.com/lepinkainen/feed-forge/internal/tildes"
 )
 
 // CLI structure
@@ -77,6 +78,12 @@ var CLI struct {
 		FeedURL  string `help:"Oglaf RSS feed URL" default:"https://www.oglaf.com/feeds/rss/"`
 		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"oglaf" help:"Generate RSS feed from Oglaf comics."`
+
+	Tildes struct {
+		Outfile  string `help:"Output file path" short:"o" default:"tildes.xml"`
+		Topic    string `help:"Tildes topic name (without leading ~), e.g. tech" default:"tech" yaml:"topic"`
+		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"tildes" help:"Generate RSS feed from a Tildes group Atom feed."`
 
 	Generate struct{} `cmd:"generate" help:"Generate feeds for all configured providers."`
 }
@@ -180,6 +187,14 @@ func buildProviderConfig(name string) any {
 				Interval: CLI.Oglaf.Interval,
 			},
 			FeedURL: CLI.Oglaf.FeedURL,
+		}
+	case "tildes":
+		return &tildes.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.Tildes.Outfile,
+				Interval: CLI.Tildes.Interval,
+			},
+			Topic: CLI.Tildes.Topic,
 		}
 	default:
 		return nil
@@ -562,6 +577,22 @@ func main() {
 		outfile := resolveOutfile(CLI.Oglaf.Outfile)
 		if err := provider.GenerateFeed(outfile); err != nil {
 			slog.Error("Failed to generate Oglaf feed", "error", err)
+			os.Exit(1)
+		}
+
+	case "tildes":
+		slog.Debug("Generating Tildes feed...")
+
+		providerConfig := buildProviderConfig("tildes")
+		provider, err := providers.DefaultRegistry.CreateProvider("tildes", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create Tildes provider", "error", err)
+			os.Exit(1)
+		}
+
+		outfile := resolveOutfile(CLI.Tildes.Outfile)
+		if err := provider.GenerateFeed(outfile); err != nil {
+			slog.Error("Failed to generate Tildes feed", "error", err)
 			os.Exit(1)
 		}
 
