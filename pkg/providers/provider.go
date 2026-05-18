@@ -53,7 +53,7 @@ func GetGenerateConfig(config any) GenerateConfig {
 		return GenerateConfig{}
 	}
 	v := reflect.ValueOf(config)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {
