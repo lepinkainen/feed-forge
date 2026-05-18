@@ -1,6 +1,8 @@
 package oglaf
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"html"
 	"io"
@@ -12,6 +14,7 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
@@ -270,13 +273,14 @@ const feedItemLimit = 25
 // then returns the most recent processed comics for the feed. Unprocessed
 // backfill work is intentionally not returned directly: mixing freshly
 // processed items into the feed caused duplicate-entry churn in readers.
-func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]providers.FeedItem, error) {
+func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]providers.FeedItem, int, error) {
 	// 1. Backfill images for unprocessed comics (bounded per run for performance).
 	unprocessed, err := getUnprocessedComics(contentDB, 50)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get unprocessed comics: %w", err)
+		return nil, 0, fmt.Errorf("failed to get unprocessed comics: %w", err)
 	}
 
+	backfilled := 0
 	for _, item := range unprocessed {
 		imageURL, extractErr := extractFullComicURL(item.Link)
 		if extractErr != nil {
@@ -289,14 +293,16 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 
 		if markErr := markImageExtracted(contentDB, item.Link, imageURL); markErr != nil {
 			slog.Warn("Failed to mark image as extracted", "link", item.Link, "error", markErr)
+			continue
 		}
+		backfilled++
 	}
 
 	// 2. Return the most recent processed comics. After the backfill above,
 	// any item just processed that is recent enough will appear here.
 	cachedItems, err := getProcessedComics(contentDB, feedItemLimit)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get processed comics: %w", err)
+		return nil, 0, fmt.Errorf("failed to get processed comics: %w", err)
 	}
 
 	transformedItems := make([]providers.FeedItem, 0, len(cachedItems))
@@ -305,23 +311,22 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 		transformedItems = append(transformedItems, item)
 	}
 
-	slog.Debug("Incremental comic processing completed", "backfilled", len(unprocessed), "feedItems", len(transformedItems))
-	return transformedItems, nil
+	slog.Debug("Incremental comic processing completed", "attempted", len(unprocessed), "backfilled", backfilled, "feedItems", len(transformedItems))
+	return transformedItems, backfilled, nil
+}
+
+func (p *Provider) httpCacheStore() *httpcache.Store {
+	if p == nil || p.BaseProvider == nil {
+		return nil
+	}
+	return p.HTTPCache
 }
 
 // fetchRSSFeed fetches and parses the Oglaf RSS feed
 func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 	// Use enhanced HTTP client with proper timeout and retry policy
 	client := api.NewGenericClient()
-	resp, err := client.Get(p.FeedURL, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := httpcache.CachedGet(context.Background(), client, p.httpCacheStore(), p.FeedURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -418,15 +423,23 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	}
 
 	// Incremental RSS fetch
+	rssNotModified := false
 	_, err := p.fetchRSSFeedIncremental(contentDB)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, httpcache.ErrNotModified) {
+			rssNotModified = true
+		} else {
+			return nil, err
+		}
 	}
 
 	// Process comics incrementally
-	feedItems, err := p.processComicsIncremental(contentDB)
+	feedItems, backfilled, err := p.processComicsIncremental(contentDB)
 	if err != nil {
 		return nil, err
+	}
+	if rssNotModified && backfilled == 0 {
+		return nil, httpcache.ErrNotModified
 	}
 
 	// Apply limit if specified

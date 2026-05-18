@@ -1,6 +1,7 @@
 package oglaf
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -8,6 +9,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/api"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
+	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
 func TestFetchRSSFeedWithHTTPServer(t *testing.T) {
@@ -168,5 +173,68 @@ func TestItemAccessors(t *testing.T) {
 	}
 	if item.Content() != "Comic description" {
 		t.Fatalf("Content() = %q, want %q", item.Content(), "Comic description")
+	}
+}
+
+func TestFetchRSSFeedConditionalNotModified(t *testing.T) {
+	rssFixture := mustReadFixture(t, "rss_fixture.xml")
+	store, err := httpcache.NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 2 {
+			if got := r.Header.Get("If-None-Match"); got != `"rss-v1"` {
+				t.Fatalf("If-None-Match = %q, want %q", got, `"rss-v1"`)
+			}
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		w.Header().Set("ETag", `"rss-v1"`)
+		_, _ = w.Write(rssFixture)
+	}))
+	defer server.Close()
+
+	provider := &Provider{BaseProvider: &providers.BaseProvider{HTTPCache: store}, FeedURL: server.URL}
+	if _, err := provider.fetchRSSFeed(); err != nil {
+		t.Fatalf("fetchRSSFeed(first) error = %v", err)
+	}
+
+	_, err = provider.fetchRSSFeed()
+	if !errors.Is(err, httpcache.ErrNotModified) {
+		t.Fatalf("fetchRSSFeed(second) error = %v, want ErrNotModified", err)
+	}
+}
+
+func TestFetchRSSFeedOverwritesChangedValidators(t *testing.T) {
+	store, err := httpcache.NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("ETag", `"rss-v2"`)
+		_, _ = w.Write(mustReadFixture(t, "rss_fixture.xml"))
+	}))
+	defer server.Close()
+
+	if err := store.Save(server.URL, api.CacheValidators{ETag: `"rss-v1"`}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	provider := &Provider{BaseProvider: &providers.BaseProvider{HTTPCache: store}, FeedURL: server.URL}
+	if _, err := provider.fetchRSSFeed(); err != nil {
+		t.Fatalf("fetchRSSFeed() error = %v", err)
+	}
+
+	got, ok := store.Get(server.URL)
+	if !ok || got.ETag != `"rss-v2"` {
+		t.Fatalf("stored validators = %#v, %v; want etag v2", got, ok)
 	}
 }

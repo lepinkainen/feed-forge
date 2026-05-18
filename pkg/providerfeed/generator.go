@@ -1,11 +1,16 @@
 package providerfeed
 
 import (
+	"errors"
 	"fmt"
+	"log/slog"
+	"os"
+	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -27,6 +32,20 @@ func BuildGenerator(
 
 		feedItems, err := fetchItems(0)
 		if err != nil {
+			if errors.Is(err, httpcache.ErrNotModified) {
+				if _, statErr := os.Stat(outfile); statErr == nil {
+					now := time.Now()
+					if chtimeErr := os.Chtimes(outfile, now, now); chtimeErr != nil {
+						return chtimeErr
+					}
+					slog.Debug("Feed unchanged, bumped mtime", "outfile", outfile)
+					return nil
+				} else if !errors.Is(statErr, os.ErrNotExist) {
+					return statErr
+				}
+
+				slog.Warn("Upstream unchanged but output file is missing", "outfile", outfile)
+			}
 			return err
 		}
 

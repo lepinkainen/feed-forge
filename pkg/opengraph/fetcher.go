@@ -3,6 +3,7 @@ package opengraph
 import (
 	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -18,6 +19,8 @@ import (
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
+
+var errNotModified = errors.New("opengraph not modified")
 
 // ProxyConfig configures a proxy for fetching URLs from blocked domains
 type ProxyConfig struct {
@@ -88,6 +91,8 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 		return nil, nil
 	}
 
+	var expired *Data
+
 	// Check database cache first
 	if f.db != nil {
 		cached, err := f.db.GetCachedData(targetURL)
@@ -97,6 +102,11 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 		if cached != nil {
 			slog.Debug("Found cached OpenGraph data", "url", targetURL)
 			return cached, nil
+		}
+
+		expired, err = f.db.GetExpiredData(targetURL)
+		if err != nil {
+			slog.Warn("Error reading expired cache", "url", targetURL, "error", err)
 		}
 
 		// Check for recent failures
@@ -114,7 +124,31 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	data, err := f.fetchFreshData(fetchCtx, targetURL)
+	var etag, lastModified string
+	if expired != nil {
+		etag = expired.ETag
+		lastModified = expired.LastModified
+	}
+
+	var data *Data
+	var err error
+	if etag == "" && lastModified == "" {
+		data, err = f.fetchFreshData(fetchCtx, targetURL)
+	} else {
+		data, err = f.fetchFreshDataConditional(fetchCtx, targetURL, etag, lastModified)
+	}
+	if errors.Is(err, errNotModified) && expired != nil {
+		now := time.Now()
+		expired.FetchedAt = now
+		expired.ExpiresAt = now.Add(time.Duration(DefaultCacheHours) * time.Hour)
+		if f.db != nil {
+			if cacheErr := f.db.SaveCachedData(expired, true); cacheErr != nil {
+				slog.Warn("Failed to refresh OpenGraph cache expiry", "url", targetURL, "error", cacheErr)
+			}
+		}
+		slog.Debug("OpenGraph data unchanged, refreshed cache expiry", "url", targetURL)
+		return expired, nil
+	}
 	fetchSuccess := err == nil && data != nil
 
 	if err != nil {
@@ -146,8 +180,12 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 	return nil, err
 }
 
-// fetchFreshData fetches fresh OpenGraph data from a URL
+// fetchFreshData fetches fresh OpenGraph data from a URL.
 func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, error) {
+	return f.fetchFreshDataConditional(ctx, targetURL, "", "")
+}
+
+func (f *Fetcher) fetchFreshDataConditional(ctx context.Context, targetURL, etag, lastModified string) (*Data, error) {
 	// Get or create a mutex for this URL to prevent concurrent fetches
 	urlMutexInterface, _ := f.urlMutexes.LoadOrStore(targetURL, &sync.Mutex{})
 	urlMutex := urlMutexInterface.(*sync.Mutex)
@@ -211,6 +249,12 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	req.Header.Set("Connection", "keep-alive")
+	if etag != "" {
+		req.Header.Set("If-None-Match", etag)
+	}
+	if lastModified != "" {
+		req.Header.Set("If-Modified-Since", lastModified)
+	}
 
 	if useProxy {
 		req.Header.Set("X-Proxy-Secret", f.proxy.Secret)
@@ -229,6 +273,9 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	}()
 
 	// Check status code
+	if resp.StatusCode == http.StatusNotModified {
+		return nil, errNotModified
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("HTTP error: %d %s", resp.StatusCode, resp.Status)
 	}
@@ -279,9 +326,11 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 	// Extract OpenGraph data
 	now := time.Now()
 	data := &Data{
-		URL:       targetURL,
-		FetchedAt: now,
-		ExpiresAt: now.Add(time.Duration(DefaultCacheHours) * time.Hour),
+		URL:          targetURL,
+		ETag:         resp.Header.Get("ETag"),
+		LastModified: resp.Header.Get("Last-Modified"),
+		FetchedAt:    now,
+		ExpiresAt:    now.Add(time.Duration(DefaultCacheHours) * time.Hour),
 	}
 
 	f.extractOpenGraphTags(doc, data)

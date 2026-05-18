@@ -1,6 +1,7 @@
 package feissarimokat
 
 import (
+	"context"
 	"encoding/xml"
 	"fmt"
 	"html"
@@ -10,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 )
 
 // FeedURL and ImageBaseURL are vars (not consts) so tests can redirect them
@@ -28,20 +30,18 @@ var (
 	imgSrcRegex   = regexp.MustCompile(`<img[^>]*src="([^"]+)"`)
 )
 
-// fetchRSSFeed fetches and parses the feissarimokat RSS feed
+// fetchRSSFeed fetches and parses the feissarimokat RSS feed.
 func fetchRSSFeed() ([]RSSItem, error) {
+	return fetchRSSFeedWithCache(nil)
+}
+
+func fetchRSSFeedWithCache(store *httpcache.Store) ([]RSSItem, error) {
 	slog.Debug("Fetching Feissarimokat RSS feed", "url", FeedURL)
 
 	client := api.NewGenericClient()
-	resp, err := client.Get(FeedURL, nil)
+	body, err := httpcache.CachedGet(context.Background(), client, store, FeedURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching RSS feed: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading RSS response: %w", err)
 	}
 
 	var rss RSS

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -135,5 +136,47 @@ func TestBuildGeneratorConfigFuncOverridesPreview(t *testing.T) {
 	}
 	if strings.Contains(string(contents), "Original Title") {
 		t.Errorf("feed output should not contain original title; got:\n%s", contents)
+	}
+}
+
+func TestBuildGeneratorNotModifiedBumpsExistingOutfile(t *testing.T) {
+	outfile := filepath.Join(t.TempDir(), "feed.xml")
+	if err := os.WriteFile(outfile, []byte("old"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	oldTime := time.Now().Add(-time.Hour).Truncate(time.Second)
+	if err := os.Chtimes(outfile, oldTime, oldTime); err != nil {
+		t.Fatalf("Chtimes(old): %v", err)
+	}
+
+	gen := BuildGenerator(
+		func(int) ([]providers.FeedItem, error) { return nil, httpcache.ErrNotModified },
+		validPreview(),
+		nil,
+		nil,
+	)
+	if err := gen(outfile); err != nil {
+		t.Fatalf("gen error = %v", err)
+	}
+
+	info, err := os.Stat(outfile)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if !info.ModTime().After(oldTime) {
+		t.Fatalf("mtime = %v, want after %v", info.ModTime(), oldTime)
+	}
+}
+
+func TestBuildGeneratorNotModifiedMissingOutfileReturnsError(t *testing.T) {
+	gen := BuildGenerator(
+		func(int) ([]providers.FeedItem, error) { return nil, httpcache.ErrNotModified },
+		validPreview(),
+		nil,
+		nil,
+	)
+	err := gen(filepath.Join(t.TempDir(), "missing.xml"))
+	if !errors.Is(err, httpcache.ErrNotModified) {
+		t.Fatalf("error = %v, want ErrNotModified", err)
 	}
 }

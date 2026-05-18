@@ -1,12 +1,15 @@
 package feissarimokat
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 )
 
 func TestFetchRSSFeedWithHTTPServer(t *testing.T) {
@@ -216,5 +219,41 @@ func TestProcessItemsBuildsContentAndSkipsScrapeFailures(t *testing.T) {
 	}
 	if !strings.Contains(items[1].ContentHTML, `alt="Title &#34;quoted&#34; &lt;b&gt;tag&lt;/b&gt;"`) {
 		t.Fatalf("second ContentHTML = %q, want escaped alt text", items[1].ContentHTML)
+	}
+}
+
+func TestFetchRSSFeedWithCacheReturnsNotModified(t *testing.T) {
+	oldFeedURL := FeedURL
+	defer func() { FeedURL = oldFeedURL }()
+
+	store, err := httpcache.NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var requestCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if requestCount == 2 {
+			if got := r.Header.Get("If-None-Match"); got != `"feed-v1"` {
+				t.Fatalf("If-None-Match = %q, want %q", got, `"feed-v1"`)
+			}
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		w.Header().Set("ETag", `"feed-v1"`)
+		_, _ = w.Write([]byte(`<?xml version="1.0"?><rss><channel><item><title>Post</title><link>https://example.com/post</link></item></channel></rss>`))
+	}))
+	defer server.Close()
+
+	FeedURL = server.URL
+	if _, err := fetchRSSFeedWithCache(store); err != nil {
+		t.Fatalf("fetchRSSFeedWithCache(first) error = %v", err)
+	}
+	_, err = fetchRSSFeedWithCache(store)
+	if !errors.Is(err, httpcache.ErrNotModified) {
+		t.Fatalf("fetchRSSFeedWithCache(second) error = %v, want ErrNotModified", err)
 	}
 }

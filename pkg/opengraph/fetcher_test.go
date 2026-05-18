@@ -312,6 +312,58 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 	}
 }
 
+func TestFetchDataConditionalNotModifiedRefreshesExpiredCache(t *testing.T) {
+	var sawValidator atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("If-None-Match") == `"og-v1"` {
+			sawValidator.Store(true)
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		http.Error(w, "missing conditional", http.StatusBadRequest)
+	}))
+	defer server.Close()
+
+	db := newTestOGDB(t)
+	now := time.Now().UTC().Add(-48 * time.Hour)
+	targetURL := "http://example.invalid/post"
+	cached := &Data{
+		URL:       targetURL,
+		Title:     "Cached OG",
+		ETag:      `"og-v1"`,
+		FetchedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+	}
+	if err := db.SaveCachedData(cached, true); err != nil {
+		t.Fatalf("SaveCachedData() error = %v", err)
+	}
+
+	fetcher := NewFetcher(db)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	data, err := fetcher.FetchData(targetURL)
+	if err != nil {
+		t.Fatalf("FetchData() error = %v", err)
+	}
+	if data == nil || data.Title != "Cached OG" {
+		t.Fatalf("FetchData() = %#v", data)
+	}
+	if !sawValidator.Load() {
+		t.Fatal("server did not receive If-None-Match")
+	}
+
+	fresh, err := db.GetCachedData(targetURL)
+	if err != nil {
+		t.Fatalf("GetCachedData() error = %v", err)
+	}
+	if fresh == nil || !fresh.ExpiresAt.After(time.Now().UTC()) {
+		t.Fatalf("refreshed cache = %#v", fresh)
+	}
+}
+
 func rewriteHostTransport(server *httptest.Server) *http.Transport {
 	serverAddr := server.Listener.Addr().String()
 

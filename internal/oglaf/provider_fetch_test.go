@@ -279,9 +279,13 @@ func TestProcessComicsIncrementalBackfillsAndReturnsProcessed(t *testing.T) {
 	}
 
 	p := &Provider{BaseProvider: &providers.BaseProvider{ContentDB: db}, FeedURL: srv.URL}
-	feedItems, err := p.processComicsIncremental(db)
+	feedItems, backfilled, err := p.processComicsIncremental(db)
 	if err != nil {
 		t.Fatalf("processComicsIncremental: %v", err)
+	}
+
+	if backfilled != 2 {
+		t.Fatalf("backfilled = %d, want 2", backfilled)
 	}
 
 	// Two comics extracted successfully → 2 feed items returned.

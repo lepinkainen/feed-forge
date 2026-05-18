@@ -122,6 +122,8 @@ func (db *Database) createSchema() error {
 		description TEXT DEFAULT '',
 		image TEXT DEFAULT '',
 		site_name TEXT DEFAULT '',
+		etag TEXT DEFAULT '',
+		last_modified TEXT DEFAULT '',
 		fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		expires_at TIMESTAMP NOT NULL,
 		fetch_success BOOLEAN DEFAULT 0
@@ -131,8 +133,20 @@ func (db *Database) createSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_opengraph_expires ON opengraph_cache(expires_at);
 	`
 
-	_, err := db.db.Exec(schema)
-	return err
+	if _, err := db.db.Exec(schema); err != nil {
+		return err
+	}
+
+	for _, migration := range []string{
+		`ALTER TABLE opengraph_cache ADD COLUMN etag TEXT DEFAULT ''`,
+		`ALTER TABLE opengraph_cache ADD COLUMN last_modified TEXT DEFAULT ''`,
+	} {
+		if _, err := db.db.Exec(migration); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // Close closes the database connection
@@ -152,7 +166,7 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 	defer db.mu.RUnlock()
 
 	query := `
-	SELECT url, title, description, image, site_name, fetched_at, expires_at, fetch_success
+	SELECT url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at, fetch_success
 	FROM opengraph_cache 
 	WHERE url = ? AND expires_at > CURRENT_TIMESTAMP AND fetch_success = 1
 	`
@@ -166,6 +180,8 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 		&data.Description,
 		&data.Image,
 		&data.SiteName,
+		&data.ETag,
+		&data.LastModified,
 		&data.FetchedAt,
 		&data.ExpiresAt,
 		&fetchSuccess,
@@ -192,8 +208,8 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 
 	query := `
 	INSERT OR REPLACE INTO opengraph_cache 
-	(url, title, description, image, site_name, fetched_at, expires_at, fetch_success)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	(url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at, fetch_success)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.db.Exec(query,
@@ -202,6 +218,8 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 		data.Description,
 		data.Image,
 		data.SiteName,
+		data.ETag,
+		data.LastModified,
 		data.FetchedAt,
 		data.ExpiresAt,
 		fetchSuccess,
@@ -214,12 +232,53 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 	return nil
 }
 
-// CleanupExpired removes expired cache entries
+// GetExpiredValidators returns validators for an expired successful cached row.
+func (db *Database) GetExpiredValidators(url string) (etag, lastModified string, found bool) {
+	data, err := db.GetExpiredData(url)
+	if err != nil || data == nil {
+		return "", "", false
+	}
+	return data.ETag, data.LastModified, data.ETag != "" || data.LastModified != ""
+}
+
+// GetExpiredData retrieves expired successful cached OpenGraph data for conditional refresh.
+func (db *Database) GetExpiredData(url string) (*Data, error) {
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+
+	query := `
+	SELECT url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at
+	FROM opengraph_cache
+	WHERE url = ? AND expires_at <= CURRENT_TIMESTAMP AND fetch_success = 1
+	`
+
+	var data Data
+	err := db.db.QueryRow(query, url).Scan(
+		&data.URL,
+		&data.Title,
+		&data.Description,
+		&data.Image,
+		&data.SiteName,
+		&data.ETag,
+		&data.LastModified,
+		&data.FetchedAt,
+		&data.ExpiresAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to query expired cached data: %w", err)
+	}
+	return &data, nil
+}
+
+// CleanupExpired removes expired cache entries without reusable validators.
 func (db *Database) CleanupExpired() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	query := `DELETE FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP`
+	query := `DELETE FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP AND etag = '' AND last_modified = ''`
 	result, err := db.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup expired entries: %w", err)

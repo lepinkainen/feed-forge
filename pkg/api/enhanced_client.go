@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"time"
@@ -26,6 +27,20 @@ type EnhancedClient struct {
 	retryPolicy    *RetryPolicy
 	userAgent      string
 	defaultHeaders map[string]string
+}
+
+// CacheValidators holds HTTP conditional request validators.
+type CacheValidators struct {
+	ETag         string
+	LastModified string
+}
+
+// ConditionalResponse is the fully-read result of a conditional GET.
+type ConditionalResponse struct {
+	NotModified  bool
+	Body         []byte
+	ETag         string
+	LastModified string
 }
 
 // NewEnhancedClient creates a new enhanced HTTP client with the provided configuration
@@ -152,6 +167,68 @@ func (ec *EnhancedClient) GetWithContext(ctx context.Context, url string, additi
 	return response, nil
 }
 
+// GetConditional performs an HTTP GET request with ETag/Last-Modified validators.
+func (ec *EnhancedClient) GetConditional(ctx context.Context, url string, prev CacheValidators, additionalHeaders map[string]string) (*ConditionalResponse, error) {
+	var response *ConditionalResponse
+
+	operation := func() error {
+		if err := ec.rateLimiter.WaitContext(ctx); err != nil {
+			return fmt.Errorf("rate limiter wait: %w", err)
+		}
+
+		req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		ec.applyHeaders(req, additionalHeaders)
+		if prev.ETag != "" {
+			req.Header.Set("If-None-Match", prev.ETag)
+		}
+		if prev.LastModified != "" {
+			req.Header.Set("If-Modified-Since", prev.LastModified)
+		}
+
+		start := time.Now()
+		res, err := ec.client.Do(req)
+		duration := time.Since(start)
+		if err != nil {
+			ec.logAPICall(url, duration, false, err)
+			return fmt.Errorf("failed to perform GET request: %w", err)
+		}
+		defer func() { _ = res.Body.Close() }()
+
+		if err := ensureConditionalStatus(res); err != nil {
+			ec.logAPICall(url, duration, false, err)
+			return &HTTPError{StatusCode: res.StatusCode, Message: err.Error(), Err: err}
+		}
+
+		conditional := &ConditionalResponse{
+			NotModified:  res.StatusCode == http.StatusNotModified,
+			ETag:         res.Header.Get("ETag"),
+			LastModified: res.Header.Get("Last-Modified"),
+		}
+		if !conditional.NotModified {
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				ec.logAPICall(url, duration, false, err)
+				return fmt.Errorf("failed to read response body: %w", err)
+			}
+			conditional.Body = body
+		}
+
+		response = conditional
+		ec.logAPICall(url, duration, true, nil)
+		return nil
+	}
+
+	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url)); err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (ec *EnhancedClient) applyHeaders(req *http.Request, additionalHeaders map[string]string) {
 	req.Header.Set("User-Agent", ec.userAgent)
 
@@ -187,6 +264,14 @@ func (ec *EnhancedClient) RemoveDefaultHeader(key string) {
 // ensureStatusOK checks if the response status is 200 OK
 func ensureStatusOK(resp *http.Response) error {
 	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status code: %d %s", resp.StatusCode, resp.Status)
+	}
+	return nil
+}
+
+// ensureConditionalStatus checks if the response status is OK or Not Modified.
+func ensureConditionalStatus(resp *http.Response) error {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotModified {
 		return fmt.Errorf("unexpected status code: %d %s", resp.StatusCode, resp.Status)
 	}
 	return nil

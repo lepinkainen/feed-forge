@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -298,5 +299,55 @@ func TestNewGenericClient(t *testing.T) {
 	// Should use NoOpRateLimiter
 	if !client.CanProceed() {
 		t.Errorf("NewGenericClient() should have no rate limiting")
+	}
+}
+
+func TestEnhancedClient_GetConditional(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if r.URL.Path == "/fail" {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+
+		if r.Header.Get("If-None-Match") == `"v1"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+
+		w.Header().Set("ETag", `"v1"`)
+		w.Header().Set("Last-Modified", "Mon, 01 Jan 2024 00:00:00 GMT")
+		_, _ = w.Write([]byte("body"))
+	}))
+	defer server.Close()
+
+	client := NewEnhancedClient(&EnhancedClientConfig{
+		RetryPolicy: &RetryPolicy{MaxAttempts: 2, InitialBackoff: time.Millisecond, RetryableErrors: []int{http.StatusInternalServerError}},
+		RateLimiter: NewNoOpRateLimiter(),
+	})
+
+	fresh, err := client.GetConditional(t.Context(), server.URL, CacheValidators{}, nil)
+	if err != nil {
+		t.Fatalf("GetConditional(fresh) error = %v", err)
+	}
+	if fresh.NotModified || string(fresh.Body) != "body" || fresh.ETag != `"v1"` || fresh.LastModified == "" {
+		t.Fatalf("fresh response = %#v", fresh)
+	}
+
+	notModified, err := client.GetConditional(t.Context(), server.URL, CacheValidators{ETag: `"v1"`}, nil)
+	if err != nil {
+		t.Fatalf("GetConditional(not modified) error = %v", err)
+	}
+	if !notModified.NotModified || len(notModified.Body) != 0 {
+		t.Fatalf("notModified response = %#v", notModified)
+	}
+
+	beforeFail := hits.Load()
+	if _, err := client.GetConditional(t.Context(), server.URL+"/fail", CacheValidators{}, nil); err == nil {
+		t.Fatal("GetConditional(500) error = nil, want error")
+	}
+	if got := hits.Load() - beforeFail; got != 2 {
+		t.Fatalf("retry hits = %d, want 2", got)
 	}
 }

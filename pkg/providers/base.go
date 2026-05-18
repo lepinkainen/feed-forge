@@ -7,6 +7,7 @@ import (
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/opengraph"
 )
 
@@ -15,6 +16,7 @@ type BaseProvider struct {
 	// Database connections
 	ContentDB *database.Database
 	OgDB      *opengraph.Database
+	HTTPCache *httpcache.Store
 
 	generateFeed func(outfile string) error
 }
@@ -41,8 +43,24 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	}
 
 	// Clean up expired OpenGraph cache entries
-	if err := base.OgDB.CleanupExpired(); err != nil {
-		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", err)
+	if cleanupErr := base.OgDB.CleanupExpired(); cleanupErr != nil {
+		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", cleanupErr)
+	}
+
+	httpCachePath, err := filesystem.GetDefaultPath("http_cache.db")
+	if err != nil {
+		if closeErr := base.OgDB.Close(); closeErr != nil {
+			slog.Error("Failed to close OpenGraph database", "error", closeErr)
+		}
+		return nil, err
+	}
+
+	base.HTTPCache, err = httpcache.NewStore(httpCachePath)
+	if err != nil {
+		if closeErr := base.OgDB.Close(); closeErr != nil {
+			slog.Error("Failed to close OpenGraph database", "error", closeErr)
+		}
+		return nil, err
 	}
 
 	// Initialize content database if needed
@@ -52,6 +70,9 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 			if closeErr := base.OgDB.Close(); closeErr != nil {
 				slog.Error("Failed to close OpenGraph database", "error", closeErr)
 			}
+			if closeErr := base.HTTPCache.Close(); closeErr != nil {
+				slog.Error("Failed to close HTTP cache database", "error", closeErr)
+			}
 			return nil, err
 		}
 
@@ -59,6 +80,9 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 		if err != nil {
 			if closeErr := base.OgDB.Close(); closeErr != nil {
 				slog.Error("Failed to close OpenGraph database", "error", closeErr)
+			}
+			if closeErr := base.HTTPCache.Close(); closeErr != nil {
+				slog.Error("Failed to close HTTP cache database", "error", closeErr)
 			}
 			return nil, err
 		}
@@ -92,6 +116,12 @@ func (b *BaseProvider) Close() error {
 
 	if b.OgDB != nil {
 		if err := b.OgDB.Close(); err != nil {
+			lastErr = err
+		}
+	}
+
+	if b.HTTPCache != nil {
+		if err := b.HTTPCache.Close(); err != nil {
 			lastErr = err
 		}
 	}

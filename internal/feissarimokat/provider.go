@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -78,11 +79,25 @@ func init() {
 	})
 }
 
+func (p *Provider) httpCacheStore() *httpcache.Store {
+	if p == nil || p.BaseProvider == nil {
+		return nil
+	}
+	return p.HTTPCache
+}
+
 // FetchItems implements the FeedProvider interface
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	slog.Debug("Fetching Feissarimokat items")
 
-	rssItems, err := fetchRSSFeed()
+	store := p.httpCacheStore()
+	var rssItems []RSSItem
+	var err error
+	if store == nil {
+		rssItems, err = fetchRSSFeed()
+	} else {
+		rssItems, err = fetchRSSFeedWithCache(store)
+	}
 	if err != nil {
 		return nil, err
 	}
