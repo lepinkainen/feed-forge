@@ -54,3 +54,8 @@ reddit.json
 
 # Private files
 .envrc
+.pi/todos/
+
+# Generated feed output directory
+rss/
+
