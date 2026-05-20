@@ -133,6 +133,19 @@ func TestNormalizeTopic(t *testing.T) {
 	}
 }
 
+func TestNormalizeTopics(t *testing.T) {
+	got := normalizeTopics("~tech", []string{"science", " tech ", "~games", ""})
+	want := []string{"tech", "science", "games"}
+	if len(got) != len(want) {
+		t.Fatalf("len = %d, want %d: %#v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestBuildFeedURL(t *testing.T) {
 	if got, want := buildFeedURL("tech"), "https://tildes.net/~tech/topics.atom"; got != want {
 		t.Errorf("buildFeedURL(\"tech\") = %q, want %q", got, want)

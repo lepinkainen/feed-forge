@@ -52,6 +52,30 @@ func normalizeTopic(topic string) string {
 	return strings.TrimPrefix(strings.TrimSpace(topic), "~")
 }
 
+// normalizeTopics returns unique, non-empty topic names. The singular topic is
+// kept for backwards-compatible configs; topics provides multi-group support.
+func normalizeTopics(topic string, topics []string) []string {
+	seen := make(map[string]struct{}, len(topics)+1)
+	out := make([]string, 0, len(topics)+1)
+	add := func(raw string) {
+		name := normalizeTopic(raw)
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+
+	add(topic)
+	for _, candidate := range topics {
+		add(candidate)
+	}
+	return out
+}
+
 // buildFeedURL constructs the Tildes Atom feed URL for the given bare topic.
 func buildFeedURL(topic string) string {
 	return fmt.Sprintf("https://tildes.net/~%s/topics.atom", topic)

@@ -45,6 +45,7 @@
 <body onload="resolveURLs()">
     <h1>Available Feeds</h1>
     {{if .Feeds}}
+    <p><a href="{{.OPMLFilename}}">Import all feeds (OPML)</a></p>
     {{range .Feeds}}
     <div class="feed">
         <div class="feed-name">{{.Provider}}</div>

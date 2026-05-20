@@ -2,9 +2,11 @@
 package main
 
 import (
+	xmlenc "encoding/xml"
 	"fmt"
 	"html/template"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -29,14 +31,16 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 	"github.com/lepinkainen/feed-forge/internal/tildes"
+	"github.com/lepinkainen/feed-forge/internal/youtube"
 )
 
 // CLI structure
 var CLI struct {
-	Config    string `help:"Configuration file path" default:"config.yaml"`
-	Debug     bool   `help:"Enable debug logging" default:"false"`
-	OutputDir string `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
-	CacheDir  string `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
+	Config      string `help:"Configuration file path" default:"config.yaml"`
+	Debug       bool   `help:"Enable debug logging" default:"false"`
+	OutputDir   string `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
+	FeedBaseURL string `help:"Public base URL for generated feeds and OPML" default:"https://endymion.xyz/rss/" yaml:"feed-base-url"`
+	CacheDir    string `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
 
 	Reddit struct {
 		Outfile     string `help:"Output file path" short:"o" default:"reddit.xml"`
@@ -69,7 +73,7 @@ var CLI struct {
 	} `cmd:"feissarimokat" help:"Generate RSS feed from Feissarimokat comics."`
 
 	Preview struct {
-		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf, feissarimokat)."`
+		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf, feissarimokat, tildes, youtube)."`
 		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
 		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
@@ -80,10 +84,25 @@ var CLI struct {
 	} `cmd:"oglaf" help:"Generate RSS feed from Oglaf comics."`
 
 	Tildes struct {
-		Outfile  string `help:"Output file path" short:"o" default:"tildes.xml"`
-		Topic    string `help:"Tildes topic name (without leading ~), e.g. tech" default:"tech" yaml:"topic"`
-		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
-	} `cmd:"tildes" help:"Generate RSS feed from a Tildes group Atom feed."`
+		Outfile  string   `help:"Output file path" short:"o" default:"tildes.xml"`
+		Topic    string   `help:"Tildes topic name (without leading ~), e.g. tech" default:"tech" yaml:"topic"`
+		Topics   []string `help:"Tildes topic names (without leading ~), repeat for multiple groups" yaml:"topics"`
+		Interval string   `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"tildes" help:"Generate RSS feed from Tildes group Atom feeds."`
+
+	YouTube struct {
+		Outfile       string   `help:"Output file path" short:"o" default:"youtube.xml"`
+		FeedURL       string   `help:"YouTube Atom feed URL" yaml:"feed-url"`
+		FeedURLs      []string `name:"feed-urls" help:"YouTube Atom feed URLs, repeat for multiple channels" yaml:"feed-urls"`
+		ChannelIDs    []string `name:"channel-ids" help:"YouTube channel IDs, repeat for multiple channels" yaml:"channel-ids"`
+		Limit         int      `help:"Maximum number of items" default:"30" yaml:"limit"`
+		IncludeShorts bool     `help:"Include YouTube Shorts" default:"false" yaml:"include-shorts"`
+		Interval      string   `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"youtube" name:"youtube" help:"Generate RSS feed from YouTube channel Atom feeds."`
+
+	YouTubeRSS struct {
+		URL string `arg:"" name:"url" help:"YouTube channel URL, e.g. https://www.youtube.com/@Taskmaster"`
+	} `cmd:"youtube-rss" name:"youtube-rss" help:"Print the RSS feed URL advertised by a YouTube channel page."`
 
 	Generate struct{} `cmd:"generate" help:"Generate feeds for all configured providers."`
 }
@@ -194,7 +213,20 @@ func buildProviderConfig(name string) any {
 				Outfile:  CLI.Tildes.Outfile,
 				Interval: CLI.Tildes.Interval,
 			},
-			Topic: CLI.Tildes.Topic,
+			Topic:  CLI.Tildes.Topic,
+			Topics: CLI.Tildes.Topics,
+		}
+	case "youtube":
+		return &youtube.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.YouTube.Outfile,
+				Interval: CLI.YouTube.Interval,
+			},
+			FeedURL:       CLI.YouTube.FeedURL,
+			FeedURLs:      CLI.YouTube.FeedURLs,
+			ChannelIDs:    CLI.YouTube.ChannelIDs,
+			Limit:         CLI.YouTube.Limit,
+			IncludeShorts: CLI.YouTube.IncludeShorts,
 		}
 	default:
 		return nil
@@ -316,9 +348,34 @@ func shouldSkipProvider(outfile string, interval time.Duration) (bool, time.Dura
 
 type feedResult struct {
 	Provider string
+	FeedName string
 	Filename string // e.g. "reddit.xml"
 	Status   string // "generated", "skipped", "failed"
 }
+
+type opmlDocument struct {
+	XMLName xmlenc.Name `xml:"opml"`
+	Version string      `xml:"version,attr"`
+	Head    opmlHead    `xml:"head"`
+	Body    opmlBody    `xml:"body"`
+}
+
+type opmlHead struct {
+	Title string `xml:"title"`
+}
+
+type opmlBody struct {
+	Outlines []opmlOutline `xml:"outline"`
+}
+
+type opmlOutline struct {
+	Text   string `xml:"text,attr"`
+	Title  string `xml:"title,attr"`
+	Type   string `xml:"type,attr"`
+	XMLURL string `xml:"xmlUrl,attr"`
+}
+
+const opmlFilename = "feeds.opml"
 
 func generateAll(configPath string) error {
 	names, err := configuredProviders(configPath)
@@ -369,6 +426,7 @@ func generateProvider(configPath, name string) feedResult {
 		slog.Error("Provider not found", "provider", name, "error", err)
 		return result
 	}
+	result.FeedName = feedName(info, name)
 
 	var providerConfig any
 	if info.ConfigFactory != nil {
@@ -453,12 +511,74 @@ func generateFeedIndex(results []feedResult) error {
 	}
 	defer func() { _ = file.Close() }()
 
-	data := struct{ Feeds []feedResult }{Feeds: feeds}
+	data := struct {
+		Feeds        []feedResult
+		OPMLFilename string
+	}{Feeds: feeds, OPMLFilename: opmlFilename}
 	if err := htmlTmpl.Execute(file, data); err != nil {
 		return fmt.Errorf("failed to execute index template: %w", err)
 	}
 
+	if err := generateOPML(feeds); err != nil {
+		return err
+	}
+
 	slog.Info("Generated feed index", "path", indexPath)
+	return nil
+}
+
+func feedName(info *providers.ProviderInfo, fallback string) string {
+	if info != nil && info.Preview != nil && info.Preview.ProviderName != "" {
+		return info.Preview.ProviderName
+	}
+	if info != nil && info.Name != "" {
+		return info.Name
+	}
+	return fallback
+}
+
+func generateOPML(feeds []feedResult) error {
+	baseURL := CLI.FeedBaseURL
+	if baseURL == "" {
+		baseURL = "https://endymion.xyz/rss/"
+	}
+
+	outlines := make([]opmlOutline, 0, len(feeds))
+	for _, f := range feeds {
+		xmlURL, err := url.JoinPath(baseURL, f.Filename)
+		if err != nil {
+			return fmt.Errorf("build OPML URL for %s: %w", f.Filename, err)
+		}
+		name := f.FeedName
+		if name == "" {
+			name = f.Provider
+		}
+		outlines = append(outlines, opmlOutline{
+			Text:   name,
+			Title:  name,
+			Type:   "rss",
+			XMLURL: xmlURL,
+		})
+	}
+
+	doc := opmlDocument{
+		Version: "2.0",
+		Head:    opmlHead{Title: "Feed Forge feeds"},
+		Body:    opmlBody{Outlines: outlines},
+	}
+	payload, err := xmlenc.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal OPML: %w", err)
+	}
+	payload = append([]byte(xmlenc.Header), payload...)
+	payload = append(payload, '\n')
+
+	opmlPath := filepath.Join(CLI.OutputDir, opmlFilename)
+	if err := os.WriteFile(opmlPath, payload, 0o600); err != nil {
+		return fmt.Errorf("write OPML file: %w", err)
+	}
+
+	slog.Info("Generated OPML feed list", "path", opmlPath)
 	return nil
 }
 
@@ -595,6 +715,30 @@ func main() {
 			slog.Error("Failed to generate Tildes feed", "error", err)
 			os.Exit(1)
 		}
+
+	case "youtube":
+		slog.Debug("Generating YouTube feed...")
+
+		providerConfig := buildProviderConfig("youtube")
+		provider, err := providers.DefaultRegistry.CreateProvider("youtube", providerConfig)
+		if err != nil {
+			slog.Error("Failed to create YouTube provider", "error", err)
+			os.Exit(1)
+		}
+
+		outfile := resolveOutfile(CLI.YouTube.Outfile)
+		if err := provider.GenerateFeed(outfile); err != nil {
+			slog.Error("Failed to generate YouTube feed", "error", err)
+			os.Exit(1)
+		}
+
+	case "youtube-rss <url>":
+		feedURL, err := youtube.DiscoverFeedURL(CLI.YouTubeRSS.URL)
+		if err != nil {
+			slog.Error("Failed to discover YouTube RSS feed", "url", CLI.YouTubeRSS.URL, "error", err)
+			os.Exit(1)
+		}
+		fmt.Println(feedURL)
 
 	case "generate":
 		slog.Debug("Generating feeds for all configured providers...")

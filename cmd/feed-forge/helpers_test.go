@@ -225,15 +225,20 @@ func TestGenerateFeedIndex_SkipsWithoutOutputDir(t *testing.T) {
 }
 
 func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
-	old := CLI.OutputDir
-	t.Cleanup(func() { CLI.OutputDir = old })
+	oldOutputDir := CLI.OutputDir
+	oldFeedBaseURL := CLI.FeedBaseURL
+	t.Cleanup(func() {
+		CLI.OutputDir = oldOutputDir
+		CLI.FeedBaseURL = oldFeedBaseURL
+	})
 	CLI.OutputDir = t.TempDir()
+	CLI.FeedBaseURL = "https://endymion.xyz/rss/"
 
 	results := []feedResult{
-		{Provider: "reddit", Filename: "reddit.xml", Status: "generated"},
-		{Provider: "oglaf", Filename: "oglaf.xml", Status: "skipped"},
-		{Provider: "broken", Filename: "broken.xml", Status: "failed"},
-		{Provider: "hackernews", Filename: "hackernews.xml", Status: "generated"},
+		{Provider: "reddit", FeedName: "Reddit", Filename: "reddit.xml", Status: "generated"},
+		{Provider: "oglaf", FeedName: "Oglaf", Filename: "oglaf.xml", Status: "skipped"},
+		{Provider: "broken", FeedName: "Broken", Filename: "broken.xml", Status: "failed"},
+		{Provider: "hackernews", FeedName: "Hacker News", Filename: "hackernews.xml", Status: "generated"},
 	}
 
 	if err := generateFeedIndex(results); err != nil {
@@ -246,7 +251,7 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 	}
 	body := string(content)
 
-	for _, want := range []string{"hackernews.xml", "oglaf.xml", "reddit.xml"} {
+	for _, want := range []string{"hackernews.xml", "oglaf.xml", "reddit.xml", "feeds.opml"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("index.html missing %q:\n%s", want, body)
 		}
@@ -260,5 +265,24 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 	hnIndex := strings.Index(body, "hackernews")
 	if !(hnIndex >= 0 && oglafIndex >= 0 && redditIndex >= 0 && hnIndex < oglafIndex && oglafIndex < redditIndex) {
 		t.Fatalf("providers not sorted in index.html:\n%s", body)
+	}
+
+	opmlContent, err := os.ReadFile(filepath.Join(CLI.OutputDir, "feeds.opml"))
+	if err != nil {
+		t.Fatalf("ReadFile(feeds.opml) error = %v", err)
+	}
+	opml := string(opmlContent)
+	for _, want := range []string{
+		`<opml version="2.0">`,
+		`text="Hacker News" title="Hacker News" type="rss" xmlUrl="https://endymion.xyz/rss/hackernews.xml"`,
+		`text="Oglaf" title="Oglaf" type="rss" xmlUrl="https://endymion.xyz/rss/oglaf.xml"`,
+		`text="Reddit" title="Reddit" type="rss" xmlUrl="https://endymion.xyz/rss/reddit.xml"`,
+	} {
+		if !strings.Contains(opml, want) {
+			t.Fatalf("feeds.opml missing %q:\n%s", want, opml)
+		}
+	}
+	if strings.Contains(opml, "broken.xml") {
+		t.Fatalf("feeds.opml should not include failed feed:\n%s", opml)
 	}
 }

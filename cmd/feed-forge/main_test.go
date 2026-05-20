@@ -10,6 +10,8 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
+	"github.com/lepinkainen/feed-forge/internal/tildes"
+	"github.com/lepinkainen/feed-forge/internal/youtube"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -52,8 +54,20 @@ oglaf:
 
 tildes:
   topic: "tech"
+  topics: ["science", "games"]
   outfile: tildes.xml
   interval: 30m
+
+youtube:
+  feed-urls:
+    - "https://www.youtube.com/feeds/videos.xml?channel_id=UC1111111111111111111111"
+    - "https://www.youtube.com/feeds/videos.xml?channel_id=UC2222222222222222222222"
+  channel-ids:
+    - "UC3333333333333333333333"
+  limit: 25
+  include-shorts: false
+  outfile: youtube.xml
+  interval: 45m
 `
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(yaml), 0o644); err != nil {
@@ -160,6 +174,63 @@ func TestLoadProviderConfigFromYAML_Feissarimokat(t *testing.T) {
 	}
 	if gc.Interval != "48h" {
 		t.Errorf("Interval = %q, want %q", gc.Interval, "48h")
+	}
+}
+
+func TestLoadProviderConfigFromYAML_Tildes(t *testing.T) {
+	configPath := writeTestConfig(t)
+
+	cfg := &tildes.Config{}
+	if err := loadProviderConfigFromYAML(configPath, "tildes", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if cfg.Topic != "tech" {
+		t.Errorf("Topic = %q, want tech", cfg.Topic)
+	}
+	if len(cfg.Topics) != 2 || cfg.Topics[0] != "science" || cfg.Topics[1] != "games" {
+		t.Errorf("Topics = %#v, want [science games]", cfg.Topics)
+	}
+
+	gc := providers.GetGenerateConfig(cfg)
+	if gc.Outfile != "tildes.xml" {
+		t.Errorf("Outfile = %q, want %q", gc.Outfile, "tildes.xml")
+	}
+	if gc.Interval != "30m" {
+		t.Errorf("Interval = %q, want %q", gc.Interval, "30m")
+	}
+}
+
+func TestLoadProviderConfigFromYAML_YouTube(t *testing.T) {
+	configPath := writeTestConfig(t)
+
+	cfg := &youtube.Config{}
+	if err := loadProviderConfigFromYAML(configPath, "youtube", cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(cfg.FeedURLs) != 2 {
+		t.Fatalf("FeedURLs len = %d, want 2", len(cfg.FeedURLs))
+	}
+	if cfg.FeedURLs[0] != "https://www.youtube.com/feeds/videos.xml?channel_id=UC1111111111111111111111" {
+		t.Errorf("FeedURLs[0] = %q", cfg.FeedURLs[0])
+	}
+	if len(cfg.ChannelIDs) != 1 || cfg.ChannelIDs[0] != "UC3333333333333333333333" {
+		t.Errorf("ChannelIDs = %#v", cfg.ChannelIDs)
+	}
+	if cfg.Limit != 25 {
+		t.Errorf("Limit = %d, want 25", cfg.Limit)
+	}
+	if cfg.IncludeShorts {
+		t.Errorf("IncludeShorts = true, want false")
+	}
+
+	gc := providers.GetGenerateConfig(cfg)
+	if gc.Outfile != "youtube.xml" {
+		t.Errorf("Outfile = %q, want %q", gc.Outfile, "youtube.xml")
+	}
+	if gc.Interval != "45m" {
+		t.Errorf("Interval = %q, want %q", gc.Interval, "45m")
 	}
 }
 
