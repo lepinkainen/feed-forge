@@ -247,10 +247,7 @@ func (p *Provider) fetchRSSFeedIncremental(contentDB *database.Database) ([]*RSS
 	}
 
 	// 2. Identify new items
-	newItems, err := getNewRSSItems(contentDB, allItems)
-	if err != nil {
-		return nil, fmt.Errorf("failed to identify new RSS items: %w", err)
-	}
+	newItems := getNewRSSItems(contentDB, allItems)
 
 	// 3. Cache new RSS items
 	for _, item := range newItems {
@@ -324,88 +321,74 @@ func (p *Provider) httpCacheStore() *httpcache.Store {
 
 // fetchRSSFeed fetches and parses the Oglaf RSS feed
 func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
-	// Use enhanced HTTP client with proper timeout and retry policy
 	client := api.NewGenericClient()
 	body, err := httpcache.CachedGet(context.Background(), client, p.httpCacheStore(), p.FeedURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Simple RSS parsing - look for items
-	bodyStr := string(body)
-
-	matches := rssItemRegex.FindAllStringSubmatch(bodyStr, -1)
+	matches := rssItemRegex.FindAllStringSubmatch(string(body), -1)
 
 	var items []*RSSItem
-
 	for _, match := range matches {
 		if len(match) < 2 {
 			continue
 		}
-
-		itemContent := match[1]
-
-		titleMatches := rssTitleRegex.FindStringSubmatch(itemContent)
-		title := ""
-		if len(titleMatches) > 1 {
-			title = titleMatches[1]
-			if title == "" && len(titleMatches) > 2 {
-				title = titleMatches[2]
-			}
-			title = unwrapCDATA(title)
-		}
-
-		linkMatches := rssLinkRegex.FindStringSubmatch(itemContent)
-		link := ""
-		if len(linkMatches) > 1 {
-			link = linkMatches[1]
-		}
-
-		descMatches := rssDescRegex.FindStringSubmatch(itemContent)
-		description := ""
-		if len(descMatches) > 1 {
-			description = descMatches[1]
-			if description == "" && len(descMatches) > 2 {
-				description = descMatches[2]
-			}
-			description = unwrapCDATA(description)
-		}
-
-		pubDateMatches := rssPubRegex.FindStringSubmatch(itemContent)
-		rawPubDate := ""
-		if len(pubDateMatches) > 1 {
-			rawPubDate = pubDateMatches[1]
-		}
-
-		if rawPubDate == "" {
-			slog.Warn("Skipping RSS item with missing pubDate", "link", link)
-			continue
-		}
-		publishedAt, err := parsePubDate(rawPubDate)
-		if err != nil {
-			slog.Warn("Skipping RSS item with unparseable pubDate", "link", link, "pubDate", rawPubDate, "error", err)
-			continue
-		}
-
-		guidMatches := rssGUIDRegex.FindStringSubmatch(itemContent)
-		guid := ""
-		if len(guidMatches) > 1 {
-			guid = guidMatches[1]
-		}
-
-		if title != "" && link != "" {
-			items = append(items, &RSSItem{
-				Title:       title,
-				Link:        link,
-				Description: description,
-				PublishedAt: publishedAt.UTC(),
-				GUID:        guid,
-				ImageURL:    "",
-			})
+		if item := parseRSSItem(match[1]); item != nil {
+			items = append(items, item)
 		}
 	}
-
 	return items, nil
+}
+
+func parseRSSItem(itemContent string) *RSSItem {
+	title := extractCDATAField(rssTitleRegex, itemContent)
+	link := extractFirstGroup(rssLinkRegex, itemContent)
+	description := extractCDATAField(rssDescRegex, itemContent)
+	rawPubDate := extractFirstGroup(rssPubRegex, itemContent)
+
+	if rawPubDate == "" {
+		slog.Warn("Skipping RSS item with missing pubDate", "link", link)
+		return nil
+	}
+	publishedAt, err := parsePubDate(rawPubDate)
+	if err != nil {
+		slog.Warn("Skipping RSS item with unparseable pubDate", "link", link, "pubDate", rawPubDate, "error", err)
+		return nil
+	}
+
+	guid := extractFirstGroup(rssGUIDRegex, itemContent)
+	if title == "" || link == "" {
+		return nil
+	}
+	return &RSSItem{
+		Title:       title,
+		Link:        link,
+		Description: description,
+		PublishedAt: publishedAt.UTC(),
+		GUID:        guid,
+		ImageURL:    "",
+	}
+}
+
+func extractFirstGroup(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+func extractCDATAField(re *regexp.Regexp, s string) string {
+	m := re.FindStringSubmatch(s)
+	if len(m) <= 1 {
+		return ""
+	}
+	v := m[1]
+	if v == "" && len(m) > 2 {
+		v = m[2]
+	}
+	return unwrapCDATA(v)
 }
 
 // FetchItems implements the FeedProvider interface

@@ -129,7 +129,7 @@ func getRSSItemByLink(db *database.Database, link string) (*RSSItem, error) {
 }
 
 // getNewRSSItems identifies new RSS items that don't exist in the database
-func getNewRSSItems(db *database.Database, allItems []*RSSItem) ([]*RSSItem, error) {
+func getNewRSSItems(db *database.Database, allItems []*RSSItem) []*RSSItem {
 	var newItems []*RSSItem
 
 	for _, item := range allItems {
@@ -144,7 +144,7 @@ func getNewRSSItems(db *database.Database, allItems []*RSSItem) ([]*RSSItem, err
 		}
 	}
 
-	return newItems, nil
+	return newItems
 }
 
 // markImageExtracted marks a comic as having its image extracted
