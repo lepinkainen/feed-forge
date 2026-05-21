@@ -21,6 +21,8 @@ linters:
     - sqlclosecheck
     - noctx
     - gosec
+    - unparam
+    - gocyclo
   exclusions:
     paths:
       - llm-shared
@@ -52,6 +54,8 @@ linters:
         - singleCaseSwitch
         - ifElseChain
         - paramTypeCombine
+    gocyclo:
+      min-complexity: 15
     revive:
       severity: warning
       rules:
