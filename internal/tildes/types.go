@@ -3,6 +3,7 @@ package tildes
 import (
 	"encoding/xml"
 	"fmt"
+	"html"
 	"time"
 )
 
@@ -55,12 +56,15 @@ type Item struct {
 	commentCount int
 }
 
-// Title returns the entry title with a "[~group] " prefix.
+// Title returns the entry title with a "[~group] " prefix. Tildes wraps titles
+// in CDATA but still encodes HTML entities inside (e.g. &#34;), so we run them
+// through html.UnescapeString to recover the original characters.
 func (i *Item) Title() string {
+	title := html.UnescapeString(i.entry.Title)
 	if i.group != "" {
-		return fmt.Sprintf("[%s] %s", i.group, i.entry.Title)
+		return fmt.Sprintf("[%s] %s", i.group, title)
 	}
-	return i.entry.Title
+	return title
 }
 
 // Link returns the <link rel="alternate"> href — the external article for
