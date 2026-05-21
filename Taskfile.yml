@@ -109,11 +109,11 @@ tasks:
     cmds:
       - mkdir -p internal/oglaf/testdata internal/feissarimokat/testdata internal/hackernews/testdata
       - curl -L --fail --show-error --silent https://www.oglaf.com/feeds/rss/ -o internal/oglaf/testdata/rss_live_snapshot.xml
-      - curl -L --fail --show-error --silent https://static.feissarimokat.com/dynamic/latest/posts.rss -o internal/feissarimokat/testdata/feed_live_snapshot.rss
+      - curl -L --fail --show-error --silent https://static.feissarimokat.com/dynamic/latest/posts.rss -o internal/feissarimokat/testdata/feed_live_snapshot.xml
       - |
         post_url=$$(python - <<'PY'
         import pathlib, re
-        rss = pathlib.Path('internal/feissarimokat/testdata/feed_live_snapshot.rss').read_text()
+        rss = pathlib.Path('internal/feissarimokat/testdata/feed_live_snapshot.xml').read_text()
         m = re.search(r'<link>(https://www\.feissarimokat\.com/[^<]+)</link>', rss)
         if not m:
             raise SystemExit('failed to find feissarimokat post link in RSS fixture')
