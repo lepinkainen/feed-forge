@@ -20,11 +20,6 @@ type LookupIPAddrsResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
 }
 
-// IsFetchableURL checks whether a URL is safe for outbound HTTP fetching.
-func IsFetchableURL(urlStr string) bool {
-	return IsFetchableURLWithContext(context.Background(), net.DefaultResolver, urlStr)
-}
-
 // IsFetchableURLWithContext checks whether a URL is safe for outbound HTTP fetching.
 func IsFetchableURLWithContext(ctx context.Context, resolver LookupIPAddrsResolver, urlStr string) bool {
 	u, err := url.Parse(urlStr)
@@ -83,22 +78,24 @@ func IsBlockedFetchAddr(ip netip.Addr) bool {
 		return true
 	}
 
-	if ip.Is4() {
-		b := ip.As4()
-		if b[0] == 100 && b[1]&0xc0 == 64 { // 100.64.0.0/10 shared address space
-			return true
-		}
-		if b[0] == 169 && b[1] == 254 { // IPv4 link-local / metadata route
-			return true
-		}
-		if b[0] == 198 && (b[1] == 18 || b[1] == 19) { // benchmark testing range
-			return true
-		}
-		if b[0] >= 224 { // multicast + reserved
-			return true
-		}
+	if ip.Is4() && isBlockedIPv4(ip.As4()) {
+		return true
 	}
 
+	return false
+}
+
+func isBlockedIPv4(b [4]byte) bool {
+	switch {
+	case b[0] == 100 && b[1]&0xc0 == 64: // 100.64.0.0/10 shared address space
+		return true
+	case b[0] == 169 && b[1] == 254: // IPv4 link-local / metadata route
+		return true
+	case b[0] == 198 && (b[1] == 18 || b[1] == 19): // benchmark testing range
+		return true
+	case b[0] >= 224: // multicast + reserved
+		return true
+	}
 	return false
 }
 
