@@ -40,27 +40,31 @@ func discoverFeedURLFromHTML(r io.Reader) (string, error) {
 			}
 			return "", fmt.Errorf("parse youtube channel page: %w", z.Err())
 		case html.StartTagToken, html.SelfClosingTagToken:
-			t := z.Token()
-			if !strings.EqualFold(t.Data, "link") {
-				continue
+			if href, ok := rssAlternateHref(z.Token()); ok {
+				return href, nil
 			}
-
-			attrs := make(map[string]string, len(t.Attr))
-			for _, attr := range t.Attr {
-				attrs[strings.ToLower(attr.Key)] = attr.Val
-			}
-			if attrs["href"] == "" {
-				continue
-			}
-			if !strings.EqualFold(attrs["type"], "application/rss+xml") {
-				continue
-			}
-			if !hasRel(attrs["rel"], "alternate") {
-				continue
-			}
-			return attrs["href"], nil
 		}
 	}
+}
+
+func rssAlternateHref(t html.Token) (string, bool) {
+	if !strings.EqualFold(t.Data, "link") {
+		return "", false
+	}
+	attrs := make(map[string]string, len(t.Attr))
+	for _, attr := range t.Attr {
+		attrs[strings.ToLower(attr.Key)] = attr.Val
+	}
+	if attrs["href"] == "" {
+		return "", false
+	}
+	if !strings.EqualFold(attrs["type"], "application/rss+xml") {
+		return "", false
+	}
+	if !hasRel(attrs["rel"], "alternate") {
+		return "", false
+	}
+	return attrs["href"], true
 }
 
 func hasRel(rel, want string) bool {

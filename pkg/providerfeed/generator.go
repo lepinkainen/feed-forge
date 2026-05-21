@@ -32,21 +32,7 @@ func BuildGenerator(
 
 		feedItems, err := fetchItems(0)
 		if err != nil {
-			if errors.Is(err, httpcache.ErrNotModified) {
-				if _, statErr := os.Stat(outfile); statErr == nil {
-					now := time.Now()
-					if chtimeErr := os.Chtimes(outfile, now, now); chtimeErr != nil {
-						return chtimeErr
-					}
-					slog.Debug("Feed unchanged, bumped mtime", "outfile", outfile)
-					return nil
-				} else if !errors.Is(statErr, os.ErrNotExist) {
-					return statErr
-				}
-
-				slog.Warn("Upstream unchanged but output file is missing", "outfile", outfile)
-			}
-			return err
+			return handleFetchError(outfile, err)
 		}
 
 		if err := filesystem.EnsureDirectoryExists(outfile); err != nil {
@@ -65,4 +51,22 @@ func BuildGenerator(
 		feed.LogFeedGeneration(len(feedItems), outfile)
 		return nil
 	}
+}
+
+func handleFetchError(outfile string, err error) error {
+	if !errors.Is(err, httpcache.ErrNotModified) {
+		return err
+	}
+	if _, statErr := os.Stat(outfile); statErr == nil {
+		now := time.Now()
+		if chtimeErr := os.Chtimes(outfile, now, now); chtimeErr != nil {
+			return chtimeErr
+		}
+		slog.Debug("Feed unchanged, bumped mtime", "outfile", outfile)
+		return nil
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return statErr
+	}
+	slog.Warn("Upstream unchanged but output file is missing", "outfile", outfile)
+	return err
 }
