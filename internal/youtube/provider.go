@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -87,6 +88,13 @@ func NewYouTubeProvider(feedURLs []string, limit int, includeShorts bool) (provi
 	return p, nil
 }
 
+func (p *Provider) httpCacheStore() *httpcache.Store {
+	if p == nil || p.BaseProvider == nil {
+		return nil
+	}
+	return p.HTTPCache
+}
+
 func (p *Provider) feedConfig() feedmeta.Config {
 	cfg := previewInfo.Config
 	if len(p.FeedURLs) == 1 && isYouTubeFeedURL(p.FeedURLs[0]) {
@@ -101,10 +109,15 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	items := make([]providers.FeedItem, 0)
 	seen := make(map[string]struct{})
 
+	var lastErr error
+	failed := 0
 	for _, feedURL := range p.FeedURLs {
-		feed, err := fetchAtomFeed(feedURL)
+		feed, err := fetchAtomFeed(p.httpCacheStore(), feedURL)
 		if err != nil {
-			return nil, err
+			slog.Warn("Skipping YouTube feed after fetch failure", "url", feedURL, "error", err)
+			lastErr = err
+			failed++
+			continue
 		}
 
 		for _, entry := range feed.Entries {
@@ -126,6 +139,10 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 
 			items = append(items, &Item{entry: entry, channelTitle: feed.Title})
 		}
+	}
+
+	if len(items) == 0 && failed > 0 {
+		return nil, fmt.Errorf("all %d youtube feed(s) failed: %w", failed, lastErr)
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {

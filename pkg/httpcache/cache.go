@@ -49,6 +49,54 @@ func CachedGet(ctx context.Context, client *api.EnhancedClient, store *Store, ur
 	return resp.Body, nil
 }
 
+// CachedGetWithStale performs a conditional GET that also persists the response
+// body, so a previously fetched copy can be served when the upstream later fails
+// (for example an intermittent HTTP 404). On a 200 the fresh body is cached and
+// returned with stale=false. On 304 the cached body is returned with stale=false.
+// If the request fails but a cached body exists, that body is returned with
+// stale=true alongside the original error, letting callers degrade gracefully;
+// with no cached body the error is returned as-is.
+func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *Store, url string, headers map[string]string) (body []byte, stale bool, err error) {
+	if client == nil {
+		return nil, false, fmt.Errorf("http cache get: client is nil")
+	}
+
+	var prev api.CacheValidators
+	if store != nil {
+		if validators, ok := store.GetContext(ctx, url); ok {
+			prev = validators
+		}
+	}
+
+	resp, getErr := client.GetConditional(ctx, url, prev, headers)
+	if getErr != nil {
+		if store != nil {
+			if cached, ok := store.GetBodyContext(ctx, url); ok {
+				return cached, true, getErr
+			}
+		}
+		return nil, false, getErr
+	}
+
+	if resp.NotModified {
+		if store != nil {
+			if cached, ok := store.GetBodyContext(ctx, url); ok {
+				return cached, false, nil
+			}
+		}
+		return nil, false, ErrNotModified
+	}
+
+	if store != nil {
+		validators := api.CacheValidators{ETag: resp.ETag, LastModified: resp.LastModified}
+		if saveErr := store.SaveBodyContext(ctx, url, validators, resp.Body); saveErr != nil {
+			slog.Warn("Failed to save cached HTTP body", "url", url, "error", saveErr)
+		}
+	}
+
+	return resp.Body, false, nil
+}
+
 // Store persists HTTP validators by URL.
 type Store struct {
 	db     *sql.DB
@@ -130,11 +178,53 @@ func (s *Store) createSchema() error {
 		url TEXT PRIMARY KEY,
 		etag TEXT DEFAULT '',
 		last_modified TEXT DEFAULT '',
+		body BLOB,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 	`
-	_, err := s.db.ExecContext(context.Background(), schema)
-	return err
+	if _, err := s.db.ExecContext(context.Background(), schema); err != nil {
+		return err
+	}
+	return s.ensureBodyColumn()
+}
+
+// ensureBodyColumn adds the body column to databases created before stale-body
+// caching existed. ALTER TABLE ADD COLUMN is a no-op-safe migration for existing rows.
+func (s *Store) ensureBodyColumn() error {
+	ctx := context.Background()
+	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(http_validators)")
+	if err != nil {
+		return fmt.Errorf("inspect http cache schema: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	hasBody := false
+	for rows.Next() {
+		var (
+			cid        int
+			name       string
+			ctype      string
+			notNull    int
+			dflt       sql.NullString
+			primaryKey int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dflt, &primaryKey); err != nil {
+			return fmt.Errorf("scan http cache schema: %w", err)
+		}
+		if name == "body" {
+			hasBody = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read http cache schema: %w", err)
+	}
+
+	if !hasBody {
+		if _, err := s.db.ExecContext(ctx, "ALTER TABLE http_validators ADD COLUMN body BLOB"); err != nil {
+			return fmt.Errorf("add body column: %w", err)
+		}
+	}
+	return nil
 }
 
 // Close closes the backing database.
@@ -176,6 +266,54 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 		return api.CacheValidators{}, false
 	}
 	return v, true
+}
+
+// GetBodyContext returns the cached response body for URL, if one was stored.
+func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, bool) {
+	if s == nil || s.db == nil || url == "" {
+		return nil, false
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var body []byte
+	err := s.db.QueryRowContext(ctx, `SELECT body FROM http_validators WHERE url = ?`, url).Scan(&body)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false
+	}
+	if err != nil {
+		slog.Warn("Failed to read cached HTTP body", "url", url, "error", err)
+		return nil, false
+	}
+	if len(body) == 0 {
+		return nil, false
+	}
+	return body, true
+}
+
+// SaveBodyContext stores validators and the response body for URL.
+func (s *Store) SaveBodyContext(ctx context.Context, url string, v api.CacheValidators, body []byte) error {
+	if s == nil || s.db == nil || url == "" {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.ExecContext(ctx, `
+	INSERT INTO http_validators (url, etag, last_modified, body, updated_at)
+	VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	ON CONFLICT(url) DO UPDATE SET
+		etag = excluded.etag,
+		last_modified = excluded.last_modified,
+		body = excluded.body,
+		updated_at = CURRENT_TIMESTAMP
+	`, url, v.ETag, v.LastModified, body)
+	if err != nil {
+		return fmt.Errorf("save HTTP body: %w", err)
+	}
+	return nil
 }
 
 // Save stores validators for URL.

@@ -180,6 +180,72 @@ func TestCachedGetContextCancellation(t *testing.T) {
 	}
 }
 
+func TestCachedGetWithStaleServesCachedBodyOnError(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			_, _ = w.Write([]byte("fresh feed"))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := api.NewEnhancedClient(&api.EnhancedClientConfig{
+		RetryPolicy: &api.RetryPolicy{MaxAttempts: 1, RetryableErrors: []int{}},
+		RateLimiter: api.NewNoOpRateLimiter(),
+	})
+
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	if err != nil {
+		t.Fatalf("CachedGetWithStale(first) error = %v", err)
+	}
+	if stale || string(body) != "fresh feed" {
+		t.Fatalf("first = (%q, stale=%v), want (\"fresh feed\", false)", body, stale)
+	}
+
+	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	if err == nil {
+		t.Fatal("CachedGetWithStale(404) error = nil, want underlying error")
+	}
+	if !stale || string(body) != "fresh feed" {
+		t.Fatalf("second = (%q, stale=%v), want cached \"fresh feed\", stale=true", body, stale)
+	}
+}
+
+func TestCachedGetWithStaleNoCacheReturnsError(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := api.NewEnhancedClient(&api.EnhancedClientConfig{
+		RetryPolicy: &api.RetryPolicy{MaxAttempts: 1, RetryableErrors: []int{}},
+		RateLimiter: api.NewNoOpRateLimiter(),
+	})
+
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	if err == nil {
+		t.Fatal("CachedGetWithStale(404, no cache) error = nil, want error")
+	}
+	if stale || body != nil {
+		t.Fatalf("got (%q, stale=%v), want (nil, false)", body, stale)
+	}
+}
+
 func TestStoreConcurrentAccess(t *testing.T) {
 	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
 	if err != nil {
