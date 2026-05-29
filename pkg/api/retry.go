@@ -67,35 +67,42 @@ func (rp *RetryPolicy) CalculateBackoff(attempt int) time.Duration {
 	return time.Duration(backoff)
 }
 
+func asHTTPError(err error) (*HTTPError, bool) {
+	var httpErr *HTTPError
+	if !errors.As(err, &httpErr) {
+		return nil, false
+	}
+	return httpErr, true
+}
+
 // IsRetryableError checks if an error should trigger a retry
 func (rp *RetryPolicy) IsRetryableError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for HTTP status code errors
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
+	if httpErr, ok := asHTTPError(err); ok {
 		return rp.isRetryableStatusCode(httpErr.StatusCode)
 	}
-
-	// For other errors, default to not retrying
 	return false
+}
+
+// IsTransientUpstreamError reports whether the error is an HTTP 4xx/5xx from
+// an upstream service. Callers can demote these in logs and exit cleanly.
+func IsTransientUpstreamError(err error) bool {
+	code, ok := UpstreamStatusCode(err)
+	return ok && code >= 400 && code < 600
+}
+
+// UpstreamStatusCode returns the HTTP status code from a wrapped HTTPError.
+func UpstreamStatusCode(err error) (int, bool) {
+	httpErr, ok := asHTTPError(err)
+	if !ok {
+		return 0, false
+	}
+	return httpErr.StatusCode, true
 }
 
 // IsRateLimitError checks if an error is specifically due to rate limiting
 func (rp *RetryPolicy) IsRateLimitError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	// Check for HTTP status code errors
-	var httpErr *HTTPError
-	if errors.As(err, &httpErr) {
-		return httpErr.StatusCode == http.StatusTooManyRequests
-	}
-
-	return false
+	httpErr, ok := asHTTPError(err)
+	return ok && httpErr.StatusCode == http.StatusTooManyRequests
 }
 
 // isRetryableStatusCode checks if a status code should trigger retries
@@ -130,7 +137,10 @@ func ExecuteWithRetry(operation RetryableOperation, policy *RetryPolicy, operati
 
 // ExecuteWithRetryContext executes an operation with retry logic that can be cancelled.
 func ExecuteWithRetryContext(ctx context.Context, operation RetryableOperation, policy *RetryPolicy, operationName string) error {
-	var lastErr error
+	var (
+		lastErr  error
+		attempts int
+	)
 
 	for attempt := 1; attempt <= policy.MaxAttempts; attempt++ {
 		if attempt > 1 {
@@ -139,6 +149,7 @@ func ExecuteWithRetryContext(ctx context.Context, operation RetryableOperation, 
 			}
 		}
 
+		attempts = attempt
 		err := operation()
 		if err == nil {
 			if attempt > 1 {
@@ -160,7 +171,7 @@ func ExecuteWithRetryContext(ctx context.Context, operation RetryableOperation, 
 		}
 	}
 
-	return fmt.Errorf("operation %s failed after %d attempts: %w", operationName, policy.MaxAttempts, lastErr)
+	return fmt.Errorf("operation %s failed after %d attempt(s): %w", operationName, attempts, lastErr)
 }
 
 func waitBeforeAttempt(ctx context.Context, policy *RetryPolicy, attempt int, lastErr error, operationName string) error {
@@ -173,7 +184,11 @@ func waitBeforeAttempt(ctx context.Context, policy *RetryPolicy, attempt int, la
 			"backoff", backoff)
 	}
 
-	slog.Warn("Retrying operation",
+	level := slog.LevelWarn
+	if IsTransientUpstreamError(lastErr) {
+		level = slog.LevelDebug
+	}
+	slog.Log(ctx, level, "Retrying operation",
 		"operation", operationName,
 		"attempt", attempt,
 		"maxAttempts", policy.MaxAttempts,

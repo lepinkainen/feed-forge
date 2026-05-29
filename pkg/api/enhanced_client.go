@@ -294,9 +294,13 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 		fields = append(fields, "error", err)
 	}
 
-	if success {
+	switch {
+	case success:
 		slog.Debug("API call completed", fields...)
-	} else {
+	case IsTransientUpstreamError(err):
+		// Aggregated by caller into one summary line per run.
+		slog.Debug("API call failed (transient upstream)", fields...)
+	default:
 		slog.Warn("API call failed", fields...)
 	}
 }

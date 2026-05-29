@@ -12,13 +12,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kong"
 	kongyaml "github.com/alecthomas/kong-yaml"
 	"gopkg.in/yaml.v3"
 
+	apipkg "github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
@@ -351,6 +351,7 @@ type feedResult struct {
 	FeedName string
 	Filename string // e.g. "reddit.xml"
 	Status   string // "generated", "skipped", "failed"
+	Err      error
 }
 
 type opmlDocument struct {
@@ -391,7 +392,6 @@ func generateAll(configPath string) error {
 	var (
 		wg      sync.WaitGroup
 		results = make([]feedResult, len(names))
-		failed  atomic.Int32
 	)
 
 	for i, name := range names {
@@ -399,9 +399,6 @@ func generateAll(configPath string) error {
 		go func(i int, name string) {
 			defer wg.Done()
 			results[i] = generateProvider(configPath, name)
-			if results[i].Status == "failed" {
-				failed.Add(1)
-			}
 		}(i, name)
 	}
 
@@ -411,8 +408,27 @@ func generateAll(configPath string) error {
 		slog.Error("Failed to generate feed index", "error", err)
 	}
 
-	if f := failed.Load(); f > 0 {
-		return fmt.Errorf("%d provider(s) failed", f)
+	var (
+		transient []string
+		hardCount int
+	)
+	for _, r := range results {
+		if r.Status != "failed" {
+			continue
+		}
+		if code, ok := apipkg.UpstreamStatusCode(r.Err); ok && code >= 400 && code < 600 {
+			transient = append(transient, fmt.Sprintf("%s=%d", r.Provider, code))
+		} else {
+			hardCount++
+		}
+	}
+
+	if len(transient) > 0 {
+		slog.Warn("Transient upstream failures", "providers", strings.Join(transient, ","))
+	}
+
+	if hardCount > 0 {
+		return fmt.Errorf("%d provider(s) failed", hardCount)
 	}
 
 	return nil
@@ -456,6 +472,7 @@ func generateProvider(configPath, name string) feedResult {
 	provider, err := providers.DefaultRegistry.CreateProvider(name, providerConfig)
 	if err != nil {
 		slog.Error("Failed to create provider", "provider", name, "error", err)
+		result.Err = err
 		return result
 	}
 
@@ -469,7 +486,10 @@ func generateProvider(configPath, name string) feedResult {
 
 	slog.Info("Generating feed", "provider", name, "outfile", outfile)
 	if err := provider.GenerateFeed(outfile); err != nil {
-		slog.Error("Failed to generate feed", "provider", name, "error", err)
+		result.Err = err
+		if !apipkg.IsTransientUpstreamError(err) {
+			slog.Error("Failed to generate feed", "provider", name, "error", err)
+		}
 		return result
 	}
 
