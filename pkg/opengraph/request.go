@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/net/html"
@@ -31,11 +30,19 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 }
 
 func (f *Fetcher) fetchFreshDataConditional(ctx context.Context, targetURL, etag, lastModified string) (*Data, error) {
-	urlMutexInterface, _ := f.urlMutexes.LoadOrStore(targetURL, &sync.Mutex{})
-	urlMutex := urlMutexInterface.(*sync.Mutex)
-	urlMutex.Lock()
-	defer urlMutex.Unlock()
+	v, err, _ := f.fetchGroup.Do(targetURL, func() (any, error) {
+		return f.doFetchConditional(ctx, targetURL, etag, lastModified)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if v == nil {
+		return nil, nil
+	}
+	return v.(*Data), nil
+}
 
+func (f *Fetcher) doFetchConditional(ctx context.Context, targetURL, etag, lastModified string) (*Data, error) {
 	select {
 	case f.semaphore <- struct{}{}:
 		defer func() { <-f.semaphore }()

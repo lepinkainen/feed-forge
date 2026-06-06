@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/urlutils"
+	"golang.org/x/sync/singleflight"
 )
 
 var errNotModified = errors.New("opengraph not modified")
@@ -30,7 +31,7 @@ type Fetcher struct {
 	domainMutex sync.Mutex
 	lastFetch   map[string]time.Time
 	semaphore   chan struct{}
-	urlMutexes  sync.Map
+	fetchGroup  singleflight.Group
 }
 
 // NewFetcher creates a new OpenGraph fetcher
