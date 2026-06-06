@@ -231,7 +231,6 @@ func TestFetchData_CachesFailures(t *testing.T) {
 }
 
 func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
-	fetcher := NewFetcher(nil)
 	doc, err := html.Parse(strings.NewReader(`<!doctype html><html><head>
 		<title> Page Title </title>
 		<meta name="description" content="fallback description">
@@ -243,7 +242,7 @@ func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
 	}
 
 	data := &Data{}
-	fetcher.extractOpenGraphTags(doc, data)
+	extractOpenGraphTags(doc, data)
 	if data.Title != "Page Title" || data.Description != "fallback description" || data.Image != "/fallback.png" || data.SiteName != "Site" {
 		t.Fatalf("extractOpenGraphTags() = %#v", data)
 	}
@@ -271,7 +270,7 @@ func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
 		t.Fatal("failed to find meta node")
 	}
 	data = &Data{}
-	fetcher.processMetaTag(metaNode, data)
+	processMetaTag(metaNode, data)
 	if data.Title != "Preferred" {
 		t.Fatalf("processMetaTag() title = %q, want Preferred", data.Title)
 	}
@@ -285,7 +284,7 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 		Image:       "://bad",
 		SiteName:    " Site\x00 ",
 	}
-	fetcher.cleanupData(data, "https://example.com/post")
+	cleanupData(data, "https://example.com/post")
 	if !strings.HasSuffix(data.Title, "...") || strings.Contains(data.Title, "\x00") || len(data.Title) > 205 {
 		t.Fatalf("cleanupData() title = %q", data.Title)
 	}
@@ -299,7 +298,7 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 		t.Fatalf("cleanupData() site name = %q, want Site", data.SiteName)
 	}
 
-	converted, err := fetcher.convertToUTF8([]byte("hello"), "text/html; charset=not-real")
+	converted, err := convertToUTF8([]byte("hello"), "text/html; charset=not-real")
 	if err != nil || converted != "hello" {
 		t.Fatalf("convertToUTF8() = (%q, %v), want (hello, nil)", converted, err)
 	}
