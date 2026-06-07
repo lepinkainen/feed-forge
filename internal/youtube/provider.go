@@ -141,7 +141,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 		}
 	}
 
-	if len(items) == 0 && failed > 0 {
+	if failed > 0 && failed == len(p.FeedURLs) {
 		return nil, fmt.Errorf("all %d youtube feed(s) failed: %w", failed, lastErr)
 	}
 

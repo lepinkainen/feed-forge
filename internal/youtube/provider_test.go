@@ -88,6 +88,70 @@ func TestFetchItemsCanIncludeShorts(t *testing.T) {
 	}
 }
 
+func TestFetchItemsContinuesWhenSomeFeedsFail(t *testing.T) {
+	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(sampleFeed))
+	}))
+	defer okSrv.Close()
+	failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer failSrv.Close()
+
+	provider := &Provider{FeedURLs: []string{okSrv.URL, failSrv.URL}, IncludeShorts: true}
+	items, err := provider.FetchItems(0)
+	if err != nil {
+		t.Fatalf("FetchItems: %v", err)
+	}
+	if got, want := len(items), 2; got != want {
+		t.Fatalf("item count = %d, want %d", got, want)
+	}
+}
+
+func TestFetchItemsSucceedsWhenFeedYieldsZeroItemsAfterFilter(t *testing.T) {
+	const shortsOnlyFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/" xmlns="http://www.w3.org/2005/Atom">
+  <title>Shorts</title>
+  <entry>
+    <id>yt:video:short999</id>
+    <yt:videoId>short999</yt:videoId>
+    <title>Short only</title>
+    <link rel="alternate" href="https://www.youtube.com/shorts/short999"/>
+    <published>2026-05-18T12:15:01+00:00</published>
+    <updated>2026-05-18T12:15:02+00:00</updated>
+  </entry>
+</feed>`
+	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(shortsOnlyFeed))
+	}))
+	defer okSrv.Close()
+	failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer failSrv.Close()
+
+	provider := &Provider{FeedURLs: []string{okSrv.URL, failSrv.URL}, IncludeShorts: false}
+	items, err := provider.FetchItems(0)
+	if err != nil {
+		t.Fatalf("FetchItems should not error when at least one feed succeeded: %v", err)
+	}
+	if len(items) != 0 {
+		t.Fatalf("item count = %d, want 0", len(items))
+	}
+}
+
+func TestFetchItemsErrorsWhenAllFeedsFail(t *testing.T) {
+	failSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer failSrv.Close()
+
+	provider := &Provider{FeedURLs: []string{failSrv.URL, failSrv.URL}}
+	if _, err := provider.FetchItems(0); err == nil {
+		t.Fatal("FetchItems should error when every feed fails")
+	}
+}
+
 func TestNormalizeFeedURLs(t *testing.T) {
 	got := normalizeFeedURLs(
 		"https://www.youtube.com/feeds/videos.xml?channel_id=UC1",
