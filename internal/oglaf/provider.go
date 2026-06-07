@@ -2,6 +2,7 @@ package oglaf
 
 import (
 	"context"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"html"
@@ -20,17 +21,29 @@ import (
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
-// Compiled regexes for RSS parsing and comic image extraction.
+// Compiled regexes for comic image extraction from the per-comic HTML pages.
 var (
-	rssItemRegex  = regexp.MustCompile(`(?s)<item[^>]*>(.*?)</item>`)
-	rssTitleRegex = regexp.MustCompile(`<title[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</title>`)
-	rssLinkRegex  = regexp.MustCompile(`<link[^>]*>(.*?)</link>`)
-	rssDescRegex  = regexp.MustCompile(`<description[^>]*>(?:<!\[CDATA\[(.*?)\]\]|(.*?))</description>`)
-	rssPubRegex   = regexp.MustCompile(`<pubDate[^>]*>(.*?)</pubDate>`)
-	rssGUIDRegex  = regexp.MustCompile(`<guid[^>]*>(.*?)</guid>`)
 	stripImgRegex = regexp.MustCompile(`<img[^>]*id="strip"[^>]*src="([^"]+)"`)
 	mediaRegex    = regexp.MustCompile(`src="([^"]*//media\.oglaf\.com/comic/[^"]+)"`)
 )
+
+// rssFeed mirrors the subset of the Oglaf RSS document we care about.
+type rssFeed struct {
+	XMLName xml.Name   `xml:"rss"`
+	Channel rssChannel `xml:"channel"`
+}
+
+type rssChannel struct {
+	Items []rssItemXML `xml:"item"`
+}
+
+type rssItemXML struct {
+	Title       string `xml:"title"`
+	Link        string `xml:"link"`
+	Description string `xml:"description"`
+	PubDate     string `xml:"pubDate"`
+	GUID        string `xml:"guid"`
+}
 
 var previewInfo = &providers.PreviewInfo{
 	Config: feedmeta.Config{
@@ -166,13 +179,6 @@ func comicDescription(link, imageURL, title string) string {
 </div>`,
 		escapedLink, escapedImageURL, escapedTitle, escapedLink,
 	)
-}
-
-func unwrapCDATA(value string) string {
-	if strings.HasPrefix(value, "<![CDATA[") && strings.HasSuffix(value, "]]>") {
-		return strings.TrimSuffix(strings.TrimPrefix(value, "<![CDATA["), "]]>")
-	}
-	return value
 }
 
 // NewOglafProvider creates a new Oglaf provider
@@ -322,7 +328,7 @@ func (p *Provider) httpCacheStore() *httpcache.Store {
 	return p.HTTPCache
 }
 
-// fetchRSSFeed fetches and parses the Oglaf RSS feed
+// fetchRSSFeed fetches and parses the Oglaf RSS feed.
 func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 	// Use enhanced HTTP client with proper timeout and retry policy
 	client := api.NewGenericClient()
@@ -331,81 +337,44 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 		return nil, err
 	}
 
-	// Simple RSS parsing - look for items
-	bodyStr := string(body)
+	var feed rssFeed
+	if err := xml.Unmarshal(body, &feed); err != nil {
+		return nil, fmt.Errorf("parse oglaf rss: %w", err)
+	}
 
-	matches := rssItemRegex.FindAllStringSubmatch(bodyStr, -1)
-
-	var items []*RSSItem
-
-	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-
-		itemContent := match[1]
-
-		titleMatches := rssTitleRegex.FindStringSubmatch(itemContent)
-		title := ""
-		if len(titleMatches) > 1 {
-			title = titleMatches[1]
-			if title == "" && len(titleMatches) > 2 {
-				title = titleMatches[2]
-			}
-			title = unwrapCDATA(title)
-		}
-
-		linkMatches := rssLinkRegex.FindStringSubmatch(itemContent)
-		link := ""
-		if len(linkMatches) > 1 {
-			link = linkMatches[1]
-		}
-
-		descMatches := rssDescRegex.FindStringSubmatch(itemContent)
-		description := ""
-		if len(descMatches) > 1 {
-			description = descMatches[1]
-			if description == "" && len(descMatches) > 2 {
-				description = descMatches[2]
-			}
-			description = unwrapCDATA(description)
-		}
-
-		pubDateMatches := rssPubRegex.FindStringSubmatch(itemContent)
-		rawPubDate := ""
-		if len(pubDateMatches) > 1 {
-			rawPubDate = pubDateMatches[1]
-		}
-
-		if rawPubDate == "" {
-			slog.Warn("Skipping RSS item with missing pubDate", "link", link)
-			continue
-		}
-		publishedAt, err := parsePubDate(rawPubDate)
-		if err != nil {
-			slog.Warn("Skipping RSS item with unparseable pubDate", "link", link, "pubDate", rawPubDate, "error", err)
-			continue
-		}
-
-		guidMatches := rssGUIDRegex.FindStringSubmatch(itemContent)
-		guid := ""
-		if len(guidMatches) > 1 {
-			guid = guidMatches[1]
-		}
-
-		if title != "" && link != "" {
-			items = append(items, &RSSItem{
-				Title:       title,
-				Link:        link,
-				Description: description,
-				PublishedAt: publishedAt.UTC(),
-				GUID:        guid,
-				ImageURL:    "",
-			})
+	items := make([]*RSSItem, 0, len(feed.Channel.Items))
+	for _, raw := range feed.Channel.Items {
+		if item := convertRSSItem(raw); item != nil {
+			items = append(items, item)
 		}
 	}
 
 	return items, nil
+}
+
+// convertRSSItem validates a parsed RSS item and returns the canonical *RSSItem,
+// or nil for items missing required fields. PubDate is the only field that can
+// shape-fail (missing or unparseable); title/link emptiness drops the item silently.
+func convertRSSItem(raw rssItemXML) *RSSItem {
+	if raw.PubDate == "" {
+		slog.Warn("Skipping RSS item with missing pubDate", "link", raw.Link)
+		return nil
+	}
+	publishedAt, err := parsePubDate(raw.PubDate)
+	if err != nil {
+		slog.Warn("Skipping RSS item with unparseable pubDate", "link", raw.Link, "pubDate", raw.PubDate, "error", err)
+		return nil
+	}
+	if raw.Title == "" || raw.Link == "" {
+		return nil
+	}
+	return &RSSItem{
+		Title:       raw.Title,
+		Link:        raw.Link,
+		Description: raw.Description,
+		PublishedAt: publishedAt.UTC(),
+		GUID:        raw.GUID,
+	}
 }
 
 // FetchItems implements the FeedProvider interface

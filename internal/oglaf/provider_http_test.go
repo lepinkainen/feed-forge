@@ -79,8 +79,14 @@ func TestFetchRSSFeedWithLiveSnapshotFixture(t *testing.T) {
 	if first.PublishedAt.IsZero() {
 		t.Fatalf("first parsed item has zero PublishedAt: %#v", first)
 	}
+	// xml.Unmarshal decodes the HTML-escaped CDATA block into real markup, so
+	// the description must come back populated (the legacy regex parser used
+	// to silently drop it for the live feed shape).
 	if first.Description == "" {
-		t.Log("live snapshot fixture currently yields empty description via regex parser; title/link/pubDate still validated")
+		t.Fatalf("first parsed item has empty Description: %#v", first)
+	}
+	if !strings.Contains(first.Description, "oglaf.com") {
+		t.Fatalf("Description = %q, want HTML referencing oglaf.com", first.Description)
 	}
 }
 
