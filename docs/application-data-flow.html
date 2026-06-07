@@ -1,0 +1,1788 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feed Forge Data Flow</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b1020;
+        --panel: #111936;
+        --panel-2: #172247;
+        --ink: #e8eefc;
+        --muted: #9fb0d1;
+        --line: #31416f;
+        --accent: #66e3ff;
+        --accent-2: #9dff9d;
+        --warn: #ffd36b;
+        --bad: #ff7a92;
+        --purple: #c69cff;
+        --shadow: 0 18px 55px rgba(0, 0, 0, 0.35);
+        --radius: 18px;
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(
+            circle at 20% -10%,
+            rgba(102, 227, 255, 0.22),
+            transparent 36rem
+          ),
+          radial-gradient(
+            circle at 85% 0%,
+            rgba(198, 156, 255, 0.18),
+            transparent 30rem
+          ),
+          linear-gradient(180deg, #081022, var(--bg) 40%, #070b16);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+
+      a {
+        color: var(--accent);
+      }
+      button,
+      select,
+      input {
+        font: inherit;
+      }
+      button:focus-visible,
+      select:focus-visible,
+      input:focus-visible,
+      [tabindex]:focus-visible {
+        outline: 3px solid var(--accent);
+        outline-offset: 3px;
+      }
+
+      .wrap {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 0 auto;
+      }
+
+      header {
+        padding: 48px 0 26px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+        align-items: end;
+      }
+      .kicker {
+        color: var(--accent);
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        font-size: 0.78rem;
+      }
+      h1 {
+        margin: 10px 0 12px;
+        font-size: clamp(2rem, 5vw, 4.8rem);
+        line-height: 0.96;
+        letter-spacing: -0.06em;
+      }
+      .lede {
+        margin: 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 2vw, 1.24rem);
+        max-width: 760px;
+      }
+      .hero-card {
+        background:
+          linear-gradient(
+            160deg,
+            rgba(102, 227, 255, 0.16),
+            rgba(198, 156, 255, 0.08)
+          ),
+          var(--panel);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius);
+        padding: 18px;
+        box-shadow: var(--shadow);
+      }
+      .hero-card p {
+        margin: 6px 0;
+      }
+      .hero-card code {
+        color: var(--accent-2);
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .pill {
+        display: inline-flex;
+        gap: 6px;
+        align-items: center;
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: var(--muted);
+        background: rgba(255, 255, 255, 0.04);
+        font-size: 0.86rem;
+      }
+
+      nav.sticky {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        backdrop-filter: blur(14px);
+        background: rgba(8, 13, 29, 0.78);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .nav-inner {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+        flex-wrap: wrap;
+      }
+      .nav-links,
+      .nav-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .nav-links a,
+      .mini-btn {
+        text-decoration: none;
+        color: var(--ink);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.04);
+        padding: 8px 11px;
+        border-radius: 999px;
+        cursor: pointer;
+        font-size: 0.86rem;
+      }
+      .nav-links a:hover,
+      .mini-btn:hover {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .mini-btn[aria-pressed="true"] {
+        background: rgba(102, 227, 255, 0.12);
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .mini-btn.flash {
+        background: rgba(157, 255, 157, 0.18);
+        border-color: var(--accent-2);
+        color: var(--accent-2);
+      }
+
+      main {
+        padding: 28px 0 56px;
+      }
+      section {
+        margin: 28px 0;
+      }
+      .section-title {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 14px;
+        flex-wrap: wrap;
+      }
+      h2 {
+        margin: 0;
+        font-size: clamp(1.5rem, 3vw, 2.4rem);
+        letter-spacing: -0.04em;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      .kbd {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.78rem;
+        padding: 1px 6px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--ink);
+      }
+
+      .panel {
+        background: rgba(17, 25, 54, 0.84);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+        padding: 14px;
+        margin-bottom: 12px;
+      }
+      label.control {
+        display: grid;
+        gap: 7px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      select,
+      input[type="search"] {
+        width: 100%;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 12px;
+        background: #0b132b;
+        color: var(--ink);
+        padding: 10px 12px;
+      }
+      .toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-content: end;
+      }
+      .toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 10px;
+        border: 1px solid rgba(255, 255, 255, 0.13);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--muted);
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.86rem;
+      }
+      .toggle input {
+        accent-color: var(--accent);
+      }
+
+      .flow-summary {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+        padding: 4px 2px 14px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .flow-summary strong {
+        color: var(--ink);
+        font-weight: 700;
+      }
+      .flow-summary .pill {
+        padding: 4px 10px;
+        font-size: 0.78rem;
+      }
+      .flow-summary .hint-kbd {
+        margin-left: auto;
+        opacity: 0.85;
+      }
+
+      .flow-layout {
+        display: grid;
+        grid-template-columns: 1fr 340px;
+        gap: 16px;
+      }
+      body.expand-all .flow-layout {
+        grid-template-columns: 1fr;
+      }
+      body.expand-all .detail {
+        display: none;
+      }
+
+      .diagram {
+        position: relative;
+        padding: 18px;
+        min-height: 460px;
+      }
+      .rail {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        align-items: stretch;
+      }
+      body.expand-all .rail {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .stage {
+        display: flex;
+        flex-direction: column;
+        min-height: 118px;
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.06),
+          rgba(255, 255, 255, 0.025)
+        );
+        padding: 14px;
+        cursor: pointer;
+        transition:
+          transform 0.16s ease,
+          border-color 0.16s ease,
+          background 0.16s ease;
+      }
+      .stage:hover,
+      .stage.active {
+        transform: translateY(-3px);
+        border-color: var(--accent);
+        background: rgba(102, 227, 255, 0.09);
+      }
+      .stage.dim {
+        opacity: 0.5;
+        filter: grayscale(0.2);
+      }
+      .stage .num {
+        color: var(--accent);
+        font-weight: 900;
+        font-size: 0.8rem;
+        letter-spacing: 0.08em;
+      }
+      .stage h3 {
+        margin: 8px 0 6px;
+        font-size: 1rem;
+      }
+      .stage p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.35;
+      }
+      .stage .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 10px;
+      }
+      .tag {
+        font-size: 0.72rem;
+        color: #dbe7ff;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 3px 7px;
+        border-radius: 999px;
+      }
+      .stage .why {
+        display: inline-flex;
+        align-self: flex-start;
+        margin-top: 8px;
+        font-size: 0.72rem;
+        color: var(--warn);
+        border: 1px solid rgba(255, 211, 107, 0.3);
+        padding: 2px 8px;
+        border-radius: 999px;
+        background: rgba(255, 211, 107, 0.08);
+      }
+      .stage .inline-details {
+        display: none;
+      }
+      body.expand-all .stage .inline-details {
+        display: block;
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .stage .inline-details ul {
+        margin: 0;
+        padding-left: 18px;
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .stage .inline-details li {
+        margin: 5px 0;
+        line-height: 1.4;
+      }
+      mark.hit {
+        background: rgba(157, 255, 157, 0.3);
+        color: var(--ink);
+        padding: 0 3px;
+        border-radius: 3px;
+      }
+
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 14px 0 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        display: inline-block;
+        margin-right: 6px;
+      }
+      .dot.config {
+        background: var(--purple);
+      }
+      .dot.runtime {
+        background: var(--accent);
+      }
+      .dot.cache {
+        background: var(--warn);
+      }
+      .dot.output {
+        background: var(--accent-2);
+      }
+
+      .detail {
+        padding: 18px;
+        position: sticky;
+        top: 70px;
+        align-self: start;
+      }
+      .detail h3 {
+        margin: 0 0 8px;
+        font-size: 1.25rem;
+      }
+      .detail p {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+      .detail ul {
+        margin: 12px 0 0;
+        padding-left: 19px;
+        color: var(--muted);
+      }
+      .detail li {
+        margin: 7px 0;
+      }
+      .detail code,
+      .code {
+        color: var(--accent-2);
+        background: rgba(157, 255, 157, 0.08);
+        border: 1px solid rgba(157, 255, 157, 0.12);
+        border-radius: 6px;
+        padding: 1px 5px;
+      }
+
+      .swimlanes {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 12px;
+        padding: 14px;
+      }
+      .lane {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        padding: 14px;
+        min-height: 220px;
+      }
+      .lane h3 {
+        margin: 0 0 12px;
+        font-size: 0.95rem;
+        color: var(--accent);
+      }
+      .node {
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 14px;
+        padding: 11px;
+        margin: 9px 0;
+        background: rgba(11, 19, 43, 0.78);
+        cursor: pointer;
+        transition:
+          border-color 0.16s ease,
+          transform 0.16s ease;
+      }
+      .node:hover,
+      .node.active {
+        border-color: var(--accent-2);
+        transform: translateX(3px);
+      }
+      .node strong {
+        display: block;
+        font-size: 0.92rem;
+      }
+      .node span {
+        color: var(--muted);
+        font-size: 0.78rem;
+      }
+
+      .provider-grid {
+        display: grid;
+        grid-template-columns: 350px 1fr;
+        gap: 16px;
+      }
+      .provider-list {
+        padding: 10px;
+        display: grid;
+        gap: 8px;
+        align-content: start;
+      }
+      .provider-btn {
+        text-align: left;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 14px;
+        padding: 12px;
+        background: rgba(255, 255, 255, 0.035);
+        color: var(--ink);
+        cursor: pointer;
+      }
+      .provider-btn:hover,
+      .provider-btn.active {
+        border-color: var(--accent);
+        background: rgba(102, 227, 255, 0.08);
+      }
+      .provider-btn small {
+        color: var(--muted);
+        display: block;
+        margin-top: 3px;
+      }
+      .provider-card {
+        padding: 18px;
+      }
+      .facts {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 14px;
+      }
+      .fact {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        padding: 12px;
+      }
+      .fact b {
+        display: block;
+        color: var(--accent);
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        margin-bottom: 5px;
+      }
+      .fact span {
+        color: var(--muted);
+      }
+
+      .sim {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .log {
+        padding: 16px;
+        background: #070b16;
+        border-radius: var(--radius);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        min-height: 340px;
+        max-height: 520px;
+        overflow: auto;
+      }
+      .log-line {
+        display: grid;
+        grid-template-columns: 64px 1fr;
+        gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      .log-line:last-child {
+        border-bottom: 0;
+      }
+      .stamp {
+        color: var(--accent);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.82rem;
+      }
+      .msg {
+        color: var(--muted);
+      }
+      .run-btn {
+        border: 0;
+        border-radius: 14px;
+        background: linear-gradient(135deg, var(--accent), var(--purple));
+        color: #07101d;
+        font-weight: 900;
+        padding: 12px 16px;
+        cursor: pointer;
+        box-shadow: 0 14px 35px rgba(102, 227, 255, 0.18);
+      }
+      .run-btn:hover {
+        filter: brightness(1.08);
+      }
+
+      .decision-tree {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+      }
+      .decision {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.035);
+      }
+      .decision b {
+        color: var(--warn);
+      }
+      .decision span {
+        color: var(--muted);
+      }
+
+      footer {
+        color: var(--muted);
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 22px 0 40px;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      @media (max-width: 980px) {
+        .hero,
+        .flow-layout,
+        .provider-grid,
+        .sim {
+          grid-template-columns: 1fr;
+        }
+        .controls {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .rail,
+        body.expand-all .rail {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .swimlanes {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .detail {
+          position: static;
+        }
+      }
+      @media (max-width: 620px) {
+        .wrap {
+          width: min(100vw - 20px, 1220px);
+        }
+        .controls,
+        .facts,
+        .swimlanes {
+          grid-template-columns: 1fr;
+        }
+        .rail,
+        body.expand-all .rail {
+          grid-template-columns: 1fr;
+        }
+        .decision {
+          grid-template-columns: 1fr;
+        }
+        .nav-inner {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+        .flow-summary .hint-kbd {
+          display: none;
+        }
+      }
+      @media print {
+        nav.sticky,
+        .toggles,
+        .run-btn,
+        .nav-actions,
+        .flow-summary .hint-kbd {
+          display: none !important;
+        }
+        body {
+          background: #fff;
+          color: #111;
+        }
+        .panel,
+        .stage,
+        .lane,
+        .fact,
+        .decision,
+        .hero-card,
+        .log {
+          background: #fff !important;
+          color: #111 !important;
+          border-color: #999 !important;
+          box-shadow: none !important;
+        }
+        .stage {
+          break-inside: avoid;
+        }
+        .detail {
+          display: none;
+        }
+        .flow-layout {
+          grid-template-columns: 1fr;
+        }
+        .stage .inline-details {
+          display: block !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap hero">
+        <div>
+          <div class="kicker">Feed Forge architecture</div>
+          <h1>Application data flow</h1>
+          <p class="lede">
+            Standalone map of how CLI input, YAML config, providers, caches,
+            templates, OpenGraph metadata, and output files move through Feed
+            Forge.
+          </p>
+          <div class="pill-row" aria-label="high level pieces">
+            <span class="pill">CLI + YAML</span>
+            <span class="pill">Provider registry</span>
+            <span class="pill">FetchItems()</span>
+            <span class="pill">Atom templates</span>
+            <span class="pill">XML outputs</span>
+          </div>
+        </div>
+        <div class="hero-card">
+          <p>
+            <strong>Main entry:</strong> <code>cmd/feed-forge/main.go</code>
+          </p>
+          <p>
+            <strong>Shared contracts:</strong> <code>pkg/providers</code>,
+            <code>pkg/feed</code>, <code>pkg/providerfeed</code>
+          </p>
+          <p>
+            <strong>Provider modules:</strong>
+            <code>internal/*/provider.go</code>
+          </p>
+        </div>
+      </div>
+    </header>
+
+    <nav class="sticky" aria-label="page sections">
+      <div class="wrap nav-inner">
+        <div class="nav-links">
+          <a href="#flow">Flow</a>
+          <a href="#runtime">Runtime lanes</a>
+          <a href="#providers">Providers</a>
+          <a href="#simulate">Simulator</a>
+          <a href="#decisions">Branch rules</a>
+        </div>
+        <div class="nav-actions">
+          <button
+            class="mini-btn"
+            id="expandBtn"
+            type="button"
+            aria-pressed="false"
+            title="Toggle inline details on every stage card"
+          >
+            Expand all
+          </button>
+          <button
+            class="mini-btn"
+            id="copyBtn"
+            type="button"
+            title="Copy a shareable URL for this view"
+          >
+            Copy link
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <main class="wrap">
+      <section id="flow">
+        <div class="section-title">
+          <div>
+            <h2>Interactive flow</h2>
+            <div class="hint">
+              Pick command + provider, then click a stage for details or hit
+              <span class="kbd">Expand all</span> to read every stage inline.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel controls" aria-label="flow controls">
+          <label class="control"
+            >Command path
+            <select id="modeSelect">
+              <option value="single">single provider command</option>
+              <option value="generate">
+                generate all configured providers
+              </option>
+              <option value="preview">preview provider</option>
+            </select>
+          </label>
+          <label class="control"
+            >Provider
+            <select id="providerSelect"></select>
+          </label>
+          <label class="control"
+            >Search stage text
+            <input
+              id="searchBox"
+              type="search"
+              placeholder="config, cache, template..."
+            />
+          </label>
+          <div class="toggles" aria-label="diagram toggles">
+            <label class="toggle"
+              ><input id="toggleOG" type="checkbox" checked /> OpenGraph</label
+            >
+            <label class="toggle"
+              ><input id="toggleCache" type="checkbox" checked /> Caches</label
+            >
+            <label class="toggle"
+              ><input id="toggleIndex" type="checkbox" checked /> Index</label
+            >
+          </div>
+        </div>
+
+        <div class="flow-summary" id="flowSummary"></div>
+
+        <div class="flow-layout">
+          <div class="panel diagram">
+            <div class="rail" id="stageRail"></div>
+            <div class="legend">
+              <span><i class="dot config"></i>config/control</span>
+              <span><i class="dot runtime"></i>runtime data</span>
+              <span><i class="dot cache"></i>cache/database</span>
+              <span><i class="dot output"></i>output</span>
+            </div>
+          </div>
+          <aside class="panel detail" aria-live="polite">
+            <h3 id="detailTitle">Select stage</h3>
+            <p id="detailText">Click any box to inspect flow details.</p>
+            <ul id="detailList"></ul>
+          </aside>
+        </div>
+      </section>
+
+      <section id="runtime">
+        <div class="section-title">
+          <div>
+            <h2>Runtime lanes</h2>
+            <div class="hint">
+              Click node to focus matching stage. Lanes show ownership
+              boundaries.
+            </div>
+          </div>
+        </div>
+        <div class="panel swimlanes" id="swimlanes"></div>
+      </section>
+
+      <section id="providers">
+        <div class="section-title">
+          <div>
+            <h2>Provider source paths</h2>
+            <div class="hint">
+              Provider-specific source, filter, cache, and template behavior.
+            </div>
+          </div>
+        </div>
+        <div class="provider-grid">
+          <div class="panel provider-list" id="providerList"></div>
+          <div class="panel provider-card">
+            <h3 id="providerTitle"></h3>
+            <p id="providerDesc" class="hint"></p>
+            <div class="facts" id="providerFacts"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="simulate">
+        <div class="section-title">
+          <div>
+            <h2>Run simulator</h2>
+            <div class="hint">
+              Model key branches without making network calls.
+            </div>
+          </div>
+          <button class="run-btn" id="runSim" type="button">
+            Run selected flow
+          </button>
+        </div>
+        <div class="sim">
+          <div
+            class="panel controls"
+            style="margin: 0; grid-template-columns: 1fr"
+          >
+            <label class="toggle"
+              ><input id="simInterval" type="checkbox" /> output younger than
+              interval</label
+            >
+            <label class="toggle"
+              ><input id="simOutputDir" type="checkbox" checked /> output-dir
+              configured</label
+            >
+            <label class="toggle"
+              ><input id="simCacheHit" type="checkbox" checked /> cache hit
+              possible</label
+            >
+            <label class="toggle"
+              ><input id="simProxy" type="checkbox" /> reddit/OG proxy
+              configured</label
+            >
+            <p class="hint">
+              Simulator follows same conceptual order: config → registry →
+              provider factory → FetchItems → template → write output.
+            </p>
+          </div>
+          <div class="log" id="simLog" aria-live="polite"></div>
+        </div>
+      </section>
+
+      <section id="decisions">
+        <div class="section-title">
+          <div>
+            <h2>Branch rules</h2>
+            <div class="hint">
+              Important conditionals that change data flow.
+            </div>
+          </div>
+        </div>
+        <div class="panel decision-tree" id="decisionTree"></div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        Generated for repository docs. No external CSS, JS, fonts, or network
+        resources.
+      </div>
+    </footer>
+
+    <script>
+      const providers = {
+        reddit: {
+          name: "reddit",
+          label: "Reddit JSON",
+          desc: "Builds a Reddit homepage JSON URL or proxy URL, fetches posts, filters by score/comments, and renders reddit-atom.",
+          source:
+            "https://www.reddit.com/.json?feed=<feed-id>&user=<username> or proxy-url",
+          config:
+            "feed-id, username, min-score, min-comments, proxy-url, proxy-secret, og-proxy-url, outfile, interval",
+          contentDB: "No content database",
+          httpCache:
+            "Base http_cache.db opened; provider fetch path uses Reddit API client",
+          og: "Yes. OG proxy used when og-proxy-url + proxy-secret exist.",
+          template: "reddit-atom",
+          output: "reddit.xml by default",
+          filters: "min-score and min-comments; optional preview limit",
+        },
+        hackernews: {
+          name: "hackernews",
+          label: "Hacker News",
+          desc: "Fetches front page stories, stores/upserts content, refreshes stats from Algolia, categorizes by domain/content/points, and renders hackernews-atom.",
+          source: "news.ycombinator.com + Algolia item stats",
+          config: "min-points, limit, outfile, interval",
+          contentDB: "hackernews.db",
+          httpCache: "Base http_cache.db opened",
+          og: "Yes. External article URLs get concurrent OpenGraph lookup.",
+          template: "hackernews-atom",
+          output: "hackernews.xml by default",
+          filters: "min-points and limit; category mapper",
+        },
+        fingerpori: {
+          name: "fingerpori",
+          label: "Fingerpori",
+          desc: "Fetches comic API data, computes feed fields, applies limit, and renders fingerpori-atom without OpenGraph lookup.",
+          source: "Helsingin Sanomat Fingerpori API/page data",
+          config: "limit, outfile, interval",
+          contentDB: "No content database",
+          httpCache: "Base http_cache.db opened",
+          og: "No OpenGraph DB passed to feed generator.",
+          template: "fingerpori-atom",
+          output: "fingerpori.xml by default",
+          filters: "limit",
+        },
+        feissarimokat: {
+          name: "feissarimokat",
+          label: "Feissarimokat",
+          desc: "Fetches RSS with HTTP cache support, processes embedded image content, optionally limits preview output, and renders feissarimokat-atom.",
+          source: "https://www.feissarimokat.com/ RSS",
+          config: "outfile, interval",
+          contentDB: "No content database",
+          httpCache: "http_cache.db via CachedGet",
+          og: "No OpenGraph DB passed to feed generator.",
+          template: "feissarimokat-atom",
+          output: "feissarimokat.xml by default",
+          filters: "preview limit only",
+        },
+        oglaf: {
+          name: "oglaf",
+          label: "Oglaf",
+          desc: "Fetches Oglaf RSS incrementally, stores items, backfills full comic images from comic pages, and renders latest processed comics.",
+          source: "https://www.oglaf.com/feeds/rss/ plus comic pages",
+          config: "feed-url, outfile, interval",
+          contentDB: "oglaf.db",
+          httpCache: "http_cache.db with not-modified handling",
+          og: "OG DB available; item link equals comments link so external OG URL list is usually empty.",
+          template: "oglaf-atom",
+          output: "oglaf.xml by default",
+          filters: "feedItemLimit=25; optional preview limit",
+        },
+        tildes: {
+          name: "tildes",
+          label: "Tildes",
+          desc: "Fetches one or more Tildes group Atom feeds, cleans content, parses votes/comments, sorts newest first, and renders tildes-atom.",
+          source: "https://tildes.net/~<topic>/topics.atom",
+          config: "topic, topics, outfile, interval",
+          contentDB: "No content database",
+          httpCache: "Base http_cache.db opened",
+          og: "Yes. External topic links can get OpenGraph metadata.",
+          template: "tildes-atom",
+          output: "tildes.xml by default",
+          filters: "topic/topic list and optional preview limit",
+        },
+        youtube: {
+          name: "youtube",
+          label: "YouTube",
+          desc: "Fetches one or more YouTube channel Atom feeds, deduplicates videos, filters Shorts unless enabled, sorts newest first, and renders youtube-atom.",
+          source: "YouTube channel Atom feed URLs or channel IDs",
+          config:
+            "feed-url, feed-urls, channel-ids, limit, include-shorts, outfile, interval",
+          contentDB: "No content database",
+          httpCache: "Base http_cache.db opened",
+          og: "Yes. Video links can get OpenGraph metadata.",
+          template: "youtube-atom",
+          output: "youtube.xml by default",
+          filters: "dedupe, include-shorts, limit",
+        },
+      };
+
+      const stages = [
+        {
+          id: "bootstrap",
+          n: "01",
+          title: "Provider bootstrap",
+          text: "Provider packages are imported for side effects. Each init() calls providers.MustRegister(name, ProviderInfo).",
+          tags: ["registry", "init"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "DefaultRegistry stores factory, config factory, preview metadata, description, version.",
+            "ProviderInfo.Preview carries feed metadata and template name.",
+            "Registered names include reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, youtube.",
+          ],
+        },
+        {
+          id: "config",
+          n: "02",
+          title: "Config discovery + CLI parse",
+          text: "resolveConfigPath checks --config, XDG config, executable dir, then local config.yaml. Kong merges YAML and flags.",
+          tags: ["YAML", "Kong"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "Global fields: config, debug, output-dir, cache-dir.",
+            "Provider command structs hold flags/defaults and YAML tags.",
+            "cache-dir switches filesystem cache base before providers open DBs.",
+          ],
+        },
+        {
+          id: "command",
+          n: "03",
+          title: "Command branch",
+          text: "main switches on ctx.Command(): single provider, preview, or generate all configured providers.",
+          tags: ["branch"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "Single provider: buildProviderConfig() from parsed CLI struct.",
+            "generate: configuredProviders() reads YAML keys and launches provider goroutines.",
+            "preview: fetches items and launches TUI preview or prints one XML item.",
+          ],
+        },
+        {
+          id: "load-provider-config",
+          n: "04",
+          title: "Provider config object",
+          text: "ConfigFactory creates typed config. generate/preview decode only selected YAML section into it.",
+          tags: ["typed config"],
+          modes: ["generate", "preview"],
+          detail: [
+            "generate command bypasses Kong subcommand population, so loadProviderConfigFromYAML decodes provider section manually.",
+            "GetGenerateConfig extracts embedded GenerateConfig for outfile and interval.",
+            "Single provider commands instead use buildProviderConfig().",
+          ],
+        },
+        {
+          id: "create-provider",
+          n: "05",
+          title: "Factory creates provider",
+          text: "DefaultRegistry.CreateProvider looks up ProviderInfo and calls Factory(config).",
+          tags: ["factory", "BaseProvider"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "NewBaseProvider opens opengraph.db and http_cache.db for all providers.",
+            "Providers needing persistent content also open provider DB, e.g. hackernews.db or oglaf.db.",
+            "Provider installs shared GenerateFeed via providerfeed.BuildGenerator().",
+          ],
+        },
+        {
+          id: "skip",
+          n: "06",
+          title: "Interval skip gate",
+          text: "generate checks output mtime against interval before network work.",
+          tags: ["mtime", "interval"],
+          modes: ["generate"],
+          detail: [
+            "defaultInterval is 15 minutes.",
+            "If output file is newer than interval, provider status becomes skipped.",
+            "Single provider commands do not use this skip gate.",
+          ],
+        },
+        {
+          id: "fetch",
+          n: "07",
+          title: "FetchItems()",
+          text: "Provider-specific network/API/RSS work returns []providers.FeedItem.",
+          tags: ["source", "filter"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "FeedItem exposes title, link, comments link, author, score, comments, creation time, categories, image URL, and content.",
+            "Providers filter, dedupe, categorize, sort, or backfill based on source.",
+            "Preview stops here unless XML item output requested.",
+          ],
+        },
+        {
+          id: "cache",
+          n: "08",
+          title: "Caches + databases",
+          text: "HTTP cache, OpenGraph cache, and provider content DBs reduce repeated work.",
+          tags: ["sqlite", "cache"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "opengraph.db stores OG metadata, expiries, ETag, Last-Modified, and recent failures.",
+            "http_cache.db can return ErrNotModified; generator bumps output mtime when existing feed unchanged.",
+            "Provider DBs persist content across runs for incremental behavior.",
+          ],
+        },
+        {
+          id: "template",
+          n: "09",
+          title: "Template data assembly",
+          text: "Feed generator loads template override from templates/ or embedded fallback, then maps FeedItem values into TemplateData.",
+          tags: ["templates", "Atom"],
+          modes: ["single", "generate"],
+          detail: [
+            "externalItemURLs excludes empty links and self/comment links.",
+            "OpenGraph fetch runs concurrently when provider passed an OG DB.",
+            "Template funcs escape and format data before Atom XML render.",
+          ],
+        },
+        {
+          id: "og",
+          n: "10",
+          title: "OpenGraph enrichment",
+          text: "For eligible providers, external item URLs get cached OG title/description/image/site metadata.",
+          tags: ["OG", "safe fetch"],
+          modes: ["single", "generate"],
+          detail: [
+            "Fetcher limits concurrency and rate limits per domain.",
+            "Blocked/social/media domains are skipped; direct IP and private/reserved addresses are refused.",
+            "Reddit OG URLs can route through configured proxy.",
+          ],
+        },
+        {
+          id: "write",
+          n: "11",
+          title: "Write feed output",
+          text: "SaveAtomFeedToFileWithEmbeddedTemplate writes Atom XML to resolved outfile.",
+          tags: ["XML", "outfile"],
+          modes: ["single", "generate"],
+          detail: [
+            "resolveOutfile prefixes output-dir for relative paths.",
+            "filesystem.EnsureDirectoryExists creates parent dirs.",
+            "Output defaults to provider name + .xml in generate if missing.",
+          ],
+        },
+        {
+          id: "index",
+          n: "12",
+          title: "Generate feed index",
+          text: "generate command can write output-dir/index.html from feed-index.html.tmpl.",
+          tags: ["index.html"],
+          modes: ["generate"],
+          detail: [
+            "Only non-failed feed results with filenames are included.",
+            "Feeds are sorted by provider name.",
+            "If output-dir is empty, index generation is skipped.",
+          ],
+        },
+        {
+          id: "preview",
+          n: "13",
+          title: "Preview output",
+          text: "preview command fetches provider items and either runs interactive TUI or formats one XML item to stdout.",
+          tags: ["TUI", "stdout"],
+          modes: ["preview"],
+          detail: [
+            "Provider preview metadata supplies display name, template name, and feed config.",
+            "limit controls FetchItems(limit).",
+            "index >= 0 prints one formatted XML item instead of starting TUI.",
+          ],
+        },
+        {
+          id: "close",
+          n: "14",
+          title: "Cleanup + status",
+          text: "Providers that implement Close() release DB handles. generate aggregates statuses and returns failure count.",
+          tags: ["close", "status"],
+          modes: ["single", "generate", "preview"],
+          detail: [
+            "BaseProvider.Close closes content DB, OpenGraph DB, and HTTP cache store.",
+            "generate records generated, skipped, or failed per provider.",
+            "main logs errors and exits non-zero on failed generation.",
+          ],
+        },
+      ];
+
+      const lanes = [
+        {
+          name: "CLI shell",
+          nodes: [
+            ["config", "Args + config path"],
+            ["command", "Subcommand switch"],
+            ["write", "Outfile path"],
+          ],
+        },
+        {
+          name: "Registry",
+          nodes: [
+            ["bootstrap", "init() registration"],
+            ["create-provider", "Provider factory"],
+            ["preview", "Preview metadata"],
+          ],
+        },
+        {
+          name: "Provider",
+          nodes: [
+            ["load-provider-config", "Typed config"],
+            ["fetch", "FetchItems + filtering"],
+            ["cache", "Source caches/DBs"],
+          ],
+        },
+        {
+          name: "Feed engine",
+          nodes: [
+            ["template", "TemplateData"],
+            ["og", "OpenGraph fetcher"],
+            ["write", "Atom renderer"],
+          ],
+        },
+        {
+          name: "Filesystem",
+          nodes: [
+            ["cache", "*.db cache files"],
+            ["write", "*.xml feed files"],
+            ["index", "index.html"],
+          ],
+        },
+      ];
+
+      const decisions = [
+        [
+          "Config path",
+          "--config wins; else XDG config; else executable dir; else local config.yaml.",
+        ],
+        [
+          "Single vs generate",
+          "Single provider command uses Kong-populated CLI struct. generate reads YAML sections and runs providers concurrently.",
+        ],
+        [
+          "Interval skip",
+          "Only generate checks mtime; younger output skips provider before network fetch.",
+        ],
+        [
+          "Template source",
+          "templates/<name>.tmpl override wins; embedded template is fallback.",
+        ],
+        [
+          "OpenGraph",
+          "Runs only when provider passes an OG DB and item link is external, non-empty, and not equal to comments link.",
+        ],
+        [
+          "HTTP not modified",
+          "If source cache returns ErrNotModified and output exists, mtime is bumped instead of rewriting feed.",
+        ],
+        [
+          "Index page",
+          "Only generate writes feed index, and only when output-dir is configured.",
+        ],
+      ];
+
+      const providerSelect = document.getElementById("providerSelect");
+      const providerList = document.getElementById("providerList");
+      const providerTitle = document.getElementById("providerTitle");
+      const providerDesc = document.getElementById("providerDesc");
+      const providerFacts = document.getElementById("providerFacts");
+      const stageRail = document.getElementById("stageRail");
+      const modeSelect = document.getElementById("modeSelect");
+      const searchBox = document.getElementById("searchBox");
+      const detailTitle = document.getElementById("detailTitle");
+      const detailText = document.getElementById("detailText");
+      const detailList = document.getElementById("detailList");
+      const toggleOG = document.getElementById("toggleOG");
+      const toggleCache = document.getElementById("toggleCache");
+      const toggleIndex = document.getElementById("toggleIndex");
+      const flowSummary = document.getElementById("flowSummary");
+      const expandBtn = document.getElementById("expandBtn");
+      const copyBtn = document.getElementById("copyBtn");
+
+      let selectedStage = "config";
+      let selectedProvider = "reddit";
+      let expandAll = false;
+      let suppressHash = false;
+
+      function initSelectors() {
+        Object.values(providers).forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.name;
+          opt.textContent = p.label;
+          providerSelect.appendChild(opt);
+
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "provider-btn";
+          btn.dataset.provider = p.name;
+          btn.innerHTML = `<strong>${p.label}</strong><small>${p.template} → ${p.output}</small>`;
+          btn.addEventListener("click", () => selectProvider(p.name));
+          providerList.appendChild(btn);
+        });
+      }
+
+      function dimReason(stage) {
+        const mode = modeSelect.value;
+        if (!stage.modes.includes(mode)) return "skipped in " + mode + " mode";
+        if (!toggleOG.checked && stage.id === "og") return "OpenGraph toggle off";
+        if (!toggleCache.checked && stage.id === "cache") return "Caches toggle off";
+        if (!toggleIndex.checked && stage.id === "index") return "Index toggle off";
+        const q = searchBox.value.trim().toLowerCase();
+        if (q) {
+          const blob = [
+            stage.title,
+            stage.text,
+            stage.tags.join(" "),
+            stage.detail.join(" "),
+          ]
+            .join(" ")
+            .toLowerCase();
+          if (!blob.includes(q)) return "no search match";
+        }
+        return null;
+      }
+
+      function stageVisible(stage) {
+        return dimReason(stage) === null;
+      }
+
+      function highlight(text, q) {
+        const escaped = escapeHTML(text);
+        if (!q) return escaped;
+        const pattern = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const re = new RegExp("(" + pattern + ")", "gi");
+        return escaped.replace(re, '<mark class="hit">$1</mark>');
+      }
+
+      function renderStages() {
+        const q = searchBox.value.trim();
+        stageRail.innerHTML = "";
+        let visibleCount = 0;
+        stages.forEach((stage) => {
+          const el = document.createElement("article");
+          const reason = dimReason(stage);
+          const visible = reason === null;
+          if (visible) visibleCount++;
+          const classes = ["stage"];
+          if (stage.id === selectedStage) classes.push("active");
+          if (!visible) classes.push("dim");
+          el.className = classes.join(" ");
+          el.tabIndex = 0;
+          el.dataset.stage = stage.id;
+          const why = reason
+            ? `<span class="why" title="Why dim">${escapeHTML(reason)}</span>`
+            : "";
+          const inline = `<div class="inline-details"><ul>${stage.detail
+            .map((d) => `<li>${highlight(d, q)}</li>`)
+            .join("")}</ul></div>`;
+          el.innerHTML =
+            `<div class="num">${stage.n}</div>` +
+            `<h3>${highlight(stage.title, q)}</h3>` +
+            `<p>${highlight(stage.text, q)}</p>` +
+            `<div class="tags">${stage.tags
+              .map((t) => `<span class="tag">${highlight(t, q)}</span>`)
+              .join("")}</div>` +
+            why +
+            inline;
+          el.addEventListener("click", () => selectStage(stage.id));
+          el.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectStage(stage.id);
+            }
+          });
+          stageRail.appendChild(el);
+        });
+        renderSummary(visibleCount);
+        if (!stages.find((s) => s.id === selectedStage && stageVisible(s))) {
+          const next = stages.find(stageVisible);
+          if (next) selectStage(next.id, false);
+        }
+      }
+
+      function renderSummary(visibleCount) {
+        const mode = modeSelect.value;
+        const total = stages.length;
+        flowSummary.innerHTML =
+          `<span><strong>${visibleCount}</strong> of <strong>${total}</strong> stages visible</span>` +
+          `<span class="pill">mode: ${escapeHTML(mode)}</span>` +
+          `<span class="pill">provider: ${escapeHTML(providers[selectedProvider].label)}</span>` +
+          `<span class="hint hint-kbd">Use <span class="kbd">←</span> <span class="kbd">→</span> to step between stages</span>`;
+      }
+
+      function selectStage(id, rerender = true, opts = {}) {
+        const stage = stages.find((s) => s.id === id);
+        if (!stage) return;
+        selectedStage = id;
+        detailTitle.textContent = stage.title;
+        detailText.textContent = stage.text;
+        detailList.innerHTML = stage.detail
+          .map((d) => `<li>${escapeHTML(d)}</li>`)
+          .join("");
+        document
+          .querySelectorAll("[data-stage], [data-node]")
+          .forEach((el) =>
+            el.classList.toggle(
+              "active",
+              el.dataset.stage === id || el.dataset.node === id,
+            ),
+          );
+        if (rerender) renderStages();
+        if (opts.scroll) {
+          const el = stageRail.querySelector(`[data-stage="${id}"]`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+        writeHash();
+      }
+
+      function selectProvider(name) {
+        if (!providers[name]) return;
+        selectedProvider = name;
+        providerSelect.value = name;
+        const p = providers[name];
+        providerTitle.textContent = p.label;
+        providerDesc.textContent = p.desc;
+        providerFacts.innerHTML = [
+          ["Source", p.source],
+          ["Config keys", p.config],
+          ["Content DB", p.contentDB],
+          ["HTTP cache", p.httpCache],
+          ["OpenGraph", p.og],
+          ["Template", p.template],
+          ["Default output", p.output],
+          ["Filters/transforms", p.filters],
+        ]
+          .map(
+            ([k, v]) =>
+              `<div class="fact"><b>${k}</b><span>${escapeHTML(v)}</span></div>`,
+          )
+          .join("");
+        document
+          .querySelectorAll(".provider-btn")
+          .forEach((btn) =>
+            btn.classList.toggle("active", btn.dataset.provider === name),
+          );
+        renderSummary(stages.filter(stageVisible).length);
+        writeHash();
+      }
+
+      function renderLanes() {
+        const root = document.getElementById("swimlanes");
+        root.innerHTML = lanes
+          .map(
+            (lane) => `
+        <div class="lane">
+          <h3>${lane.name}</h3>
+          ${lane.nodes
+            .map(
+              ([id, label]) =>
+                `<div class="node" tabindex="0" data-node="${id}"><strong>${label}</strong><span>${stages.find((s) => s.id === id)?.title || id}</span></div>`,
+            )
+            .join("")}
+        </div>`,
+          )
+          .join("");
+        root.querySelectorAll(".node").forEach((node) => {
+          node.addEventListener("click", () =>
+            selectStage(node.dataset.node, true, { scroll: true }),
+          );
+          node.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              selectStage(node.dataset.node, true, { scroll: true });
+            }
+          });
+        });
+      }
+
+      function renderDecisions() {
+        document.getElementById("decisionTree").innerHTML = decisions
+          .map(
+            ([k, v]) =>
+              `<div class="decision"><b>${k}</b><span>${escapeHTML(v)}</span></div>`,
+          )
+          .join("");
+      }
+
+      function runSimulation() {
+        const mode = modeSelect.value;
+        const p = providers[selectedProvider];
+        const steps = [];
+        const push = (msg) => steps.push(msg);
+        push("resolveConfigPath() selects config file; Kong parses CLI + YAML");
+        push("provider packages already registered in DefaultRegistry");
+        if (document.getElementById("simOutputDir").checked)
+          push(
+            "output-dir active: relative outfile becomes output-dir/" +
+              p.output,
+          );
+        if (mode === "generate") {
+          push(
+            "configuredProviders() scans YAML keys and starts goroutine for each configured provider",
+          );
+          push(
+            "loadProviderConfigFromYAML() decodes " +
+              p.name +
+              " section into typed config",
+          );
+          if (document.getElementById("simInterval").checked) {
+            push(
+              "shouldSkipProvider() sees young outfile; provider status = skipped",
+            );
+            if (document.getElementById("simOutputDir").checked)
+              push(
+                "generateFeedIndex() writes index.html with non-failed feeds",
+              );
+            return paintLog(steps);
+          }
+        } else if (mode === "preview") {
+          push(
+            "previewFeed() loads provider config and calls FetchItems(limit)",
+          );
+        } else {
+          push(
+            "buildProviderConfig() maps parsed CLI fields into " +
+              p.name +
+              " Config",
+          );
+        }
+        push('DefaultRegistry.CreateProvider("' + p.name + '") calls factory');
+        push(
+          "NewBaseProvider() opens opengraph.db + http_cache.db" +
+            (p.contentDB.startsWith("No") ? "" : " + " + p.contentDB),
+        );
+        if (
+          document.getElementById("simProxy").checked &&
+          selectedProvider === "reddit"
+        )
+          push("Reddit source and/or OG requests use configured proxy headers");
+        push(p.label + " FetchItems() reads source: " + p.source);
+        if (document.getElementById("simCacheHit").checked)
+          push("cache checked: " + p.httpCache + "; " + p.contentDB);
+        push("provider returns []FeedItem after transforms: " + p.filters);
+        if (mode === "preview") {
+          push(
+            "preview TUI receives items, or index mode prints one XML item to stdout",
+          );
+          return paintLog(steps);
+        }
+        push("BuildGenerator ensures output directory exists");
+        push(
+          "LoadTemplateWithFallback() chooses templates/" +
+            p.template +
+            ".tmpl or embedded fallback",
+        );
+        if (toggleOG.checked && !p.og.startsWith("No"))
+          push(
+            "OpenGraph fetcher enriches eligible external links using cache, rate limits, safe URL checks",
+          );
+        push("TemplateData rendered to Atom XML via " + p.template);
+        push("os.WriteFile() writes " + p.output);
+        if (
+          mode === "generate" &&
+          document.getElementById("simOutputDir").checked
+        )
+          push("generateFeedIndex() writes output-dir/index.html");
+        push("Close() releases content DB / OG DB / HTTP cache handles");
+        paintLog(steps);
+      }
+
+      function paintLog(steps) {
+        const log = document.getElementById("simLog");
+        log.innerHTML = steps
+          .map(
+            (msg, i) =>
+              `<div class="log-line"><span class="stamp">step ${String(i + 1).padStart(2, "0")}</span><span class="msg">${escapeHTML(msg)}</span></div>`,
+          )
+          .join("");
+        log.scrollTop = 0;
+      }
+
+      function escapeHTML(str) {
+        return String(str).replace(
+          /[&<>'"]/g,
+          (ch) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              "'": "&#39;",
+              '"': "&quot;",
+            })[ch],
+        );
+      }
+
+      function setExpandAll(on, opts = {}) {
+        expandAll = !!on;
+        document.body.classList.toggle("expand-all", expandAll);
+        expandBtn.setAttribute("aria-pressed", expandAll ? "true" : "false");
+        expandBtn.textContent = expandAll ? "Collapse all" : "Expand all";
+        if (!opts.silent) writeHash();
+      }
+
+      function parseHash() {
+        return new URLSearchParams(location.hash.replace(/^#/, ""));
+      }
+
+      function writeHash() {
+        if (suppressHash) return;
+        const params = new URLSearchParams();
+        params.set("mode", modeSelect.value);
+        params.set("provider", selectedProvider);
+        params.set("stage", selectedStage);
+        if (expandAll) params.set("expand", "1");
+        const next = "#" + params.toString();
+        if (location.hash !== next) {
+          history.replaceState(null, "", next);
+        }
+      }
+
+      function applyHash() {
+        suppressHash = true;
+        const p = parseHash();
+        const m = p.get("mode");
+        if (m && ["single", "generate", "preview"].includes(m))
+          modeSelect.value = m;
+        const prov = p.get("provider");
+        if (prov && providers[prov]) selectProvider(prov);
+        const expand = p.get("expand") === "1";
+        setExpandAll(expand, { silent: true });
+        renderStages();
+        const st = p.get("stage");
+        if (st && stages.find((s) => s.id === st)) selectStage(st, true);
+        runSimulation();
+        suppressHash = false;
+        writeHash();
+      }
+
+      function copyCurrentLink() {
+        writeHash();
+        const url = location.href;
+        const restore = () => {
+          copyBtn.textContent = "Copy link";
+          copyBtn.classList.remove("flash");
+        };
+        const flash = (label) => {
+          copyBtn.textContent = label;
+          copyBtn.classList.add("flash");
+          setTimeout(restore, 1500);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard
+            .writeText(url)
+            .then(() => flash("Copied!"))
+            .catch(() => window.prompt("Copy this URL:", url));
+        } else {
+          window.prompt("Copy this URL:", url);
+        }
+      }
+
+      function moveFocus(dir) {
+        const visible = [
+          ...stageRail.querySelectorAll(".stage:not(.dim)"),
+        ];
+        if (!visible.length) return;
+        let idx = visible.findIndex((el) => el.dataset.stage === selectedStage);
+        if (idx < 0) idx = dir > 0 ? -1 : 0;
+        idx = (idx + dir + visible.length) % visible.length;
+        const el = visible[idx];
+        selectStage(el.dataset.stage, true, { scroll: true });
+        el.focus();
+      }
+
+      initSelectors();
+      renderLanes();
+      renderDecisions();
+
+      suppressHash = true;
+      selectProvider(selectedProvider);
+      renderStages();
+      selectStage(selectedStage, false);
+      runSimulation();
+      suppressHash = false;
+
+      if (location.hash) applyHash();
+      else writeHash();
+
+      providerSelect.addEventListener("change", (e) =>
+        selectProvider(e.target.value),
+      );
+      modeSelect.addEventListener("change", () => {
+        renderStages();
+        runSimulation();
+        writeHash();
+      });
+      searchBox.addEventListener("input", renderStages);
+      [toggleOG, toggleCache, toggleIndex].forEach((el) =>
+        el.addEventListener("input", () => {
+          renderStages();
+          runSimulation();
+        }),
+      );
+      document
+        .getElementById("runSim")
+        .addEventListener("click", runSimulation);
+      ["simInterval", "simOutputDir", "simCacheHit", "simProxy"].forEach((id) =>
+        document.getElementById(id).addEventListener("input", runSimulation),
+      );
+      expandBtn.addEventListener("click", () => setExpandAll(!expandAll));
+      copyBtn.addEventListener("click", copyCurrentLink);
+      window.addEventListener("hashchange", () => {
+        if (!suppressHash) applyHash();
+      });
+      window.addEventListener("keydown", (e) => {
+        if (e.target.closest("input, select, textarea, button")) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+          e.preventDefault();
+          moveFocus(1);
+        } else if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+          e.preventDefault();
+          moveFocus(-1);
+        }
+      });
+    </script>
+  </body>
+</html>
