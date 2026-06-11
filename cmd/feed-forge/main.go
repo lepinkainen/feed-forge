@@ -21,6 +21,7 @@ import (
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/notifications"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 
@@ -36,11 +37,12 @@ import (
 
 // CLI structure
 var CLI struct {
-	Config      string `help:"Configuration file path" default:"config.yaml"`
-	Debug       bool   `help:"Enable debug logging" default:"false"`
-	OutputDir   string `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
-	FeedBaseURL string `help:"Public base URL for generated feeds and OPML" default:"https://endymion.xyz/rss/" yaml:"feed-base-url"`
-	CacheDir    string `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
+	Config            string `help:"Configuration file path" default:"config.yaml"`
+	Debug             bool   `help:"Enable debug logging" default:"false"`
+	OutputDir         string `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
+	FeedBaseURL       string `help:"Public base URL for generated feeds and OPML" default:"https://endymion.xyz/rss/" yaml:"feed-base-url"`
+	CacheDir          string `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
+	DiscordWebhookURL string `help:"Discord webhook URL for failure notifications" default:"" yaml:"discord-webhook-url"`
 
 	Reddit struct {
 		Outfile     string `help:"Output file path" short:"o" default:"reddit.xml"`
@@ -349,8 +351,10 @@ func shouldSkipProvider(outfile string, interval time.Duration) (bool, time.Dura
 type feedResult struct {
 	Provider string
 	FeedName string
-	Filename string // e.g. "reddit.xml"
-	Status   string // "generated", "skipped", "failed"
+	Filename string        // e.g. "reddit.xml"
+	Status   string        // "generated", "skipped", "failed"
+	Err      error         // non-nil when Status == "failed"
+	Duration time.Duration // time spent in GenerateFeed
 }
 
 type opmlDocument struct {
@@ -388,6 +392,8 @@ func generateAll(configPath string) error {
 		return nil
 	}
 
+	runStart := time.Now()
+
 	var (
 		wg      sync.WaitGroup
 		results = make([]feedResult, len(names))
@@ -406,6 +412,25 @@ func generateAll(configPath string) error {
 	}
 
 	wg.Wait()
+
+	if CLI.DiscordWebhookURL != "" && failed.Load() > 0 {
+		notifyResults := make([]notifications.ProviderResult, len(results))
+		for i, r := range results {
+			notifyResults[i] = notifications.ProviderResult{
+				Name:     r.Provider,
+				FeedName: r.FeedName,
+				Status:   r.Status,
+				Err:      r.Err,
+				Duration: r.Duration,
+			}
+		}
+		if notifyErr := notifications.SendDiscordWebhook(CLI.DiscordWebhookURL, notifications.RunResult{
+			Providers: notifyResults,
+			StartTime: runStart,
+		}); notifyErr != nil {
+			slog.Warn("Failed to send Discord notification", "error", notifyErr)
+		}
+	}
 
 	if err := generateFeedIndex(results); err != nil {
 		slog.Error("Failed to generate feed index", "error", err)
@@ -468,10 +493,14 @@ func generateProvider(configPath, name string) feedResult {
 	}
 
 	slog.Info("Generating feed", "provider", name, "outfile", outfile)
+	start := time.Now()
 	if err := provider.GenerateFeed(outfile); err != nil {
+		result.Err = err
+		result.Duration = time.Since(start)
 		slog.Error("Failed to generate feed", "provider", name, "error", err)
 		return result
 	}
+	result.Duration = time.Since(start)
 
 	result.Status = "generated"
 	return result
