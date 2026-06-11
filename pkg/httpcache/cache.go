@@ -231,6 +231,12 @@ func (s *Store) ensureBodyColumn() error {
 
 	if !hasBody {
 		if _, err := s.db.ExecContext(ctx, "ALTER TABLE http_validators ADD COLUMN body BLOB"); err != nil {
+			// Providers run concurrently and each opens its own store on the same
+			// database file, so another goroutine may have added the column between
+			// the PRAGMA check and this ALTER.
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+				return nil
+			}
 			return fmt.Errorf("add body column: %w", err)
 		}
 	}
