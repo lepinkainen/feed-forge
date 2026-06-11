@@ -121,26 +121,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 			failed++
 			continue
 		}
-
-		for _, entry := range feed.Entries {
-			if !p.IncludeShorts && entry.isShort() {
-				continue
-			}
-
-			key := entry.VideoID
-			if key == "" {
-				key = entry.alternateHref()
-			}
-			if key == "" {
-				continue
-			}
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-
-			items = append(items, &Item{entry: entry, channelTitle: feed.Title})
-		}
+		items = appendUniqueEntries(items, seen, feed, p.IncludeShorts)
 	}
 
 	if failed > 0 && failed == len(p.FeedURLs) {
@@ -160,4 +141,25 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	}
 
 	return items, nil
+}
+
+func appendUniqueEntries(items []providers.FeedItem, seen map[string]struct{}, feed *atomFeed, includeShorts bool) []providers.FeedItem {
+	for _, entry := range feed.Entries {
+		if !includeShorts && entry.isShort() {
+			continue
+		}
+		key := entry.VideoID
+		if key == "" {
+			key = entry.alternateHref()
+		}
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		items = append(items, &Item{entry: entry, channelTitle: feed.Title})
+	}
+	return items
 }

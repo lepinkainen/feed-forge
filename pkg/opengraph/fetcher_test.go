@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -231,7 +232,6 @@ func TestFetchData_CachesFailures(t *testing.T) {
 }
 
 func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
-	fetcher := NewFetcher(nil)
 	doc, err := html.Parse(strings.NewReader(`<!doctype html><html><head>
 		<title> Page Title </title>
 		<meta name="description" content="fallback description">
@@ -243,7 +243,7 @@ func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
 	}
 
 	data := &Data{}
-	fetcher.extractOpenGraphTags(doc, data)
+	extractOpenGraphTags(doc, data)
 	if data.Title != "Page Title" || data.Description != "fallback description" || data.Image != "/fallback.png" || data.SiteName != "Site" {
 		t.Fatalf("extractOpenGraphTags() = %#v", data)
 	}
@@ -271,7 +271,7 @@ func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
 		t.Fatal("failed to find meta node")
 	}
 	data = &Data{}
-	fetcher.processMetaTag(metaNode, data)
+	processMetaTag(metaNode, data)
 	if data.Title != "Preferred" {
 		t.Fatalf("processMetaTag() title = %q, want Preferred", data.Title)
 	}
@@ -285,7 +285,7 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 		Image:       "://bad",
 		SiteName:    " Site\x00 ",
 	}
-	fetcher.cleanupData(data, "https://example.com/post")
+	cleanupData(data, "https://example.com/post")
 	if !strings.HasSuffix(data.Title, "...") || strings.Contains(data.Title, "\x00") || len(data.Title) > 205 {
 		t.Fatalf("cleanupData() title = %q", data.Title)
 	}
@@ -299,7 +299,7 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 		t.Fatalf("cleanupData() site name = %q, want Site", data.SiteName)
 	}
 
-	converted, err := fetcher.convertToUTF8([]byte("hello"), "text/html; charset=not-real")
+	converted, err := convertToUTF8([]byte("hello"), "text/html; charset=not-real")
 	if err != nil || converted != "hello" {
 		t.Fatalf("convertToUTF8() = (%q, %v), want (hello, nil)", converted, err)
 	}
@@ -443,5 +443,101 @@ func TestFetchConcurrent(t *testing.T) {
 
 	if empty := fetcher.FetchConcurrent(nil); len(empty) != 0 {
 		t.Fatalf("FetchConcurrent(nil) len = %d, want 0", len(empty))
+	}
+}
+
+func TestFetchData_SingleflightCoalescesConcurrentFetches(t *testing.T) {
+	var hits atomic.Int32
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseServer := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseServer()
+
+	arrived := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>OG</title></head></html>`))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(nil)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	const n = 10
+	targetURL := "http://example.invalid/dedupe"
+	var startGate sync.WaitGroup
+	startGate.Add(1)
+	var done sync.WaitGroup
+	results := make([]*Data, n)
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		done.Add(1)
+		go func(i int) {
+			defer done.Done()
+			startGate.Wait()
+			results[i], errs[i] = fetcher.FetchData(targetURL)
+		}(i)
+	}
+	time.Sleep(20 * time.Millisecond)
+	startGate.Done()
+
+	select {
+	case <-arrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no request reached server")
+	}
+	time.Sleep(100 * time.Millisecond)
+	releaseServer()
+	done.Wait()
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server hits = %d, want 1 (singleflight did not coalesce)", got)
+	}
+	for i := 0; i < n; i++ {
+		if errs[i] != nil {
+			t.Fatalf("goroutine %d error = %v", i, errs[i])
+		}
+		if results[i] == nil || results[i].Title != "OG" {
+			t.Fatalf("goroutine %d result = %#v", i, results[i])
+		}
+	}
+}
+
+func TestFetcher_FetchGroupReleasesAfterCompletion(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>OG</title></head></html>`))
+	}))
+	defer server.Close()
+
+	fetcher := NewFetcher(nil)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	targetURL := "http://example.invalid/sequential"
+	for i := 0; i < 3; i++ {
+		data, err := fetcher.FetchData(targetURL)
+		if err != nil {
+			t.Fatalf("FetchData iter %d error = %v", i, err)
+		}
+		if data == nil || data.Title != "OG" {
+			t.Fatalf("FetchData iter %d = %#v", i, data)
+		}
+	}
+	if got := hits.Load(); got != 3 {
+		t.Fatalf("server hits = %d, want 3 (singleflight should not cache across sequential calls)", got)
 	}
 }

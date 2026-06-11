@@ -29,11 +29,9 @@ var _ dbinterfaces.CleanupProvider = (*Database)(nil)
 // NewDatabase creates a new OpenGraph database instance
 func NewDatabase(dbPath string) (*Database, error) {
 	if dbPath == "" {
-		// Default to current directory
 		dbPath = DefaultDBFile
 	}
 
-	// Ensure directory exists
 	if err := filesystem.EnsureDirectoryExists(dbPath); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %w", err)
 	}
@@ -43,55 +41,16 @@ func NewDatabase(dbPath string) (*Database, error) {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	// Configure SQLite for better concurrency and performance
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil { // 5 second timeout for lock contention
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
-		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	if err := configureSQLite(db); err != nil {
+		closeDBOnError(db)
+		return nil, err
 	}
 
-	var journalMode string
-	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
-		return nil, fmt.Errorf("failed to read journal mode: %w", err)
-	}
-
-	if !strings.EqualFold(journalMode, "wal") {
-		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil { // Enable WAL mode for concurrent readers/writers
-			if closeErr := db.Close(); closeErr != nil {
-				slog.Error("Failed to close database", "error", closeErr)
-			}
-			return nil, fmt.Errorf("failed to set journal mode: %w", err)
-		}
-	}
-
-	pragmas := []string{
-		"PRAGMA synchronous=NORMAL",  // Balance between performance and safety
-		"PRAGMA temp_store=memory",   // Store temp tables in memory
-		"PRAGMA mmap_size=268435456", // 256MB memory mapped I/O
-	}
-
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			if closeErr := db.Close(); closeErr != nil {
-				slog.Error("Failed to close database", "error", closeErr)
-			}
-			return nil, fmt.Errorf("failed to set pragma %q: %w", pragma, err)
-		}
-	}
-
-	// Configure connection pool
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 
-	// Test the connection
 	if err := db.Ping(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
+		closeDBOnError(db)
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -99,17 +58,47 @@ func NewDatabase(dbPath string) (*Database, error) {
 		db:     db,
 		dbPath: dbPath,
 	}
-
-	// Create schema
 	if err := ogDB.createSchema(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
+		closeDBOnError(db)
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
 	slog.Info("OpenGraph database initialized", "path", dbPath)
 	return ogDB, nil
+}
+
+func closeDBOnError(db *sql.DB) {
+	if err := db.Close(); err != nil {
+		slog.Error("Failed to close database", "error", err)
+	}
+}
+
+func configureSQLite(db *sql.DB) error {
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	var journalMode string
+	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
+		return fmt.Errorf("failed to read journal mode: %w", err)
+	}
+	if !strings.EqualFold(journalMode, "wal") {
+		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			return fmt.Errorf("failed to set journal mode: %w", err)
+		}
+	}
+
+	pragmas := []string{
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA temp_store=memory",
+		"PRAGMA mmap_size=268435456",
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return fmt.Errorf("failed to set pragma %q: %w", pragma, err)
+		}
+	}
+	return nil
 }
 
 // createSchema creates the necessary tables

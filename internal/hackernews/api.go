@@ -80,26 +80,8 @@ func fetchItems() []Item {
 // updateItemStats updates item statistics using concurrent API calls to Algolia
 func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) {
 	slog.Debug("Updating item stats", "itemCount", len(items))
-	skippedCount := 0
 
-	// Filter items that need updating
-	var itemsToUpdate []Item
-	for _, item := range items {
-		// Skip items with empty ItemID
-		if item.ItemID == "" {
-			slog.Warn("Skipping item with empty ItemID", "title", item.ItemTitle)
-			continue
-		}
-
-		// Skip items that were just updated in updateStoredItems
-		if recentlyUpdated[item.ItemID] {
-			slog.Debug("Skipping recently updated item", "hn_id", item.ItemID)
-			skippedCount++
-			continue
-		}
-
-		itemsToUpdate = append(itemsToUpdate, item)
-	}
+	itemsToUpdate, skippedCount := filterItemsForUpdate(items, recentlyUpdated)
 
 	if len(itemsToUpdate) == 0 {
 		if skippedCount > 0 {
@@ -139,45 +121,62 @@ func updateItemStats(db *sql.DB, items []Item, recentlyUpdated map[string]bool) 
 		close(resultChan)
 	}()
 
-	// Process results and update database
 	updatedCount := 0
 	deletedCount := 0
 	for update := range resultChan {
-		if update.err != nil {
-			if update.isDeadItem {
-				// Delete the dead item from database
-				_, err := db.Exec(`DELETE FROM items WHERE item_hn_id = ?`, update.itemID)
-				if err != nil {
-					slog.Warn("Failed to delete dead item from database", "error", err, "hn_id", update.itemID)
-				} else {
-					slog.Debug("Deleted dead item from database", "hn_id", update.itemID)
-					deletedCount++
-				}
-			} else {
-				slog.Warn("Failed to fetch item stats from Algolia", "error", update.err, "hn_id", update.itemID)
-			}
-			continue
-		}
-
-		// Update database with current stats
-		_, err := db.Exec(`
-			UPDATE items SET 
-				points = ?, 
-				comment_count = ?, 
-				updated_at = ?
-			WHERE item_hn_id = ?`,
-			update.points, update.commentCount, time.Now(), update.itemID)
-
-		if err != nil {
-			slog.Warn("Failed to update item stats in database", "error", err, "hn_id", update.itemID)
-			continue
-		}
-
-		slog.Debug("Updated item stats", "hn_id", update.itemID, "points", update.points, "comments", update.commentCount)
-		updatedCount++
+		upd, del := applyStatUpdate(db, update)
+		updatedCount += upd
+		deletedCount += del
 	}
 
 	slog.Debug("Completed stats update", "updated", updatedCount, "deleted", deletedCount, "skipped", skippedCount)
+}
+
+// applyStatUpdate writes one Algolia result to the DB and reports the row delta.
+func applyStatUpdate(db *sql.DB, update statsUpdate) (updated, deleted int) {
+	if update.err != nil {
+		if update.isDeadItem {
+			if _, err := db.Exec(`DELETE FROM items WHERE item_hn_id = ?`, update.itemID); err != nil {
+				slog.Warn("Failed to delete dead item from database", "error", err, "hn_id", update.itemID)
+				return 0, 0
+			}
+			slog.Debug("Deleted dead item from database", "hn_id", update.itemID)
+			return 0, 1
+		}
+		slog.Warn("Failed to fetch item stats from Algolia", "error", update.err, "hn_id", update.itemID)
+		return 0, 0
+	}
+
+	_, err := db.Exec(`
+		UPDATE items SET
+			points = ?,
+			comment_count = ?,
+			updated_at = ?
+		WHERE item_hn_id = ?`,
+		update.points, update.commentCount, time.Now(), update.itemID)
+	if err != nil {
+		slog.Warn("Failed to update item stats in database", "error", err, "hn_id", update.itemID)
+		return 0, 0
+	}
+	slog.Debug("Updated item stats", "hn_id", update.itemID, "points", update.points, "comments", update.commentCount)
+	return 1, 0
+}
+
+// filterItemsForUpdate drops items missing an ID or already refreshed this run.
+func filterItemsForUpdate(items []Item, recentlyUpdated map[string]bool) (toUpdate []Item, skipped int) {
+	for _, item := range items {
+		if item.ItemID == "" {
+			slog.Warn("Skipping item with empty ItemID", "title", item.ItemTitle)
+			continue
+		}
+		if recentlyUpdated[item.ItemID] {
+			slog.Debug("Skipping recently updated item", "hn_id", item.ItemID)
+			skipped++
+			continue
+		}
+		toUpdate = append(toUpdate, item)
+	}
+	return toUpdate, skipped
 }
 
 // fetchItemStats retrieves current statistics for a single item from Algolia API

@@ -47,7 +47,6 @@ func NewDatabase(config Config) (*Database, error) {
 	cacheMutex.Lock()
 	defer cacheMutex.Unlock()
 
-	// If a connection for this path already exists, return it
 	if db, ok := dbCache[config.Path]; ok {
 		return db, nil
 	}
@@ -61,58 +60,19 @@ func NewDatabase(config Config) (*Database, error) {
 		return nil, err
 	}
 
-	// Configure SQLite for better concurrency and performance (if using SQLite)
 	if config.Driver == "sqlite" {
-		if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil { // 5 second timeout for lock contention
-			if closeErr := db.Close(); closeErr != nil {
-				slog.Error("Failed to close database", "error", closeErr)
-			}
+		if err := configureSQLitePragmas(db); err != nil {
+			closeDBOnError(db)
 			return nil, err
-		}
-
-		var journalMode string
-		if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
-			if closeErr := db.Close(); closeErr != nil {
-				slog.Error("Failed to close database", "error", closeErr)
-			}
-			return nil, err
-		}
-
-		if !strings.EqualFold(journalMode, "wal") {
-			if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil { // Enable WAL mode for concurrent readers/writers
-				if closeErr := db.Close(); closeErr != nil {
-					slog.Error("Failed to close database", "error", closeErr)
-				}
-				return nil, err
-			}
-		}
-
-		pragmas := []string{
-			"PRAGMA synchronous=NORMAL",  // Balance between performance and safety
-			"PRAGMA temp_store=memory",   // Store temp tables in memory
-			"PRAGMA mmap_size=268435456", // 256MB memory mapped I/O
-		}
-
-		for _, pragma := range pragmas {
-			if _, err := db.Exec(pragma); err != nil {
-				if closeErr := db.Close(); closeErr != nil {
-					slog.Error("Failed to close database", "error", closeErr)
-				}
-				return nil, err
-			}
 		}
 	}
 
-	// Configure connection pool
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 
-	// Test connection
 	if err := db.Ping(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close database", "error", closeErr)
-		}
+		closeDBOnError(db)
 		return nil, err
 	}
 
@@ -120,11 +80,42 @@ func NewDatabase(config Config) (*Database, error) {
 		db:     db,
 		dbPath: config.Path,
 	}
-
-	// Store the new connection in the cache
 	dbCache[config.Path] = database
-
 	return database, nil
+}
+
+func closeDBOnError(db *sql.DB) {
+	if err := db.Close(); err != nil {
+		slog.Error("Failed to close database", "error", err)
+	}
+}
+
+func configureSQLitePragmas(db *sql.DB) error {
+	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return err
+	}
+
+	var journalMode string
+	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
+		return err
+	}
+	if !strings.EqualFold(journalMode, "wal") {
+		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+			return err
+		}
+	}
+
+	pragmas := []string{
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA temp_store=memory",
+		"PRAGMA mmap_size=268435456",
+	}
+	for _, pragma := range pragmas {
+		if _, err := db.Exec(pragma); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Close closes the database connection

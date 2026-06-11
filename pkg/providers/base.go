@@ -31,64 +31,66 @@ type DatabaseConfig struct {
 func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 	base := &BaseProvider{}
 
-	// Initialize OpenGraph database (all providers use this)
+	success := false
+	defer func() {
+		if success {
+			return
+		}
+		if base.ContentDB != nil {
+			closeOrLog("content database", base.ContentDB)
+		}
+		if base.HTTPCache != nil {
+			closeOrLog("HTTP cache database", base.HTTPCache)
+		}
+		if base.OgDB != nil {
+			closeOrLog("OpenGraph database", base.OgDB)
+		}
+	}()
+
 	ogDBPath, err := filesystem.GetDefaultPath("opengraph.db")
 	if err != nil {
 		return nil, err
 	}
-
 	base.OgDB, err = opengraph.NewDatabase(ogDBPath)
 	if err != nil {
 		return nil, err
 	}
-
-	// Clean up expired OpenGraph cache entries
 	if cleanupErr := base.OgDB.CleanupExpired(); cleanupErr != nil {
 		slog.Warn("Failed to cleanup expired OpenGraph cache", "error", cleanupErr)
 	}
 
 	httpCachePath, err := filesystem.GetDefaultPath("http_cache.db")
 	if err != nil {
-		if closeErr := base.OgDB.Close(); closeErr != nil {
-			slog.Error("Failed to close OpenGraph database", "error", closeErr)
-		}
 		return nil, err
 	}
-
 	base.HTTPCache, err = httpcache.NewStore(httpCachePath)
 	if err != nil {
-		if closeErr := base.OgDB.Close(); closeErr != nil {
-			slog.Error("Failed to close OpenGraph database", "error", closeErr)
-		}
 		return nil, err
 	}
 
-	// Initialize content database if needed
 	if dbConfig.UseContentDB && dbConfig.ContentDBName != "" {
 		contentDBPath, err := filesystem.GetDefaultPath(dbConfig.ContentDBName)
 		if err != nil {
-			if closeErr := base.OgDB.Close(); closeErr != nil {
-				slog.Error("Failed to close OpenGraph database", "error", closeErr)
-			}
-			if closeErr := base.HTTPCache.Close(); closeErr != nil {
-				slog.Error("Failed to close HTTP cache database", "error", closeErr)
-			}
 			return nil, err
 		}
-
 		base.ContentDB, err = database.NewDatabase(database.Config{Path: contentDBPath})
 		if err != nil {
-			if closeErr := base.OgDB.Close(); closeErr != nil {
-				slog.Error("Failed to close OpenGraph database", "error", closeErr)
-			}
-			if closeErr := base.HTTPCache.Close(); closeErr != nil {
-				slog.Error("Failed to close HTTP cache database", "error", closeErr)
-			}
 			return nil, err
 		}
 	}
 
+	success = true
 	return base, nil
+}
+
+type closer interface {
+	Close() error
+}
+
+func closeOrLog(name string, c closer) {
+	if err := c.Close(); err != nil {
+		slog.Error("Failed to close "+name, "error", err)
+	}
 }
 
 // SetGenerateFeedFunc configures the shared GenerateFeed implementation for the provider.

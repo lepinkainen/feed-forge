@@ -294,9 +294,13 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 		fields = append(fields, "error", err)
 	}
 
-	if success {
+	switch {
+	case success:
 		slog.Debug("API call completed", fields...)
-	} else {
+	case IsTransientUpstreamError(err):
+		// Aggregated by caller into one summary line per run.
+		slog.Debug("API call failed (transient upstream)", fields...)
+	default:
 		// Info, not Warn: the error is returned to the caller, which decides
 		// whether it is fatal. Warn here would spam cron output (forwarded to
 		// Discord) for transient upstream blips the app recovers from.

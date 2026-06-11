@@ -21,6 +21,22 @@ tasks:
       - go vet ./...
       - go mod tidy
 
+  vuln:
+    desc: "Scan dependencies for known vulnerabilities"
+    cmds:
+      - govulncheck ./...
+
+  deadcode:
+    desc: "Report unreachable functions (advisory; interface-satisfying test methods are expected false positives)"
+    cmds:
+      - deadcode -test ./...
+
+  cognit:
+    desc: "Report functions with cognitive complexity > 20 with per-branch diagnostics (advisory; tests ignored)"
+    cmds:
+      - |
+        gocognit -ignore "_test" -over 20 -d -json . | jq -r '.[] | "\(.Complexity) \(.PkgName) \(.FuncName) \(.Pos.Filename):\(.Pos.Line):\(.Pos.Column)\n" + ([.Diagnostics[] | "  +\(.Inc) (nest \(.Nesting // 0)) \(.Text) @ \(.Pos.Line):\(.Pos.Column)"] | join("\n"))'
+
   clean:
     desc: "Clean build artifacts"
     cmds:
@@ -109,11 +125,11 @@ tasks:
     cmds:
       - mkdir -p internal/oglaf/testdata internal/feissarimokat/testdata internal/hackernews/testdata
       - curl -L --fail --show-error --silent https://www.oglaf.com/feeds/rss/ -o internal/oglaf/testdata/rss_live_snapshot.xml
-      - curl -L --fail --show-error --silent https://static.feissarimokat.com/dynamic/latest/posts.rss -o internal/feissarimokat/testdata/feed_live_snapshot.rss
+      - curl -L --fail --show-error --silent https://static.feissarimokat.com/dynamic/latest/posts.rss -o internal/feissarimokat/testdata/feed_live_snapshot.xml
       - |
         post_url=$$(python - <<'PY'
         import pathlib, re
-        rss = pathlib.Path('internal/feissarimokat/testdata/feed_live_snapshot.rss').read_text()
+        rss = pathlib.Path('internal/feissarimokat/testdata/feed_live_snapshot.xml').read_text()
         m = re.search(r'<link>(https://www\.feissarimokat\.com/[^<]+)</link>', rss)
         if not m:
             raise SystemExit('failed to find feissarimokat post link in RSS fixture')

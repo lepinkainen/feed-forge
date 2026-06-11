@@ -91,10 +91,7 @@ func TestNewRSSItemsDetection(t *testing.T) {
 	}
 
 	// Test new item detection
-	newItems, err := getNewRSSItems(db, allItems)
-	if err != nil {
-		t.Fatalf("Failed to detect new items: %v", err)
-	}
+	newItems := getNewRSSItems(db, allItems)
 
 	if len(newItems) != 1 {
 		t.Errorf("Expected 1 new item, got %d", len(newItems))

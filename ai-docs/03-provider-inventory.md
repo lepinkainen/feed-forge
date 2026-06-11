@@ -53,6 +53,12 @@ OpenGraph proxy:
 - `feedConfig()` copies `previewInfo.Config` and sets `ProxyURL=OGProxyURL`, `ProxySecret=ProxySecret` only if both set.
 - Used by `feed.createOGFetcher` for proxiable Reddit OG URLs.
 
+Proxy hosting:
+
+- Reddit applies block-level IP bans on whole datacenter ranges. Symptom: HTTP 403 with Reddit HTML body returned by `proxy/reddit-proxy.php` for all unauthenticated `.json` requests.
+- **Hetzner is permanently banned** (all ranges, not going away). Do not deploy `proxy/reddit-proxy.php` there.
+- Use a residential / SOHO / small EU shared-host IP, or switch the provider to Reddit OAuth and drop the proxy.
+
 Item type:
 
 - `RedditPost` implements `FeedItem` in `types.go`.

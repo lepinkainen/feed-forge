@@ -17,37 +17,6 @@ import (
 // Config contains metadata for feed generation.
 type Config = feedmeta.Config
 
-// GenerateAtomFeed creates an Atom RSS feed using template-based generation.
-// This is the unified function that replaces provider-specific generation logic.
-func GenerateAtomFeed(items []providers.FeedItem, templateName, templatePath string, config Config, ogDB *opengraph.Database) (string, error) {
-	return GenerateAtomFeedWithContext(context.Background(), items, templateName, templatePath, config, ogDB)
-}
-
-// GenerateAtomFeedWithContext creates an Atom RSS feed using template-based generation.
-func GenerateAtomFeedWithContext(ctx context.Context, items []providers.FeedItem, templateName, templatePath string, config Config, ogDB *opengraph.Database) (string, error) {
-	return generateAtomFeed(ctx, items, templateName, config, ogDB, func(generator *TemplateGenerator) error {
-		return generator.LoadTemplate(templateName, templatePath)
-	})
-}
-
-// SaveAtomFeedToFile generates and saves an Atom feed to a file.
-func SaveAtomFeedToFile(items []providers.FeedItem, templateName, templatePath, outputPath string, config Config, ogDB *opengraph.Database) error {
-	return SaveAtomFeedToFileWithContext(context.Background(), items, templateName, templatePath, outputPath, config, ogDB)
-}
-
-// SaveAtomFeedToFileWithContext generates and saves an Atom feed to a file.
-func SaveAtomFeedToFileWithContext(ctx context.Context, items []providers.FeedItem, templateName, templatePath, outputPath string, config Config, ogDB *opengraph.Database) error {
-	slog.Debug("Generating and saving Atom feed", "outputPath", outputPath, "itemCount", len(items))
-
-	atomContent, err := GenerateAtomFeedWithContext(ctx, items, templateName, templatePath, config, ogDB)
-	if err != nil {
-		slog.Error("Failed to generate Atom feed", "error", err)
-		return err
-	}
-
-	return os.WriteFile(outputPath, []byte(atomContent), 0o600)
-}
-
 // GenerateAtomFeedWithEmbeddedTemplate creates an Atom RSS feed using embedded templates with local override.
 func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
 	return GenerateAtomFeedWithEmbeddedTemplateWithContext(context.Background(), items, templateName, config, ogDB)

@@ -9,16 +9,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kong"
 	kongyaml "github.com/alecthomas/kong-yaml"
 	"gopkg.in/yaml.v3"
 
+	apipkg "github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/notifications"
@@ -397,7 +398,6 @@ func generateAll(configPath string) error {
 	var (
 		wg      sync.WaitGroup
 		results = make([]feedResult, len(names))
-		failed  atomic.Int32
 	)
 
 	for i, name := range names {
@@ -405,42 +405,69 @@ func generateAll(configPath string) error {
 		go func(i int, name string) {
 			defer wg.Done()
 			results[i] = generateProvider(configPath, name)
-			if results[i].Status == "failed" {
-				failed.Add(1)
-			}
 		}(i, name)
 	}
 
 	wg.Wait()
 
-	if CLI.DiscordWebhookURL != "" && failed.Load() > 0 {
-		notifyResults := make([]notifications.ProviderResult, len(results))
-		for i, r := range results {
-			notifyResults[i] = notifications.ProviderResult{
-				Name:     r.Provider,
-				FeedName: r.FeedName,
-				Status:   r.Status,
-				Err:      r.Err,
-				Duration: r.Duration,
-			}
-		}
-		if notifyErr := notifications.SendDiscordWebhook(CLI.DiscordWebhookURL, notifications.RunResult{
-			Providers: notifyResults,
-			StartTime: runStart,
-		}); notifyErr != nil {
-			slog.Warn("Failed to send Discord notification", "error", notifyErr)
-		}
-	}
+	notifyFailures(results, runStart)
 
 	if err := generateFeedIndex(results); err != nil {
 		slog.Error("Failed to generate feed index", "error", err)
 	}
 
-	if f := failed.Load(); f > 0 {
-		return fmt.Errorf("%d provider(s) failed", f)
+	var (
+		transient []string
+		hardCount int
+	)
+	for _, r := range results {
+		if r.Status != "failed" {
+			continue
+		}
+		if code, ok := apipkg.UpstreamStatusCode(r.Err); ok && code >= 400 && code < 600 {
+			transient = append(transient, fmt.Sprintf("%s=%d", r.Provider, code))
+		} else {
+			hardCount++
+		}
+	}
+
+	if len(transient) > 0 {
+		slog.Warn("Transient upstream failures", "providers", strings.Join(transient, ","))
+	}
+
+	if hardCount > 0 {
+		return fmt.Errorf("%d provider(s) failed", hardCount)
 	}
 
 	return nil
+}
+
+// notifyFailures sends a Discord webhook summary when a webhook URL is
+// configured and at least one provider failed.
+func notifyFailures(results []feedResult, runStart time.Time) {
+	if CLI.DiscordWebhookURL == "" {
+		return
+	}
+	if !slices.ContainsFunc(results, func(r feedResult) bool { return r.Status == "failed" }) {
+		return
+	}
+
+	notifyResults := make([]notifications.ProviderResult, len(results))
+	for i, r := range results {
+		notifyResults[i] = notifications.ProviderResult{
+			Name:     r.Provider,
+			FeedName: r.FeedName,
+			Status:   r.Status,
+			Err:      r.Err,
+			Duration: r.Duration,
+		}
+	}
+	if err := notifications.SendDiscordWebhook(CLI.DiscordWebhookURL, notifications.RunResult{
+		Providers: notifyResults,
+		StartTime: runStart,
+	}); err != nil {
+		slog.Warn("Failed to send Discord notification", "error", err)
+	}
 }
 
 func generateProvider(configPath, name string) feedResult {
@@ -481,6 +508,7 @@ func generateProvider(configPath, name string) feedResult {
 	provider, err := providers.DefaultRegistry.CreateProvider(name, providerConfig)
 	if err != nil {
 		slog.Error("Failed to create provider", "provider", name, "error", err)
+		result.Err = err
 		return result
 	}
 
@@ -497,7 +525,9 @@ func generateProvider(configPath, name string) feedResult {
 	if err := provider.GenerateFeed(outfile); err != nil {
 		result.Err = err
 		result.Duration = time.Since(start)
-		slog.Error("Failed to generate feed", "provider", name, "error", err)
+		if !apipkg.IsTransientUpstreamError(err) {
+			slog.Error("Failed to generate feed", "provider", name, "error", err)
+		}
 		return result
 	}
 	result.Duration = time.Since(start)
@@ -635,132 +665,40 @@ func main() {
 		filesystem.SetCacheDir(CLI.CacheDir)
 	}
 
-	switch ctx.Command() {
-	case "hackernews":
-		slog.Debug("Generating Hacker News feed...")
+	dispatchCommand(ctx.Command(), configPath)
+}
 
-		providerConfig := buildProviderConfig("hackernews")
-		provider, err := providers.DefaultRegistry.CreateProvider("hackernews", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Hacker News provider", "error", err)
-			os.Exit(1)
-		}
+func dispatchCommand(command, configPath string) {
+	type providerSpec struct {
+		key, name, outfile string
+		extra              []any
+	}
+	providerCmds := map[string]providerSpec{
+		"hackernews":    {"hackernews", "Hacker News", CLI.HackerNews.Outfile, nil},
+		"fingerpori":    {"fingerpori", "Fingerpori", CLI.Fingerpori.Outfile, nil},
+		"feissarimokat": {"feissarimokat", "Feissarimokat", CLI.Feissarimokat.Outfile, nil},
+		"oglaf":         {"oglaf", "Oglaf", CLI.Oglaf.Outfile, nil},
+		"tildes":        {"tildes", "Tildes", CLI.Tildes.Outfile, nil},
+		"youtube":       {"youtube", "YouTube", CLI.YouTube.Outfile, nil},
+	}
+	if spec, ok := providerCmds[command]; ok {
+		runProvider(spec.key, spec.name, spec.outfile, spec.extra...)
+		return
+	}
 
-		outfile := resolveOutfile(CLI.HackerNews.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Hacker News feed", "output_file", outfile, "error", err)
-			os.Exit(1)
-		}
-
+	switch command {
 	case "reddit":
-		slog.Debug("Generating Reddit feed...")
-
 		if CLI.Reddit.FeedID == "" || CLI.Reddit.Username == "" {
 			slog.Error("Reddit feed requires both feed_id and username to be set via CLI flags or config file")
 			os.Exit(1)
 		}
-
-		providerConfig := buildProviderConfig("reddit")
-		provider, err := providers.DefaultRegistry.CreateProvider("reddit", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Reddit provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.Reddit.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Reddit feed", "output_file", outfile, "feed_id", CLI.Reddit.FeedID, "username", CLI.Reddit.Username, "error", err)
-			os.Exit(1)
-		}
-
-	case "fingerpori":
-		slog.Debug("Generating Fingerpori feed...")
-
-		providerConfig := buildProviderConfig("fingerpori")
-		provider, err := providers.DefaultRegistry.CreateProvider("fingerpori", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Fingerpori provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.Fingerpori.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Fingerpori feed", "output_file", outfile, "error", err)
-			os.Exit(1)
-		}
-
-	case "feissarimokat":
-		slog.Debug("Generating Feissarimokat feed...")
-
-		providerConfig := buildProviderConfig("feissarimokat")
-		provider, err := providers.DefaultRegistry.CreateProvider("feissarimokat", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Feissarimokat provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.Feissarimokat.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Feissarimokat feed", "error", err)
-			os.Exit(1)
-		}
-
+		runProvider("reddit", "Reddit", CLI.Reddit.Outfile, "feed_id", CLI.Reddit.FeedID, "username", CLI.Reddit.Username)
 	case "preview <provider>":
 		slog.Debug("Previewing provider feed...", "provider", CLI.Preview.Provider)
-
 		if err := previewFeed(CLI.Preview.Provider, CLI.Preview.Limit, CLI.Preview.Index, configPath); err != nil {
 			slog.Error("Preview failed", "provider", CLI.Preview.Provider, "error", err)
 			os.Exit(1)
 		}
-
-	case "oglaf":
-		slog.Debug("Generating Oglaf feed...")
-
-		providerConfig := buildProviderConfig("oglaf")
-		provider, err := providers.DefaultRegistry.CreateProvider("oglaf", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Oglaf provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.Oglaf.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Oglaf feed", "error", err)
-			os.Exit(1)
-		}
-
-	case "tildes":
-		slog.Debug("Generating Tildes feed...")
-
-		providerConfig := buildProviderConfig("tildes")
-		provider, err := providers.DefaultRegistry.CreateProvider("tildes", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create Tildes provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.Tildes.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate Tildes feed", "error", err)
-			os.Exit(1)
-		}
-
-	case "youtube":
-		slog.Debug("Generating YouTube feed...")
-
-		providerConfig := buildProviderConfig("youtube")
-		provider, err := providers.DefaultRegistry.CreateProvider("youtube", providerConfig)
-		if err != nil {
-			slog.Error("Failed to create YouTube provider", "error", err)
-			os.Exit(1)
-		}
-
-		outfile := resolveOutfile(CLI.YouTube.Outfile)
-		if err := provider.GenerateFeed(outfile); err != nil {
-			slog.Error("Failed to generate YouTube feed", "error", err)
-			os.Exit(1)
-		}
-
 	case "youtube-rss <url>":
 		feedURL, err := youtube.DiscoverFeedURL(CLI.YouTubeRSS.URL)
 		if err != nil {
@@ -768,16 +706,32 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(feedURL)
-
 	case "generate":
 		slog.Debug("Generating feeds for all configured providers...")
-
 		if err := generateAll(configPath); err != nil {
 			slog.Error("Failed to generate feeds", "error", err)
 			os.Exit(1)
 		}
-
 	default:
-		panic(ctx.Command())
+		panic(command)
+	}
+}
+
+func runProvider(key, displayName, outfileFlag string, extraKV ...any) {
+	slog.Debug("Generating " + displayName + " feed...")
+
+	providerConfig := buildProviderConfig(key)
+	provider, err := providers.DefaultRegistry.CreateProvider(key, providerConfig)
+	if err != nil {
+		slog.Error("Failed to create "+displayName+" provider", "error", err)
+		os.Exit(1)
+	}
+
+	outfile := resolveOutfile(outfileFlag)
+	if err := provider.GenerateFeed(outfile); err != nil {
+		args := append([]any{"output_file", outfile}, extraKV...)
+		args = append(args, "error", err)
+		slog.Error("Failed to generate "+displayName+" feed", args...)
+		os.Exit(1)
 	}
 }

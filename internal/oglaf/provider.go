@@ -253,10 +253,7 @@ func (p *Provider) fetchRSSFeedIncremental(contentDB *database.Database) ([]*RSS
 	}
 
 	// 2. Identify new items
-	newItems, err := getNewRSSItems(contentDB, allItems)
-	if err != nil {
-		return nil, fmt.Errorf("failed to identify new RSS items: %w", err)
-	}
+	newItems := getNewRSSItems(contentDB, allItems)
 
 	// 3. Cache new RSS items
 	for _, item := range newItems {
@@ -330,7 +327,6 @@ func (p *Provider) httpCacheStore() *httpcache.Store {
 
 // fetchRSSFeed fetches and parses the Oglaf RSS feed.
 func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
-	// Use enhanced HTTP client with proper timeout and retry policy
 	client := api.NewGenericClient()
 	body, err := httpcache.CachedGet(context.Background(), client, p.httpCacheStore(), p.FeedURL, nil)
 	if err != nil {
@@ -348,7 +344,6 @@ func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 			items = append(items, item)
 		}
 	}
-
 	return items, nil
 }
 

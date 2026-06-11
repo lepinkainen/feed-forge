@@ -85,7 +85,7 @@ func TestFetchRSSFeedWithLiveSnapshotFixture(t *testing.T) {
 	oldFeedURL := FeedURL
 	defer func() { FeedURL = oldFeedURL }()
 
-	feedFixture := mustReadFixture(t, "feed_live_snapshot.rss")
+	feedFixture := mustReadFixture(t, "feed_live_snapshot.xml")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/rss+xml")
 		_, _ = w.Write(feedFixture)
