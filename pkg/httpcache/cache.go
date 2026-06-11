@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
@@ -52,11 +53,13 @@ func CachedGet(ctx context.Context, client *api.EnhancedClient, store *Store, ur
 // CachedGetWithStale performs a conditional GET that also persists the response
 // body, so a previously fetched copy can be served when the upstream later fails
 // (for example an intermittent HTTP 404). On a 200 the fresh body is cached and
-// returned with stale=false. On 304 the cached body is returned with stale=false.
-// If the request fails but a cached body exists, that body is returned with
-// stale=true alongside the original error, letting callers degrade gracefully;
-// with no cached body the error is returned as-is.
-func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *Store, url string, headers map[string]string) (body []byte, stale bool, err error) {
+// returned with stale=false. On 304 the cached body is returned with stale=false
+// and its timestamp refreshed (a 304 proves the cached copy is still current).
+// If the request fails but a cached body exists that is no older than maxStale,
+// that body is returned with stale=true alongside the original error, letting
+// callers degrade gracefully; maxStale <= 0 means no age limit. With no cached
+// body, or one older than maxStale, an error is returned.
+func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *Store, url string, headers map[string]string, maxStale time.Duration) (body []byte, stale bool, err error) {
 	if client == nil {
 		return nil, false, fmt.Errorf("http cache get: client is nil")
 	}
@@ -71,7 +74,11 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 	resp, getErr := client.GetConditional(ctx, url, prev, headers)
 	if getErr != nil {
 		if store != nil {
-			if cached, ok := store.GetBodyContext(ctx, url); ok {
+			if cached, fetchedAt, ok := store.GetBodyContext(ctx, url); ok {
+				age := time.Since(fetchedAt)
+				if maxStale > 0 && age > maxStale {
+					return nil, false, fmt.Errorf("upstream failing and cached copy is %s old (max %s): %w", age.Round(time.Minute), maxStale, getErr)
+				}
 				return cached, true, getErr
 			}
 		}
@@ -80,7 +87,10 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 
 	if resp.NotModified {
 		if store != nil {
-			if cached, ok := store.GetBodyContext(ctx, url); ok {
+			if cached, _, ok := store.GetBodyContext(ctx, url); ok {
+				if touchErr := store.TouchContext(ctx, url); touchErr != nil {
+					slog.Warn("Failed to refresh cached HTTP body timestamp", "url", url, "error", touchErr)
+				}
 				return cached, false, nil
 			}
 		}
@@ -268,28 +278,47 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 	return v, true
 }
 
-// GetBodyContext returns the cached response body for URL, if one was stored.
-func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, bool) {
+// GetBodyContext returns the cached response body for URL and the time it was
+// last fetched or verified via 304, if one was stored.
+func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, time.Time, bool) {
 	if s == nil || s.db == nil || url == "" {
-		return nil, false
+		return nil, time.Time{}, false
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	var body []byte
-	err := s.db.QueryRowContext(ctx, `SELECT body FROM http_validators WHERE url = ?`, url).Scan(&body)
+	var fetchedAt sql.NullTime
+	err := s.db.QueryRowContext(ctx, `SELECT body, updated_at FROM http_validators WHERE url = ?`, url).Scan(&body, &fetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false
+		return nil, time.Time{}, false
 	}
 	if err != nil {
 		slog.Warn("Failed to read cached HTTP body", "url", url, "error", err)
-		return nil, false
+		return nil, time.Time{}, false
 	}
 	if len(body) == 0 {
-		return nil, false
+		return nil, time.Time{}, false
 	}
-	return body, true
+	return body, fetchedAt.Time, true
+}
+
+// TouchContext refreshes the updated_at timestamp for URL, marking the cached
+// body as verified-current (used after an HTTP 304).
+func (s *Store) TouchContext(ctx context.Context, url string) error {
+	if s == nil || s.db == nil || url == "" {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.db.ExecContext(ctx, `UPDATE http_validators SET updated_at = ? WHERE url = ?`, time.Now().UTC(), url)
+	if err != nil {
+		return fmt.Errorf("touch HTTP cache entry: %w", err)
+	}
+	return nil
 }
 
 // SaveBodyContext stores validators and the response body for URL.
@@ -303,13 +332,13 @@ func (s *Store) SaveBodyContext(ctx context.Context, url string, v api.CacheVali
 
 	_, err := s.db.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, body, updated_at)
-	VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+	VALUES (?, ?, ?, ?, ?)
 	ON CONFLICT(url) DO UPDATE SET
 		etag = excluded.etag,
 		last_modified = excluded.last_modified,
 		body = excluded.body,
-		updated_at = CURRENT_TIMESTAMP
-	`, url, v.ETag, v.LastModified, body)
+		updated_at = excluded.updated_at
+	`, url, v.ETag, v.LastModified, body, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("save HTTP body: %w", err)
 	}

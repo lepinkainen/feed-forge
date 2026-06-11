@@ -203,7 +203,7 @@ func TestCachedGetWithStaleServesCachedBodyOnError(t *testing.T) {
 		RateLimiter: api.NewNoOpRateLimiter(),
 	})
 
-	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0)
 	if err != nil {
 		t.Fatalf("CachedGetWithStale(first) error = %v", err)
 	}
@@ -211,12 +211,108 @@ func TestCachedGetWithStaleServesCachedBodyOnError(t *testing.T) {
 		t.Fatalf("first = (%q, stale=%v), want (\"fresh feed\", false)", body, stale)
 	}
 
-	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0)
 	if err == nil {
 		t.Fatal("CachedGetWithStale(404) error = nil, want underlying error")
 	}
 	if !stale || string(body) != "fresh feed" {
 		t.Fatalf("second = (%q, stale=%v), want cached \"fresh feed\", stale=true", body, stale)
+	}
+}
+
+func TestCachedGetWithStaleRejectsCopyOlderThanMaxStale(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			_, _ = w.Write([]byte("fresh feed"))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	client := api.NewEnhancedClient(&api.EnhancedClientConfig{
+		RetryPolicy: &api.RetryPolicy{MaxAttempts: 1, RetryableErrors: []int{}},
+		RateLimiter: api.NewNoOpRateLimiter(),
+	})
+
+	if _, _, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour); err != nil {
+		t.Fatalf("CachedGetWithStale(first) error = %v", err)
+	}
+
+	// Within the window the cached copy is served despite the 404.
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour)
+	if err == nil || !stale || string(body) != "fresh feed" {
+		t.Fatalf("within window = (%q, stale=%v, err=%v), want cached body, stale=true, underlying error", body, stale, err)
+	}
+
+	// Age the cached copy past the window; the error must now surface.
+	if _, err := store.db.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
+		t.Fatalf("age cache entry: %v", err)
+	}
+
+	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour)
+	if err == nil {
+		t.Fatal("CachedGetWithStale(expired cache) error = nil, want error")
+	}
+	if stale || body != nil {
+		t.Fatalf("expired = (%q, stale=%v), want (nil, false)", body, stale)
+	}
+}
+
+func TestCachedGetWithStaleNotModifiedRefreshesTimestamp(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		switch hits {
+		case 1:
+			w.Header().Set("ETag", `"v1"`)
+			_, _ = w.Write([]byte("fresh feed"))
+		case 2:
+			w.WriteHeader(http.StatusNotModified)
+		default:
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	client := api.NewEnhancedClient(&api.EnhancedClientConfig{
+		RetryPolicy: &api.RetryPolicy{MaxAttempts: 1, RetryableErrors: []int{}},
+		RateLimiter: api.NewNoOpRateLimiter(),
+	})
+
+	if _, _, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour); err != nil {
+		t.Fatalf("CachedGetWithStale(first) error = %v", err)
+	}
+
+	// Backdate the entry beyond the stale window, then hit the 304: the
+	// timestamp must refresh because the cached copy was verified current.
+	if _, err := store.db.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
+		t.Fatalf("age cache entry: %v", err)
+	}
+
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour)
+	if err != nil || stale || string(body) != "fresh feed" {
+		t.Fatalf("304 = (%q, stale=%v, err=%v), want cached body, stale=false, nil error", body, stale, err)
+	}
+
+	// The 404 that follows must serve stale again — the 304 reset the clock.
+	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour)
+	if err == nil || !stale || string(body) != "fresh feed" {
+		t.Fatalf("after 304 = (%q, stale=%v, err=%v), want cached body, stale=true, underlying error", body, stale, err)
 	}
 }
 
@@ -237,7 +333,7 @@ func TestCachedGetWithStaleNoCacheReturnsError(t *testing.T) {
 		RateLimiter: api.NewNoOpRateLimiter(),
 	})
 
-	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil)
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0)
 	if err == nil {
 		t.Fatal("CachedGetWithStale(404, no cache) error = nil, want error")
 	}
