@@ -114,7 +114,9 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	for _, feedURL := range p.FeedURLs {
 		feed, err := fetchAtomFeed(p.httpCacheStore(), feedURL)
 		if err != nil {
-			slog.Warn("Skipping YouTube feed after fetch failure", "url", feedURL, "error", err)
+			// Only reached when there is no cached copy or it exceeded
+			// maxStaleAge — a real outage worth surfacing, not a transient blip.
+			slog.Error("YouTube feed unavailable, skipping", "url", feedURL, "error", err)
 			lastErr = err
 			failed++
 			continue
