@@ -297,7 +297,10 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 	if success {
 		slog.Debug("API call completed", fields...)
 	} else {
-		slog.Warn("API call failed", fields...)
+		// Info, not Warn: the error is returned to the caller, which decides
+		// whether it is fatal. Warn here would spam cron output (forwarded to
+		// Discord) for transient upstream blips the app recovers from.
+		slog.Info("API call failed", fields...)
 	}
 }
 

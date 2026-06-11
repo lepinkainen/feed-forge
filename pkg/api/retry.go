@@ -167,13 +167,13 @@ func waitBeforeAttempt(ctx context.Context, policy *RetryPolicy, attempt int, la
 	backoff := policy.CalculateBackoff(attempt - 1)
 	if policy.IsRateLimitError(lastErr) {
 		backoff *= 2
-		slog.Warn("Rate limited, using longer backoff",
+		slog.Debug("Rate limited, using longer backoff",
 			"operation", operationName,
 			"attempt", attempt,
 			"backoff", backoff)
 	}
 
-	slog.Warn("Retrying operation",
+	slog.Debug("Retrying operation",
 		"operation", operationName,
 		"attempt", attempt,
 		"maxAttempts", policy.MaxAttempts,
