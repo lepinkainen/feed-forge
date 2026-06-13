@@ -431,7 +431,9 @@ func generateAll(configPath string) error {
 		}
 	}
 
-	if len(transient) > 0 {
+	// When the Discord webhook is enabled it already reports failures, so skip
+	// the stderr warning to avoid a duplicate notification via cron + mailrise.
+	if len(transient) > 0 && CLI.DiscordWebhookURL == "" {
 		slog.Warn("Transient upstream failures", "providers", strings.Join(transient, ","))
 	}
 
