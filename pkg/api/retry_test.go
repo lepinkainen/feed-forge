@@ -209,9 +209,9 @@ func TestConservativeRetryPolicy(t *testing.T) {
 		t.Errorf("ConservativeRetryPolicy().MaxBackoff = %v, want 10s", policy.MaxBackoff)
 	}
 
-	// Conservative should have fewer retryable errors
-	if len(policy.RetryableErrors) != 3 {
-		t.Errorf("ConservativeRetryPolicy() has %d retryable codes, want 3", len(policy.RetryableErrors))
+	// Conservative retries the same 5xx/429 transient codes, just with fewer attempts.
+	if len(policy.RetryableErrors) != 5 {
+		t.Errorf("ConservativeRetryPolicy() has %d retryable codes, want 5", len(policy.RetryableErrors))
 	}
 }
 

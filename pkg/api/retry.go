@@ -49,7 +49,7 @@ func ConservativeRetryPolicy() *RetryPolicy {
 		InitialBackoff:    2 * time.Second,
 		MaxBackoff:        10 * time.Second,
 		BackoffMultiplier: 2.0,
-		RetryableErrors:   []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusServiceUnavailable},
+		RetryableErrors:   []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout},
 	}
 }
 
