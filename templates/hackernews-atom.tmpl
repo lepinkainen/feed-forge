@@ -38,7 +38,6 @@
       {{if index $.OpenGraphData .Link}}
         {{$og := index $.OpenGraphData .Link}}
         <div class="link-preview">
-          <h3>🔗 Link Preview</h3>
           {{if $og.Image}}<img src="{{$og.Image | xmlEscape}}" alt="Preview image" style="max-width: 200px; height: auto;"/>{{end}}
           {{if $og.Title}}<h4>{{$og.Title | xmlEscape}}</h4>{{end}}
           {{if $og.Description}}<p>{{$og.Description | xmlEscape}}</p>{{end}}
