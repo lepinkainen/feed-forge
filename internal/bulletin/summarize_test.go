@@ -62,18 +62,16 @@ func TestRenderClustersEmpty(t *testing.T) {
 }
 
 func TestNewSummarizerMissingAPIKey(t *testing.T) {
-	t.Setenv(apiKeyEnv, "")
-	if _, err := NewSummarizer(Config{}); err == nil {
-		t.Fatal("expected error when API key is unset, got nil")
-	} else if !strings.Contains(err.Error(), apiKeyEnv) {
-		t.Errorf("error = %q, want it to mention %s", err, apiKeyEnv)
+	if _, err := NewSummarizer(Config{}, ""); err == nil {
+		t.Fatal("expected error when API key is empty, got nil")
+	} else if !strings.Contains(err.Error(), "API key") {
+		t.Errorf("error = %q, want it to mention the missing API key", err)
 	}
 }
 
 func TestNewSummarizerMissingPromptFile(t *testing.T) {
-	t.Setenv(apiKeyEnv, "test-key")
 	cfg := Config{PromptFile: filepath.Join(t.TempDir(), "does-not-exist.txt")}
-	if _, err := NewSummarizer(cfg); err == nil {
+	if _, err := NewSummarizer(cfg, "test-key"); err == nil {
 		t.Fatal("expected error for missing prompt file, got nil")
 	} else if !strings.Contains(err.Error(), "read prompt file") {
 		t.Errorf("error = %q, want a read prompt file error", err)
@@ -81,13 +79,12 @@ func TestNewSummarizerMissingPromptFile(t *testing.T) {
 }
 
 func TestNewSummarizerInvalidPromptTemplate(t *testing.T) {
-	t.Setenv(apiKeyEnv, "test-key")
 	path := filepath.Join(t.TempDir(), "bad.tmpl")
 	if err := os.WriteFile(path, []byte("stories: {{.Stories"), 0o600); err != nil {
 		t.Fatalf("write temp prompt: %v", err)
 	}
 	cfg := Config{PromptFile: path}
-	if _, err := NewSummarizer(cfg); err == nil {
+	if _, err := NewSummarizer(cfg, "test-key"); err == nil {
 		t.Fatal("expected error for invalid template, got nil")
 	} else if !strings.Contains(err.Error(), "parse prompt template") {
 		t.Errorf("error = %q, want a parse prompt template error", err)
@@ -95,8 +92,7 @@ func TestNewSummarizerInvalidPromptTemplate(t *testing.T) {
 }
 
 func TestNewSummarizerDefaultsSucceed(t *testing.T) {
-	t.Setenv(apiKeyEnv, "test-key")
-	s, err := NewSummarizer(Config{})
+	s, err := NewSummarizer(Config{}, "test-key")
 	if err != nil {
 		t.Fatalf("NewSummarizer with defaults: %v", err)
 	}

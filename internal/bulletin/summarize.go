@@ -10,10 +10,9 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
-)
 
-// apiKeyEnv is the environment variable holding the Anthropic API key.
-const apiKeyEnv = "ANTHROPIC_API_KEY" // #nosec G101 -- environment variable name, not a credential.
+	"github.com/lepinkainen/feed-forge/pkg/llm"
+)
 
 // excerptLimit caps how much article text per cluster is sent to the model,
 // keeping token usage bounded on a busy news day.
@@ -55,13 +54,13 @@ type Summarizer struct {
 	template  *template.Template
 }
 
-// NewSummarizer constructs a Summarizer from config, reading the API key from
-// the environment and an optional prompt override from PromptFile.
-func NewSummarizer(cfg Config) (*Summarizer, error) {
+// NewSummarizer constructs a Summarizer from config and the resolved Anthropic
+// API key (see llm.Config.ResolveAPIKey), with an optional prompt override from
+// PromptFile.
+func NewSummarizer(cfg Config, apiKey string) (*Summarizer, error) {
 	cfg = cfg.withDefaults()
-	key := os.Getenv(apiKeyEnv)
-	if key == "" {
-		return nil, fmt.Errorf("%s not set", apiKeyEnv)
+	if apiKey == "" {
+		return nil, fmt.Errorf("no Anthropic API key: set anthropic.api-key in config or the %s env var", llm.APIKeyEnv)
 	}
 
 	tmplText := promptTemplate
@@ -78,7 +77,7 @@ func NewSummarizer(cfg Config) (*Summarizer, error) {
 	}
 
 	return &Summarizer{
-		client:    anthropic.NewClient(option.WithAPIKey(key)),
+		client:    anthropic.NewClient(option.WithAPIKey(apiKey)),
 		model:     cfg.Model,
 		maxTokens: int64(cfg.MaxTokens),
 		system:    systemPrompt,

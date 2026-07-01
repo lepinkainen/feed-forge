@@ -21,6 +21,13 @@ feed-base-url: "https://example.com/rss/"
 # Defaults to $XDG_CACHE_HOME/feed-forge or ~/.cache/feed-forge.
 cache-dir: ""
 
+# Shared Anthropic (Claude) credentials, used by any processor that summarises
+# via Claude (currently the bulletin pipeline). Prefer the ANTHROPIC_API_KEY
+# environment variable — if you set the key here instead, chmod 600 this file and
+# never commit it. Leave empty to use the env var.
+anthropic:
+  api-key: ""
+
 # Reddit provider configuration
 reddit:
   feed-id: "" # Required: Your Reddit feed ID (from https://www.reddit.com/prefs/feeds/)
@@ -81,7 +88,8 @@ youtube:
 #   */30 * * * *  feed-forge bulletin-fetch      # accumulate items all day
 #   0 8,18 * * *  feed-forge bulletin-publish -o bulletin.xml
 #   feed-forge bulletin-summarize                # debug: print digest, no writes
-# Requires ANTHROPIC_API_KEY in the environment.
+# Requires an Anthropic API key: set `anthropic.api-key` above or the
+# ANTHROPIC_API_KEY environment variable.
 bulletin:
   model: claude-haiku-4-5 # Anthropic model used for summarisation
   simhash-threshold: 3 # Max Hamming distance (of 64) to treat stories as duplicates

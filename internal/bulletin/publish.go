@@ -63,6 +63,7 @@ type PublishOptions struct {
 	HTMLDir     string // when non-empty, also export the digest as an HTML page here
 	FeedBaseURL string // self/alternate link for the Atom feed
 	Slot        string // bulletin slot label; derived from time of day when empty
+	APIKey      string // resolved Anthropic API key (see llm.Config.ResolveAPIKey)
 }
 
 // feedEntryLimit is how many recent bulletins the Atom feed carries, so a reader
@@ -83,7 +84,7 @@ func Publish(opts PublishOptions) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	newRow, err := createBulletinIfPending(ctx, store, cfg, opts.Slot, opts.HTMLDir)
+	newRow, err := createBulletinIfPending(ctx, store, cfg, opts.Slot, opts.HTMLDir, opts.APIKey)
 	if err != nil {
 		return err
 	}
@@ -114,7 +115,7 @@ func Publish(opts PublishOptions) error {
 // bulletin and returns it, or nil when there is nothing pending. When htmlDir is
 // set, the dated archive page is written before the row is committed, so the
 // commit that marks the items consumed never happens without its archive.
-func createBulletinIfPending(ctx context.Context, store *Store, cfg Config, slot, htmlDir string) (*Row, error) {
+func createBulletinIfPending(ctx context.Context, store *Store, cfg Config, slot, htmlDir, apiKey string) (*Row, error) {
 	items, err := store.UnpublishedItems(ctx)
 	if err != nil {
 		return nil, err
@@ -127,7 +128,7 @@ func createBulletinIfPending(ctx context.Context, store *Store, cfg Config, slot
 	clusters := clusterItems(items, cfg.SimhashThreshold)
 	slog.Info("bulletin: clustered", "items", len(items), "clusters", len(clusters))
 
-	summarizer, err := NewSummarizer(cfg)
+	summarizer, err := NewSummarizer(cfg, apiKey)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +312,7 @@ func writeLatestHTML(htmlDir string, b Row) error {
 // SummarizeDryRun clusters and summarises the current unpublished items and
 // returns the digest without writing any feed or touching the database. Backs
 // the bulletin-summarize debug command for prompt/model iteration.
-func SummarizeDryRun(cfg Config, dbPath string) (string, error) {
+func SummarizeDryRun(cfg Config, dbPath, apiKey string) (string, error) {
 	cfg = cfg.withDefaults()
 
 	ctx := context.Background()
@@ -333,7 +334,7 @@ func SummarizeDryRun(cfg Config, dbPath string) (string, error) {
 	clusters := clusterItems(items, cfg.SimhashThreshold)
 	slog.Info("bulletin: dry-run clustered", "items", len(items), "clusters", len(clusters))
 
-	summarizer, err := NewSummarizer(cfg)
+	summarizer, err := NewSummarizer(cfg, apiKey)
 	if err != nil {
 		return "", err
 	}

@@ -22,6 +22,7 @@ import (
 	apipkg "github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/pkg/llm"
 	"github.com/lepinkainen/feed-forge/pkg/notifications"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
@@ -796,6 +797,17 @@ func loadBulletinConfig(configPath string) (bulletin.Config, error) {
 	return cfg, nil
 }
 
+// resolveAnthropicAPIKey reads the general `anthropic:` config section and
+// resolves the API key, falling back to the ANTHROPIC_API_KEY env var. Shared by
+// any processor that summarises via Anthropic.
+func resolveAnthropicAPIKey(configPath string) (string, error) {
+	var cfg llm.Config
+	if err := loadProviderConfigFromYAML(configPath, "anthropic", &cfg); err != nil {
+		return "", fmt.Errorf("load anthropic config: %w", err)
+	}
+	return cfg.ResolveAPIKey(), nil
+}
+
 // bulletinDBPath resolves the bulletin database path, honouring --cache-dir.
 func bulletinDBPath() (string, error) {
 	return filesystem.GetDefaultPath("bulletin.db")
@@ -823,6 +835,11 @@ func runBulletinPublish(configPath string) error {
 		return err
 	}
 
+	apiKey, err := resolveAnthropicAPIKey(configPath)
+	if err != nil {
+		return err
+	}
+
 	outfile := resolveOutfile(CLI.BulletinPublish.Outfile)
 	feedURL := CLI.FeedBaseURL
 	if CLI.FeedBaseURL != "" {
@@ -837,6 +854,7 @@ func runBulletinPublish(configPath string) error {
 		HTMLDir:     bulletinHTMLDir(),
 		FeedBaseURL: feedURL,
 		Slot:        CLI.BulletinPublish.Slot,
+		APIKey:      apiKey,
 	})
 }
 
@@ -849,7 +867,11 @@ func runBulletinSummarize(configPath string) error {
 	if err != nil {
 		return err
 	}
-	digest, err := bulletin.SummarizeDryRun(cfg, dbPath)
+	apiKey, err := resolveAnthropicAPIKey(configPath)
+	if err != nil {
+		return err
+	}
+	digest, err := bulletin.SummarizeDryRun(cfg, dbPath, apiKey)
 	if err != nil {
 		return err
 	}

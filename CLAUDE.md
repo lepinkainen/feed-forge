@@ -111,7 +111,7 @@ A **separate code path**, intentionally outside the provider registry — it doe
 - **SimHash dedup** (`simhash.go`, `dedup.go`): 64-bit SimHash over stopword-stripped full text; greedy single-pass clustering groups stories within `simhash-threshold` Hamming distance (default 3). Fingerprints stored as SQLite INTEGER (int64 bit pattern).
 - **Summarise** (`summarize.go`): dedup happens *before* summarisation to save tokens; cluster representatives + source URLs go to Anthropic (`claude-haiku-4-5`) in a **single call** that returns a topic-grouped HTML digest. Prompt overridable via `prompt-file` for iteration.
 - **Publish** (`publish.go`): renders one Atom `<entry>` = whole digest via `templates/bulletin-atom.tmpl`, then marks items published in one transaction. When `output-dir` is set it also exports HTML pages to `<output-dir>/html/` (a dated archive page + a stable `bulletin-latest.html`) via `templates/bulletin-page.html.tmpl`, reusing the same digest (no extra LLM cost); the `generate` command's `index.html` links to `html/bulletin-latest.html` when it exists.
-- **Config**: `bulletin:` section in `config.yaml`, loaded via `loadProviderConfigFromYAML`. Requires `ANTHROPIC_API_KEY` in the environment.
+- **Config**: `bulletin:` section in `config.yaml`, loaded via `loadProviderConfigFromYAML`. The Anthropic API key comes from the shared top-level `anthropic:` section (`pkg/llm.Config`, key `api-key`), resolved via `llm.Config.ResolveAPIKey` which falls back to the `ANTHROPIC_API_KEY` env var. This general section is reusable by any future model-using processor, not bulletin-specific.
 
 ## Common Development Patterns
 
