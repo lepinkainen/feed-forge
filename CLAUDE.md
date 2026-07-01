@@ -27,6 +27,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `./build/feed-forge reddit -o output.xml --min-score 100` - Reddit feed
 - `./build/feed-forge hacker-news -o output.xml --min-points 50` - Hacker News feed
 
+**Bulletin aggregator** (see Bulletin Pipeline below):
+
+- `./build/feed-forge bulletin-fetch` - Poll source feeds, extract full text, store items (cron every ~30m)
+- `./build/feed-forge bulletin-publish -o bulletin.xml` - Dedup + summarise into a digest (cron at fixed slots, e.g. `0 8,18`)
+- `./build/feed-forge bulletin-summarize` - Debug: print the digest for current unpublished items to stdout without writing or marking anything (for prompt/model iteration). Requires `ANTHROPIC_API_KEY`.
+
 ## Architecture Overview
 
 Feed-Forge is a unified RSS feed generator. It uses a **provider-based architecture** with a common interface for different feed sources.
@@ -95,6 +101,17 @@ Feed-Forge is a unified RSS feed generator. It uses a **provider-based architect
 - Configurable filtering (score, comments, points)
 - Support for multiple link types and extended author information
 - RSS reader compatible (no custom namespaces)
+
+### Bulletin Pipeline (`internal/bulletin/`)
+
+A **separate code path**, intentionally outside the provider registry — it does not implement `FeedProvider` and is not discovered by `generate`. It aggregates many high-frequency outlets into periodic summarised digests instead of one-feed-per-source.
+
+- **Decoupled cadence**: `bulletin-fetch` (frequent cron) accumulates items; `bulletin-publish` (2×/day cron) emits a digest. State lives in `bulletin.db`; an item's `bulletin_id IS NULL` means unpublished. This makes publishing idempotent and resilient to missed runs (catch-up publishes everything unpublished).
+- **Fetch** (`fetch.go`): parses each source feed with `gofeed`, fetches each new article page through `httpcache.CachedGetWithStale` (conditional GET/ETag reused), extracts full text with `go-shiori/go-readability`, falls back to the feed's own content when extraction is thin. `HasItem` skips already-stored URLs so article pages aren't re-fetched.
+- **SimHash dedup** (`simhash.go`, `dedup.go`): 64-bit SimHash over stopword-stripped full text; greedy single-pass clustering groups stories within `simhash-threshold` Hamming distance (default 3). Fingerprints stored as SQLite INTEGER (int64 bit pattern).
+- **Summarise** (`summarize.go`): dedup happens *before* summarisation to save tokens; cluster representatives + source URLs go to Anthropic (`claude-haiku-4-5`) in a **single call** that returns a topic-grouped HTML digest. Prompt overridable via `prompt-file` for iteration.
+- **Publish** (`publish.go`): renders one Atom `<entry>` = whole digest via `templates/bulletin-atom.tmpl`, then marks items published in one transaction. When `output-dir` is set it also exports HTML pages to `<output-dir>/html/` (a dated archive page + a stable `bulletin-latest.html`) via `templates/bulletin-page.html.tmpl`, reusing the same digest (no extra LLM cost); the `generate` command's `index.html` links to `html/bulletin-latest.html` when it exists.
+- **Config**: `bulletin:` section in `config.yaml`, loaded via `loadProviderConfigFromYAML`. Requires `ANTHROPIC_API_KEY` in the environment.
 
 ## Common Development Patterns
 
