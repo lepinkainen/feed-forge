@@ -9,6 +9,9 @@
 # Base output directory for all generated feeds (optional).
 # Provider outfile paths are relative to this directory.
 # Absolute outfile paths are not affected.
+# When set, bulletin-publish also writes HTML pages to <output-dir>/html/
+# (a dated archive page plus a stable bulletin-latest.html), and the generated
+# feed index links to the latest page.
 output-dir: ""
 
 # Public base URL for generated feeds in feeds.opml.
@@ -70,3 +73,22 @@ youtube:
   include-shorts: false
   outfile: youtube.xml
   interval: 30m
+
+# Bulletin aggregator (separate code path, not a registry provider).
+# Polls high-frequency source feeds, extracts full text, de-duplicates near
+# -identical stories via SimHash, then publishes an LLM-summarised digest as a
+# single Atom entry. Runs as two cron steps + one debug command:
+#   */30 * * * *  feed-forge bulletin-fetch      # accumulate items all day
+#   0 8,18 * * *  feed-forge bulletin-publish -o bulletin.xml
+#   feed-forge bulletin-summarize                # debug: print digest, no writes
+# Requires ANTHROPIC_API_KEY in the environment.
+bulletin:
+  model: claude-haiku-4-5 # Anthropic model used for summarisation
+  simhash-threshold: 3 # Max Hamming distance (of 64) to treat stories as duplicates
+  max-tokens: 4096 # Upper bound on the digest response
+  prompt-file: "" # Optional: path to a prompt template override for iteration
+  feeds:
+    - url: https://arstechnica.com/feed/
+      category: tech
+    - url: https://www.theverge.com/rss/index.xml
+      category: tech

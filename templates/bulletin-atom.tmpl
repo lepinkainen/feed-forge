@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>{{.FeedTitle | xmlEscape}}</title>
+  <link rel="self" href="{{.SelfLink | xmlEscape}}"/>
+  <id>{{.FeedID | xmlEscape}}</id>
+  <updated>{{.Updated}}</updated>
+  <subtitle>{{.Subtitle | xmlEscape}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator | xmlEscape}}</generator>
+
+{{range .Entries}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <content type="html"><![CDATA[
+{{.Content}}
+    ]]></content>
+  </entry>
+{{end}}
+</feed>

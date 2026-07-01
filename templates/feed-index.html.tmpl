@@ -44,6 +44,9 @@
 </head>
 <body onload="resolveURLs()">
     <h1>Available Feeds</h1>
+    {{if .BulletinLink}}
+    <p><a href="{{.BulletinLink}}">📰 Read the latest bulletin</a></p>
+    {{end}}
     {{if .Feeds}}
     <p><a href="{{.OPMLFilename}}">Import all feeds (OPML)</a></p>
     {{range .Feeds}}

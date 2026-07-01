@@ -26,6 +26,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/preview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 
+	"github.com/lepinkainen/feed-forge/internal/bulletin"
+
 	// Import providers to trigger init() self-registration
 	"github.com/lepinkainen/feed-forge/internal/feissarimokat"
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
@@ -108,6 +110,15 @@ var CLI struct {
 	} `cmd:"youtube-rss" name:"youtube-rss" help:"Print the RSS feed URL advertised by a YouTube channel page."`
 
 	Generate struct{} `cmd:"generate" help:"Generate feeds for all configured providers."`
+
+	BulletinFetch struct{} `cmd:"bulletin-fetch" name:"bulletin-fetch" help:"Poll bulletin source feeds, extract full text, and store new items."`
+
+	BulletinPublish struct {
+		Outfile string `help:"Output file path" short:"o" default:"bulletin.xml"`
+		Slot    string `help:"Bulletin slot label (default: derived from time of day)"`
+	} `cmd:"bulletin-publish" name:"bulletin-publish" help:"Deduplicate and summarise stored items into a digest Atom feed."`
+
+	BulletinSummarize struct{} `cmd:"bulletin-summarize" name:"bulletin-summarize" help:"Debug: print the digest for current unpublished items to stdout without writing or marking anything."`
 }
 
 func resolveConfigPath(args []string) string {
@@ -575,7 +586,8 @@ func generateFeedIndex(results []feedResult) error {
 	data := struct {
 		Feeds        []feedResult
 		OPMLFilename string
-	}{Feeds: feeds, OPMLFilename: opmlFilename}
+		BulletinLink string
+	}{Feeds: feeds, OPMLFilename: opmlFilename, BulletinLink: bulletinIndexLink()}
 	if err := htmlTmpl.Execute(file, data); err != nil {
 		return fmt.Errorf("failed to execute index template: %w", err)
 	}
@@ -586,6 +598,34 @@ func generateFeedIndex(results []feedResult) error {
 
 	slog.Info("Generated feed index", "path", indexPath)
 	return nil
+}
+
+// bulletinHTMLSubdir is the subdirectory under OutputDir where bulletin HTML
+// pages are written.
+const bulletinHTMLSubdir = "html"
+
+// bulletinHTMLDir returns the directory for bulletin HTML pages
+// (<output-dir>/html), or "" when no output directory is configured (HTML
+// export disabled).
+func bulletinHTMLDir() string {
+	if CLI.OutputDir == "" {
+		return ""
+	}
+	return filepath.Join(CLI.OutputDir, bulletinHTMLSubdir)
+}
+
+// bulletinIndexLink returns the relative href from the feed index (in OutputDir)
+// to the latest bulletin HTML page (in OutputDir/html), or "" when HTML export
+// is disabled or the page has not been published yet.
+func bulletinIndexLink() string {
+	dir := bulletinHTMLDir()
+	if dir == "" {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(dir, bulletin.LatestPageName)); err != nil {
+		return ""
+	}
+	return bulletinHTMLSubdir + "/" + bulletin.LatestPageName
 }
 
 func feedName(info *providers.ProviderInfo, fallback string) string {
@@ -688,6 +728,10 @@ func dispatchCommand(command, configPath string) {
 		return
 	}
 
+	if handleBulletinCommand(command, configPath) {
+		return
+	}
+
 	switch command {
 	case "reddit":
 		if CLI.Reddit.FeedID == "" || CLI.Reddit.Username == "" {
@@ -717,6 +761,100 @@ func dispatchCommand(command, configPath string) {
 	default:
 		panic(command)
 	}
+}
+
+// handleBulletinCommand dispatches the bulletin-* subcommands. Returns true when
+// it handled the command (kept separate to keep dispatchCommand's complexity low).
+func handleBulletinCommand(command, configPath string) bool {
+	var (
+		err     error
+		handled = true
+	)
+	switch command {
+	case "bulletin-fetch":
+		err = runBulletinFetch(configPath)
+	case "bulletin-publish":
+		err = runBulletinPublish(configPath)
+	case "bulletin-summarize":
+		err = runBulletinSummarize(configPath)
+	default:
+		handled = false
+	}
+	if handled && err != nil {
+		slog.Error("Bulletin command failed", "command", command, "error", err)
+		os.Exit(1)
+	}
+	return handled
+}
+
+// loadBulletinConfig reads the `bulletin:` section of the config file.
+func loadBulletinConfig(configPath string) (bulletin.Config, error) {
+	var cfg bulletin.Config
+	if err := loadProviderConfigFromYAML(configPath, "bulletin", &cfg); err != nil {
+		return cfg, fmt.Errorf("load bulletin config: %w", err)
+	}
+	return cfg, nil
+}
+
+// bulletinDBPath resolves the bulletin database path, honouring --cache-dir.
+func bulletinDBPath() (string, error) {
+	return filesystem.GetDefaultPath("bulletin.db")
+}
+
+func runBulletinFetch(configPath string) error {
+	cfg, err := loadBulletinConfig(configPath)
+	if err != nil {
+		return err
+	}
+	dbPath, err := bulletinDBPath()
+	if err != nil {
+		return err
+	}
+	return bulletin.Fetch(cfg, dbPath)
+}
+
+func runBulletinPublish(configPath string) error {
+	cfg, err := loadBulletinConfig(configPath)
+	if err != nil {
+		return err
+	}
+	dbPath, err := bulletinDBPath()
+	if err != nil {
+		return err
+	}
+
+	outfile := resolveOutfile(CLI.BulletinPublish.Outfile)
+	feedURL := CLI.FeedBaseURL
+	if CLI.FeedBaseURL != "" {
+		if joined, err := url.JoinPath(CLI.FeedBaseURL, filepath.Base(CLI.BulletinPublish.Outfile)); err == nil {
+			feedURL = joined
+		}
+	}
+	return bulletin.Publish(bulletin.PublishOptions{
+		Config:      cfg,
+		DBPath:      dbPath,
+		Outfile:     outfile,
+		HTMLDir:     bulletinHTMLDir(),
+		FeedBaseURL: feedURL,
+		Slot:        CLI.BulletinPublish.Slot,
+	})
+}
+
+func runBulletinSummarize(configPath string) error {
+	cfg, err := loadBulletinConfig(configPath)
+	if err != nil {
+		return err
+	}
+	dbPath, err := bulletinDBPath()
+	if err != nil {
+		return err
+	}
+	digest, err := bulletin.SummarizeDryRun(cfg, dbPath)
+	if err != nil {
+		return err
+	}
+	fmt.Println(digest)
+	return nil
 }
 
 func runProvider(key, displayName, outfileFlag string, extraKV ...any) {
