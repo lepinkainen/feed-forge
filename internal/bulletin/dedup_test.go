@@ -22,6 +22,51 @@ func TestClusterItemsGroupsNearDuplicates(t *testing.T) {
 	}
 }
 
+func TestClusterItemsEmpty(t *testing.T) {
+	if got := clusterItems(nil, 3); len(got) != 0 {
+		t.Errorf("empty input: got %d clusters, want 0", len(got))
+	}
+	if got := clusterItems([]Item{}, 3); len(got) != 0 {
+		t.Errorf("empty slice: got %d clusters, want 0", len(got))
+	}
+}
+
+func TestClusterItemsSingleItem(t *testing.T) {
+	clusters := clusterItems([]Item{{ID: 1, SimHash: 12345}}, 3)
+	if len(clusters) != 1 || len(clusters[0].Items) != 1 {
+		t.Errorf("single item: got %d clusters", len(clusters))
+	}
+}
+
+func TestClusterItemsThresholdZero(t *testing.T) {
+	// With threshold 0, only exact-same-fingerprint items cluster.
+	items := []Item{
+		{ID: 1, SimHash: 123},
+		{ID: 2, SimHash: 123},
+		{ID: 3, SimHash: 124},
+	}
+	clusters := clusterItems(items, 0)
+	if len(clusters) != 2 {
+		t.Fatalf("threshold 0: got %d clusters, want 2", len(clusters))
+	}
+	if len(clusters[0].Items) != 2 { // items 1+2 share fingerprint
+		t.Errorf("first cluster: got %d items, want 2", len(clusters[0].Items))
+	}
+}
+
+func TestClusterItemsAllIdentical(t *testing.T) {
+	items := []Item{
+		{ID: 1, SimHash: 999},
+		{ID: 2, SimHash: 999},
+		{ID: 3, SimHash: 999},
+	}
+	clusters := clusterItems(items, 3)
+	if len(clusters) != 1 || len(clusters[0].Items) != 3 {
+		t.Errorf("all identical: got %d clusters with %d items, want 1 cluster with 3 items",
+			len(clusters), len(clusters[0].Items))
+	}
+}
+
 func TestClusterItemsZeroHashAreSingletons(t *testing.T) {
 	items := []Item{
 		{ID: 1, URL: "a", SimHash: 0},

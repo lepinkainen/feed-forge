@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Feed Forge Bulletin</title>
+  <link rel="self" href="https://feeds.example/bulletin.xml"/>
+  <id>urn:feed-forge:bulletin</id>
+  <updated>2026-07-01T18:00:00Z</updated>
+  <subtitle>Aggregated, de-duplicated news digests</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">feed-forge</generator>
+
+
+  <entry>
+    <title>Evening Bulletin — Wed, 1 Jul 2026</title>
+    <link rel="alternate" type="text/html" href="https://feeds.example/bulletin.xml"/>
+    <id>urn:feed-forge:bulletin:2</id>
+    <updated>2026-07-01T18:00:00Z</updated>
+    <published>2026-07-01T18:00:00Z</published>
+    <content type="html"><![CDATA[
+<h2>Technology</h2>
+<p>A chip launched. <a href="https://x/1">[1]</a></p>
+    ]]></content>
+  </entry>
+
+  <entry>
+    <title>Morning Bulletin — Wed, 1 Jul 2026</title>
+    <link rel="alternate" type="text/html" href="https://feeds.example/bulletin.xml"/>
+    <id>urn:feed-forge:bulletin:1</id>
+    <updated>2026-07-01T08:00:00Z</updated>
+    <published>2026-07-01T08:00:00Z</published>
+    <content type="html"><![CDATA[
+<p>Edge case with a ]]]]><![CDATA[> terminator inside.</p>
+    ]]></content>
+  </entry>
+
+</feed>

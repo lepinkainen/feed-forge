@@ -48,6 +48,30 @@ func TestSimHashFinnishText(t *testing.T) {
 	}
 }
 
+func TestTokenize(t *testing.T) {
+	tests := []struct {
+		name string
+		text string
+		want int // token count
+	}{
+		{name: "plain english", text: "hello world", want: 2},
+		{name: "stopwords dropped", text: "the quick brown fox", want: 3},
+		{name: "single chars dropped", text: "a b cd e f", want: 1}, // only "cd"
+		{name: "numbers kept", text: "report 2024", want: 2},
+		{name: "mixed unicode", text: "Suomi 2024 åäö", want: 3},
+		{name: "all stopwords", text: "the a an of in", want: 0},
+		{name: "punctuation split", text: "hello, world!", want: 2},
+		{name: "empty", text: "", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := len(tokenize(tt.text)); got != tt.want {
+				t.Errorf("tokenize(%q) = %d tokens, want %d", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSimHashIdentical(t *testing.T) {
 	s := "the quick brown fox jumps over the lazy dog repeatedly"
 	if d := Hamming(SimHash(s), SimHash(s)); d != 0 {
