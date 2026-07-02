@@ -5,23 +5,147 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Title | xmlEscape}}</title>
     <style>
+        /* Self-hosted webfonts written next to this page by bulletin-publish. */
+        @font-face {
+            font-family: 'JetBrains Mono';
+            font-style: normal;
+            font-weight: 400 700;
+            font-display: swap;
+            src: url("fonts/jetbrains-mono-latin.woff2") format("woff2");
+        }
+        @font-face {
+            font-family: 'Lora';
+            font-style: normal;
+            font-weight: 400;
+            font-display: swap;
+            src: url("fonts/lora-latin.woff2") format("woff2");
+        }
+        @font-face {
+            font-family: 'Lora';
+            font-style: italic;
+            font-weight: 400;
+            font-display: swap;
+            src: url("fonts/lora-italic-latin.woff2") format("woff2");
+        }
+        :root {
+            --bg: #121212;
+            --header-bg: #1e1e1e;
+            --text: #e0e0e0;
+            --text-paragraph: #d8d8d8;
+            --text-muted: #888888;
+            --accent: #58a6ff;
+            --accent-bg: rgba(88, 166, 255, 0.08);
+            --border: #333333;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-serif: 'Lora', Georgia, serif;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Georgia, "Times New Roman", serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #1a1a1a; line-height: 1.55; }
-        header { border-bottom: 2px solid #1a1a1a; padding-bottom: 0.75rem; margin-bottom: 1.5rem; }
-        h1 { font-size: 1.8rem; }
-        .date { color: #555; font-size: 0.95rem; margin-top: 0.25rem; }
-        h2 { font-size: 1.2rem; margin: 1.5rem 0 0.5rem; padding-bottom: 0.2rem; border-bottom: 1px solid #ddd; }
-        p { margin-bottom: 0.9rem; }
-        a { color: #0b5; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        sup a, p > a[href] { font-size: 0.85em; }
-        footer { margin-top: 2.5rem; padding-top: 0.75rem; border-top: 1px solid #ddd; color: #888; font-size: 0.8rem; }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            line-height: 1.6;
+            max-width: 680px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem;
+        }
+        header {
+            border: 1px solid var(--border);
+            background: var(--header-bg);
+            padding: 1.25rem;
+            border-radius: 4px;
+            margin-bottom: 2rem;
+        }
+        h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        h1::before {
+            content: ">";
+            color: var(--accent);
+        }
+        .meta {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+            border-top: 1px solid var(--border);
+            padding-top: 0.5rem;
+        }
+        main {
+            display: flex;
+            flex-direction: column;
+            gap: 1.75rem;
+        }
+        h2 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #ffffff;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 0.35rem;
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        h2::before {
+            content: "[#]";
+            color: var(--text-muted);
+        }
+        p {
+            margin-bottom: 1rem;
+            padding-left: 1rem;
+            border-left: 2px solid var(--border);
+            font-family: var(--font-serif);
+            font-size: 1.05rem;
+            color: var(--text-paragraph);
+            line-height: 1.65;
+        }
+        a {
+            color: var(--accent);
+            text-decoration: none;
+            background: var(--accent-bg);
+            padding: 0.1rem 0.35rem;
+            border-radius: 3px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            display: inline-flex;
+            align-items: center;
+            margin: 0 0.15rem;
+            border: 1px solid rgba(88, 166, 255, 0.15);
+            transition: all 0.2s ease;
+        }
+        a:hover {
+            background: var(--accent);
+            color: var(--bg);
+        }
+        a img {
+            border-radius: 2px;
+            margin-right: 4px;
+            filter: brightness(0.9);
+        }
+        footer {
+            margin-top: 4rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-align: center;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>{{.Slot | xmlEscape}} Bulletin</h1>
-        <div class="date">{{.Date | xmlEscape}}</div>
+        <h1>feed-forge --view-bulletin</h1>
+        <div class="meta">
+            Session: active | Date: {{.Date | xmlEscape}} | Slot: {{.Slot | xmlEscape}}
+        </div>
     </header>
     <main>
 {{.Content}}
@@ -29,3 +153,4 @@
     <footer>Generated by feed-forge · {{.Generated | xmlEscape}}</footer>
 </body>
 </html>
+

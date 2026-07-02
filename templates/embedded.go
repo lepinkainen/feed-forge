@@ -7,3 +7,10 @@ import "embed"
 //
 //go:embed *.tmpl
 var EmbeddedTemplates embed.FS
+
+// EmbeddedFonts holds the self-hosted webfonts referenced by the bulletin HTML
+// page. bulletin-publish copies these into the output directory so rendered
+// pages have no external font dependency.
+//
+//go:embed fonts/*.woff2
+var EmbeddedFonts embed.FS

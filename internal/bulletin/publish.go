@@ -13,6 +13,7 @@ import (
 
 	"github.com/lepinkainen/feed-forge/pkg/feed"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
+	"github.com/lepinkainen/feed-forge/templates"
 )
 
 const (
@@ -178,12 +179,42 @@ func Publish(opts PublishOptions) error {
 // renderAllHTML writes every bulletin's dated archive page plus the stable
 // bulletin-latest.html from the newest. Pure template render; safe to re-run.
 func renderAllHTML(htmlDir string, bulletins []Row) error {
+	if err := writeFonts(htmlDir); err != nil {
+		return err
+	}
 	for _, b := range bulletins {
 		if err := writeDatedHTML(htmlDir, b); err != nil {
 			return err
 		}
 	}
 	return writeLatestHTML(htmlDir, bulletins[0])
+}
+
+// writeFonts copies the embedded self-hosted webfonts into <htmlDir>/fonts/ so
+// the rendered pages have no external font dependency. Pages reference them with
+// the relative path "fonts/<name>.woff2".
+func writeFonts(htmlDir string) error {
+	entries, err := templates.EmbeddedFonts.ReadDir("fonts")
+	if err != nil {
+		return fmt.Errorf("read embedded fonts: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		data, rerr := templates.EmbeddedFonts.ReadFile("fonts/" + e.Name())
+		if rerr != nil {
+			return fmt.Errorf("read embedded font %s: %w", e.Name(), rerr)
+		}
+		path := filepath.Join(htmlDir, "fonts", e.Name())
+		if derr := filesystem.EnsureDirectoryExists(path); derr != nil {
+			return derr
+		}
+		if werr := os.WriteFile(path, data, 0o600); werr != nil {
+			return fmt.Errorf("write font %s: %w", path, werr)
+		}
+	}
+	return nil
 }
 
 // bulletinTitle builds the display title for a bulletin.
