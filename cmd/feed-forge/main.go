@@ -114,10 +114,13 @@ var CLI struct {
 
 	BulletinFetch struct{} `cmd:"bulletin-fetch" name:"bulletin-fetch" help:"Poll bulletin source feeds, extract full text, and store new items."`
 
+	BulletinGenerate struct {
+		Slot string `help:"Bulletin slot label (default: derived from time of day)"`
+	} `cmd:"bulletin-generate" name:"bulletin-generate" help:"Deduplicate and summarise unpublished items into a new stored bulletin (calls the model)."`
+
 	BulletinPublish struct {
 		Outfile string `help:"Output file path" short:"o" default:"bulletin.xml"`
-		Slot    string `help:"Bulletin slot label (default: derived from time of day)"`
-	} `cmd:"bulletin-publish" name:"bulletin-publish" help:"Deduplicate and summarise stored items into a digest Atom feed."`
+	} `cmd:"bulletin-publish" name:"bulletin-publish" help:"Render stored bulletins into HTML pages and the Atom feed (no model)."`
 
 	BulletinSummarize struct{} `cmd:"bulletin-summarize" name:"bulletin-summarize" help:"Debug: print the digest for current unpublished items to stdout without writing or marking anything."`
 }
@@ -774,8 +777,10 @@ func handleBulletinCommand(command, configPath string) bool {
 	switch command {
 	case "bulletin-fetch":
 		err = runBulletinFetch(configPath)
+	case "bulletin-generate":
+		err = runBulletinGenerate(configPath)
 	case "bulletin-publish":
-		err = runBulletinPublish(configPath)
+		err = runBulletinPublish()
 	case "bulletin-summarize":
 		err = runBulletinSummarize(configPath)
 	default:
@@ -825,7 +830,7 @@ func runBulletinFetch(configPath string) error {
 	return bulletin.Fetch(cfg, dbPath)
 }
 
-func runBulletinPublish(configPath string) error {
+func runBulletinGenerate(configPath string) error {
 	cfg, err := loadBulletinConfig(configPath)
 	if err != nil {
 		return err
@@ -834,8 +839,20 @@ func runBulletinPublish(configPath string) error {
 	if err != nil {
 		return err
 	}
-
 	apiKey, err := resolveAnthropicAPIKey(configPath)
+	if err != nil {
+		return err
+	}
+	return bulletin.Generate(bulletin.GenerateOptions{
+		Config: cfg,
+		DBPath: dbPath,
+		Slot:   CLI.BulletinGenerate.Slot,
+		APIKey: apiKey,
+	})
+}
+
+func runBulletinPublish() error {
+	dbPath, err := bulletinDBPath()
 	if err != nil {
 		return err
 	}
@@ -848,13 +865,10 @@ func runBulletinPublish(configPath string) error {
 		}
 	}
 	return bulletin.Publish(bulletin.PublishOptions{
-		Config:      cfg,
 		DBPath:      dbPath,
 		Outfile:     outfile,
 		HTMLDir:     bulletinHTMLDir(),
 		FeedBaseURL: feedURL,
-		Slot:        CLI.BulletinPublish.Slot,
-		APIKey:      apiKey,
 	})
 }
 

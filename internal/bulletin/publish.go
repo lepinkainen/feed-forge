@@ -55,26 +55,20 @@ func slotFor(t time.Time) string {
 	}
 }
 
-// PublishOptions carries the inputs for Publish.
-type PublishOptions struct {
-	Config      Config
-	DBPath      string
-	Outfile     string // Atom feed output path
-	HTMLDir     string // when non-empty, also export the digest as an HTML page here
-	FeedBaseURL string // self/alternate link for the Atom feed
-	Slot        string // bulletin slot label; derived from time of day when empty
-	APIKey      string // resolved Anthropic API key (see llm.Config.ResolveAPIKey)
+// GenerateOptions carries the inputs for Generate.
+type GenerateOptions struct {
+	Config Config
+	DBPath string
+	Slot   string // bulletin slot label; derived from time of day when empty
+	APIKey string // resolved Anthropic API key (see llm.Config.ResolveAPIKey)
 }
 
-// feedEntryLimit is how many recent bulletins the Atom feed carries, so a reader
-// that misses a publish can still catch up.
-const feedEntryLimit = 20
-
-// Publish summarises any unpublished items into a new bulletin (the only step
-// that calls the model), then always (re-)renders the Atom feed and HTML page
-// from the stored bulletins. Running it with no unpublished items therefore
-// rebuilds the outputs from existing data without any LLM call.
-func Publish(opts PublishOptions) error {
+// Generate summarises any unpublished items into a new stored bulletin. This is
+// the only stage that calls the model, and the only stage that writes bulletins.
+// It performs no rendering: bulletin-publish turns stored bulletins into HTML and
+// the Atom feed. Running Generate with no unpublished items is an idempotent
+// no-op.
+func Generate(opts GenerateOptions) error {
 	cfg := opts.Config.withDefaults()
 	ctx := context.Background()
 
@@ -84,62 +78,31 @@ func Publish(opts PublishOptions) error {
 	}
 	defer func() { _ = store.Close() }()
 
-	newRow, err := createBulletinIfPending(ctx, store, cfg, opts.Slot, opts.HTMLDir, opts.APIKey)
-	if err != nil {
-		return err
-	}
-
-	bulletins, err := store.LatestBulletins(ctx, feedEntryLimit)
-	if err != nil {
-		return err
-	}
-	if len(bulletins) == 0 {
-		slog.Info("bulletin: no bulletins to render")
-		return nil
-	}
-
-	if err := writeAtom(opts.Outfile, opts.FeedBaseURL, bulletins); err != nil {
-		return err
-	}
-	if opts.HTMLDir != "" {
-		if err := writeLatestHTML(opts.HTMLDir, bulletins[0]); err != nil {
-			return err
-		}
-	}
-
-	slog.Info("bulletin: rendered feed", "entries", len(bulletins), "new", newRow != nil, "outfile", opts.Outfile)
-	return nil
-}
-
-// createBulletinIfPending summarises unpublished items into a new stored
-// bulletin and returns it, or nil when there is nothing pending. When htmlDir is
-// set, the dated archive page is written before the row is committed, so the
-// commit that marks the items consumed never happens without its archive.
-func createBulletinIfPending(ctx context.Context, store *Store, cfg Config, slot, htmlDir, apiKey string) (*Row, error) {
 	items, err := store.UnpublishedItems(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if len(items) == 0 {
-		slog.Info("bulletin: no new items; rebuilding outputs from stored bulletins")
-		return nil, nil
+		slog.Info("bulletin: no new items; nothing to generate")
+		return nil
 	}
 
 	clusters := clusterItems(items, cfg.SimhashThreshold)
 	slog.Info("bulletin: clustered", "items", len(items), "clusters", len(clusters))
 
-	summarizer, err := NewSummarizer(cfg, apiKey)
+	summarizer, err := NewSummarizer(cfg, opts.APIKey)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	now := time.Now().UTC()
+	slot := opts.Slot
 	if slot == "" {
 		slot = slotFor(now)
 	}
 	digest, err := summarizer.Summarize(ctx, clusters)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	row := Row{
@@ -149,27 +112,78 @@ func createBulletinIfPending(ctx context.Context, store *Store, cfg Config, slot
 		Content:     digest,
 	}
 
-	// Write the durable archive page first: CreateBulletin is what marks these
-	// items published, so if the write fails we return before committing and the
-	// items stay pending for the next run. A crash after the write merely
-	// rewrites the same dated file next time.
-	if htmlDir != "" {
-		if derr := writeDatedHTML(htmlDir, row); derr != nil {
-			return nil, derr
-		}
-	}
-
 	ids := make([]int64, len(items))
 	for i, it := range items {
 		ids[i] = it.ID
 	}
 	id, err := store.CreateBulletin(ctx, row, ids)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	row.ID = id
-	slog.Info("bulletin: published", "id", id, "slot", slot, "items", len(ids))
-	return &row, nil
+	slog.Info("bulletin: generated", "id", id, "slot", slot, "items", len(ids))
+	return nil
+}
+
+// PublishOptions carries the inputs for Publish.
+type PublishOptions struct {
+	DBPath      string
+	Outfile     string // Atom feed output path
+	HTMLDir     string // when non-empty, also export HTML pages here
+	FeedBaseURL string // self/alternate link for the Atom feed
+}
+
+// feedEntryLimit is how many recent bulletins the Atom feed carries, so a reader
+// that misses a publish can still catch up.
+const feedEntryLimit = 20
+
+// Publish (re-)renders the Atom feed and HTML pages from the stored bulletins.
+// It calls no model and writes nothing to the database, so it can be re-run at
+// any time to rebuild every page from existing data (e.g. after a template
+// change).
+func Publish(opts PublishOptions) error {
+	ctx := context.Background()
+
+	store, err := NewStore(opts.DBPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = store.Close() }()
+
+	bulletins, err := store.AllBulletins(ctx)
+	if err != nil {
+		return err
+	}
+	if len(bulletins) == 0 {
+		slog.Info("bulletin: no bulletins to render")
+		return nil
+	}
+
+	feedEntries := bulletins
+	if len(feedEntries) > feedEntryLimit {
+		feedEntries = feedEntries[:feedEntryLimit]
+	}
+	if err := writeAtom(opts.Outfile, opts.FeedBaseURL, feedEntries); err != nil {
+		return err
+	}
+	if opts.HTMLDir != "" {
+		if err := renderAllHTML(opts.HTMLDir, bulletins); err != nil {
+			return err
+		}
+	}
+
+	slog.Info("bulletin: rendered feed", "bulletins", len(bulletins), "outfile", opts.Outfile)
+	return nil
+}
+
+// renderAllHTML writes every bulletin's dated archive page plus the stable
+// bulletin-latest.html from the newest. Pure template render; safe to re-run.
+func renderAllHTML(htmlDir string, bulletins []Row) error {
+	for _, b := range bulletins {
+		if err := writeDatedHTML(htmlDir, b); err != nil {
+			return err
+		}
+	}
+	return writeLatestHTML(htmlDir, bulletins[0])
 }
 
 // bulletinTitle builds the display title for a bulletin.
