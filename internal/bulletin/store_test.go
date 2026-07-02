@@ -21,7 +21,7 @@ func newTestStore(t *testing.T) *Store {
 
 func sampleItem(url string) Item {
 	return Item{
-		FeedURL: "https://feed.example/rss", Category: "tech",
+		FeedURL: "https://feed.example/rss", FeedName: "Example",
 		URL: url, Title: "Title", RawText: "body text here",
 		SimHash: SimHash("body text here"), FetchedAt: time.Now().UTC(),
 	}

@@ -93,7 +93,7 @@ func Fetch(cfg Config, dbPath string) error {
 
 			ok, err := store.InsertItem(ctx, Item{
 				FeedURL:   src.URL,
-				Category:  src.Category,
+				FeedName:  src.Name,
 				URL:       link,
 				Title:     entry.Title,
 				RawText:   text,

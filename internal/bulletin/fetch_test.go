@@ -76,7 +76,7 @@ func TestFetchEndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	dbPath := filepath.Join(t.TempDir(), "bulletin.db")
-	cfg := Config{Feeds: []FeedSource{{URL: srv.URL + "/feed", Category: "tech"}}}
+	cfg := Config{Feeds: []FeedSource{{URL: srv.URL + "/feed", Name: "Example News"}}}
 
 	if err := Fetch(cfg, dbPath); err != nil {
 		t.Fatalf("Fetch: %v", err)
@@ -99,8 +99,8 @@ func TestFetchEndToEnd(t *testing.T) {
 	if it.Title != "Story One" {
 		t.Errorf("Title = %q, want Story One", it.Title)
 	}
-	if it.Category != "tech" {
-		t.Errorf("Category = %q, want tech", it.Category)
+	if it.FeedName != "Example News" {
+		t.Errorf("FeedName = %q, want Example News", it.FeedName)
 	}
 	// Full-text extraction must win over the truncated feed description.
 	if !strings.Contains(it.RawText, "city council convened") {

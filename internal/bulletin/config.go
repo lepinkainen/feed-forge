@@ -18,8 +18,10 @@ func httpcacheDBPath(dbPath string) string {
 
 // FeedSource is one source feed to aggregate into bulletins.
 type FeedSource struct {
-	URL      string `yaml:"url"`
-	Category string `yaml:"category"`
+	URL string `yaml:"url"`
+	// Name is the publisher's display name (e.g. "The Verge"), used as the link
+	// text for this source in the digest. Falls back to the article host when empty.
+	Name string `yaml:"name"`
 }
 
 // Config holds the bulletin pipeline configuration, loaded from the `bulletin:`

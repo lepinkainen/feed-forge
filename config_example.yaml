@@ -97,6 +97,6 @@ bulletin:
   prompt-file: "" # Optional: path to a prompt template override for iteration
   feeds:
     - url: https://arstechnica.com/feed/
-      category: tech
+      name: Ars Technica # Display name used as the source link text in the digest
     - url: https://www.theverge.com/rss/index.xml
-      category: tech
+      name: The Verge

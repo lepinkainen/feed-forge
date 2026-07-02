@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS bulletins (
 CREATE TABLE IF NOT EXISTS items (
 	id          INTEGER PRIMARY KEY AUTOINCREMENT,
 	feed_url    TEXT NOT NULL,
-	category    TEXT NOT NULL,
+	feed_name   TEXT NOT NULL DEFAULT '',
 	url         TEXT NOT NULL UNIQUE,
 	title       TEXT NOT NULL,
 	raw_text    TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS idx_items_unpublished ON items(bulletin_id) WHERE bul
 type Item struct {
 	ID         int64
 	FeedURL    string
-	Category   string
+	FeedName   string
 	URL        string
 	Title      string
 	RawText    string
@@ -97,10 +97,10 @@ func (s *Store) Close() error {
 // idempotent. Returns true if a new row was inserted.
 func (s *Store) InsertItem(ctx context.Context, it Item) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO items (feed_url, category, url, title, raw_text, simhash, fetched_at)
+		`INSERT INTO items (feed_url, feed_name, url, title, raw_text, simhash, fetched_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(url) DO NOTHING`,
-		it.FeedURL, it.Category, it.URL, it.Title, it.RawText,
+		it.FeedURL, it.FeedName, it.URL, it.Title, it.RawText,
 		//nolint:gosec // G115: SimHash is a 64-bit fingerprint stored as SQLite INTEGER; bit pattern preserved.
 		int64(it.SimHash), it.FetchedAt,
 	)
@@ -129,7 +129,7 @@ func (s *Store) HasItem(ctx context.Context, url string) (bool, error) {
 // first.
 func (s *Store) UnpublishedItems(ctx context.Context) ([]Item, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, feed_url, category, url, title, raw_text, simhash, fetched_at
+		`SELECT id, feed_url, feed_name, url, title, raw_text, simhash, fetched_at
 		 FROM items WHERE bulletin_id IS NULL ORDER BY fetched_at ASC`,
 	)
 	if err != nil {
@@ -141,7 +141,7 @@ func (s *Store) UnpublishedItems(ctx context.Context) ([]Item, error) {
 	for rows.Next() {
 		var it Item
 		var sh int64
-		if err := rows.Scan(&it.ID, &it.FeedURL, &it.Category, &it.URL,
+		if err := rows.Scan(&it.ID, &it.FeedURL, &it.FeedName, &it.URL,
 			&it.Title, &it.RawText, &sh, &it.FetchedAt); err != nil {
 			return nil, fmt.Errorf("scan item: %w", err)
 		}
@@ -197,6 +197,12 @@ func (s *Store) CreateBulletin(ctx context.Context, b Row, itemIDs []int64) (int
 		return 0, fmt.Errorf("commit: %w", err)
 	}
 	return bulletinID, nil
+}
+
+// AllBulletins returns every non-empty bulletin, newest first, for rebuilding
+// all rendered outputs from stored data.
+func (s *Store) AllBulletins(ctx context.Context) ([]Row, error) {
+	return s.LatestBulletins(ctx, -1) // SQLite LIMIT -1 is unbounded.
 }
 
 // LatestBulletins returns up to limit most recent bulletins, newest first, for

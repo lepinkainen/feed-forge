@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"text/template"
@@ -32,7 +33,7 @@ const promptTemplate = `Below are {{.Count}} story clusters gathered from multip
 
 Produce a single HTML fragment (no <html>/<body> wrapper) that:
 - Groups stories under <h2> topic headings you choose (e.g. Technology, Business, World, Science).
-- Renders each story as a <p>: one or two sentences summarising it, followed by numbered source links like <a href="URL">[1]</a><a href="URL">[2]</a> using the sources listed.
+- Renders each story as a <p>: one or two sentences summarising it, followed by its sources. Render each source using its given name and icon as a bracketed link: [<a href="URL"><img src="ICON" alt="" width="16" height="16" style="vertical-align:middle;margin-right:3px">NAME</a>]. Use only the sources listed for that story; omit the <img> when no icon is given.
 - Orders topics by importance, most significant first.
 - Omits nothing material but stays terse.
 
@@ -140,11 +141,40 @@ func renderClusters(clusters []Cluster) string {
 		fmt.Fprintf(&b, "\n[Story %d] %s\n", i+1, rep.Title)
 		b.WriteString("Sources:\n")
 		for _, it := range c.Items {
-			fmt.Fprintf(&b, "  - %s\n", it.URL)
+			fmt.Fprintf(&b, "  - name: %s | icon: %s | url: %s\n", sourceName(it), faviconURL(it.URL), it.URL)
 		}
 		fmt.Fprintf(&b, "Excerpt: %s\n", truncate(rep.RawText, excerptLimit))
 	}
 	return b.String()
+}
+
+// sourceName returns the configured publisher name for an item, falling back to
+// the article host when the source was configured without a name.
+func sourceName(it Item) string {
+	if it.FeedName != "" {
+		return it.FeedName
+	}
+	return hostOf(it.URL)
+}
+
+// faviconURL builds a DuckDuckGo icon-service URL for the article's host. The
+// digest hotlinks this directly, so readers fetch icons from DuckDuckGo rather
+// than from each news site.
+func faviconURL(articleURL string) string {
+	host := hostOf(articleURL)
+	if host == "" {
+		return ""
+	}
+	return "https://icons.duckduckgo.com/ip3/" + host + ".ico"
+}
+
+// hostOf returns the hostname of a URL, or "" if it can't be parsed.
+func hostOf(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	return u.Hostname()
 }
 
 // truncate shortens s to at most n runes, appending an ellipsis when cut.
