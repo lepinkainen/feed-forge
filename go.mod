@@ -3,7 +3,7 @@ module github.com/lepinkainen/feed-forge
 go 1.26.1
 
 require (
-	github.com/alecthomas/kong v1.13.0
+	github.com/alecthomas/kong v1.15.0
 	github.com/alecthomas/kong-yaml v0.2.0
 	github.com/anthropics/anthropic-sdk-go v1.55.0
 	github.com/charmbracelet/bubbletea v1.3.10
