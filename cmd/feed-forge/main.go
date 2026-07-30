@@ -33,6 +33,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/feissarimokat"
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
+	"github.com/lepinkainen/feed-forge/internal/lobsters"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 	"github.com/lepinkainen/feed-forge/internal/tildes"
@@ -95,6 +96,13 @@ var CLI struct {
 		Topics   []string `help:"Tildes topic names (without leading ~), repeat for multiple groups" yaml:"topics"`
 		Interval string   `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"tildes" help:"Generate RSS feed from Tildes group Atom feeds."`
+
+	Lobsters struct {
+		Outfile  string   `help:"Output file path" short:"o" default:"lobsters.xml"`
+		Tags     []string `help:"lobste.rs tags to filter by, e.g. go rust" yaml:"tags"`
+		MinScore int      `help:"Minimum score threshold" default:"0" yaml:"min-score"`
+		Interval string   `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"lobsters" help:"Generate RSS feed from lobste.rs."`
 
 	YouTube struct {
 		Outfile       string   `help:"Output file path" short:"o" default:"youtube.xml"`
@@ -233,6 +241,15 @@ func buildProviderConfig(name string) any {
 			},
 			Topic:  CLI.Tildes.Topic,
 			Topics: CLI.Tildes.Topics,
+		}
+	case "lobsters":
+		return &lobsters.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.Lobsters.Outfile,
+				Interval: CLI.Lobsters.Interval,
+			},
+			Tags:     CLI.Lobsters.Tags,
+			MinScore: CLI.Lobsters.MinScore,
 		}
 	case "youtube":
 		return &youtube.Config{
@@ -756,6 +773,7 @@ func dispatchCommand(command, configPath string) {
 		"feissarimokat": {"feissarimokat", "Feissarimokat", CLI.Feissarimokat.Outfile, nil},
 		"oglaf":         {"oglaf", "Oglaf", CLI.Oglaf.Outfile, nil},
 		"tildes":        {"tildes", "Tildes", CLI.Tildes.Outfile, nil},
+		"lobsters":      {"lobsters", "Lobsters", CLI.Lobsters.Outfile, nil},
 		"youtube":       {"youtube", "YouTube", CLI.YouTube.Outfile, nil},
 	}
 	if spec, ok := providerCmds[command]; ok {

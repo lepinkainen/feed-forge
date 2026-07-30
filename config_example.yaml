@@ -71,6 +71,13 @@ tildes:
   outfile: tildes.xml
   interval: 30m
 
+# Lobsters provider configuration
+lobsters:
+  outfile: lobsters.xml
+  interval: 30m
+  min-score: 10
+  tags: [] # e.g. [go, rust] -> /t/go.json, /t/rust.json
+
 # YouTube provider configuration
 # Shorts are filtered out by default when entries link to /shorts/<video_id>.
 youtube:

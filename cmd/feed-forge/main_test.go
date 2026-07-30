@@ -58,6 +58,12 @@ tildes:
   outfile: tildes.xml
   interval: 30m
 
+lobsters:
+  tags: ["go", "rust"]
+  min-score: 10
+  outfile: lobsters.xml
+  interval: 30m
+
 youtube:
   feed-urls:
     - "https://www.youtube.com/feeds/videos.xml?channel_id=UC1111111111111111111111"
