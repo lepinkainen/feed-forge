@@ -31,12 +31,20 @@ $url = 'https://www.reddit.com/.json?' . http_build_query([
     'user' => $user,
 ]);
 
+// Reddit bans generic/fake-account User-Agents. Forward the caller's UA
+// (feed-forge builds it from the real config username) so Reddit sees a live
+// account as contact; fall back to a bare product UA if none was sent.
+$ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+if ($ua === '') {
+    $ua = 'feed-forge/1.0';
+}
+
 $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_FOLLOWLOCATION => true,
     CURLOPT_TIMEOUT        => 30,
-    CURLOPT_USERAGENT      => 'FeedForge/1.0 (by /u/feedforge)',
+    CURLOPT_USERAGENT      => $ua,
     CURLOPT_HTTPHEADER     => ['Accept: application/json'],
 ]);
 
