@@ -566,6 +566,13 @@ func generateFeedIndex(results []feedResult) error {
 		}
 	}
 
+	// The bulletin lives outside the provider registry, so it never appears in
+	// results. Inject it as a feed entry (for the copyable list and OPML) when
+	// its Atom feed has been published into OutputDir.
+	if entry, ok := bulletinFeedEntry(); ok {
+		feeds = append(feeds, entry)
+	}
+
 	sort.Slice(feeds, func(i, j int) bool {
 		return feeds[i].Provider < feeds[j].Provider
 	})
@@ -630,6 +637,30 @@ func bulletinIndexLink() string {
 		return ""
 	}
 	return bulletinHTMLSubdir + "/" + bulletin.LatestPageName
+}
+
+// bulletinFeedName is the default filename for the bulletin Atom feed, matching
+// the bulletin-publish -o default. It sits alongside the feed index in
+// OutputDir.
+const bulletinFeedName = "bulletin.xml"
+
+// bulletinFeedEntry returns a feed entry for the bulletin Atom feed when it has
+// been published into OutputDir, so it shows up in the copyable index list and
+// the OPML export like any registered provider. Returns ok=false when HTML/feed
+// export is disabled or the feed has not been published yet.
+func bulletinFeedEntry() (feedResult, bool) {
+	if CLI.OutputDir == "" {
+		return feedResult{}, false
+	}
+	if _, err := os.Stat(filepath.Join(CLI.OutputDir, bulletinFeedName)); err != nil {
+		return feedResult{}, false
+	}
+	return feedResult{
+		Provider: "Bulletin",
+		FeedName: "Bulletin",
+		Filename: bulletinFeedName,
+		Status:   "generated",
+	}, true
 }
 
 func feedName(info *providers.ProviderInfo, fallback string) string {

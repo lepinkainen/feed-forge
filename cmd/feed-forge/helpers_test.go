@@ -286,3 +286,55 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 		t.Fatalf("feeds.opml should not include failed feed:\n%s", opml)
 	}
 }
+
+func TestGenerateFeedIndex_IncludesBulletinFeedWhenPublished(t *testing.T) {
+	oldOutputDir := CLI.OutputDir
+	oldFeedBaseURL := CLI.FeedBaseURL
+	t.Cleanup(func() {
+		CLI.OutputDir = oldOutputDir
+		CLI.FeedBaseURL = oldFeedBaseURL
+	})
+	CLI.OutputDir = t.TempDir()
+	CLI.FeedBaseURL = "https://endymion.xyz/rss/"
+
+	results := []feedResult{
+		{Provider: "reddit", FeedName: "Reddit", Filename: "reddit.xml", Status: "generated"},
+	}
+
+	// Without a published bulletin feed, it must not appear.
+	if err := generateFeedIndex(results); err != nil {
+		t.Fatalf("generateFeedIndex() error = %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(CLI.OutputDir, "index.html"))
+	if err != nil {
+		t.Fatalf("ReadFile(index.html) error = %v", err)
+	}
+	if strings.Contains(string(body), bulletinFeedName) {
+		t.Fatalf("index.html should not list bulletin feed before it is published:\n%s", body)
+	}
+
+	// Publish the bulletin Atom feed into OutputDir; now it must appear in both
+	// the index and the OPML.
+	if err := os.WriteFile(filepath.Join(CLI.OutputDir, bulletinFeedName), []byte("<feed/>"), 0o600); err != nil {
+		t.Fatalf("write bulletin feed: %v", err)
+	}
+	if err := generateFeedIndex(results); err != nil {
+		t.Fatalf("generateFeedIndex() error = %v", err)
+	}
+
+	body, err = os.ReadFile(filepath.Join(CLI.OutputDir, "index.html"))
+	if err != nil {
+		t.Fatalf("ReadFile(index.html) error = %v", err)
+	}
+	if !strings.Contains(string(body), bulletinFeedName) {
+		t.Fatalf("index.html missing bulletin feed %q:\n%s", bulletinFeedName, body)
+	}
+
+	opml, err := os.ReadFile(filepath.Join(CLI.OutputDir, "feeds.opml"))
+	if err != nil {
+		t.Fatalf("ReadFile(feeds.opml) error = %v", err)
+	}
+	if !strings.Contains(string(opml), "https://endymion.xyz/rss/"+bulletinFeedName) {
+		t.Fatalf("feeds.opml missing bulletin feed URL:\n%s", opml)
+	}
+}
