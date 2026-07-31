@@ -137,7 +137,9 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("fetchFreshData() error = %v", err)
 	}
-	if fresh == nil || fresh.Title != "Fallback title" || fresh.Description != "OG Description" || fresh.Image != "/img.png" {
+	// fetchFreshData cleans the data inside the singleflight function, so the
+	// image URL is already resolved against the page URL here.
+	if fresh == nil || fresh.Title != "Fallback title" || fresh.Description != "OG Description" || fresh.Image != "http://example.invalid/img.png" {
 		t.Fatalf("fetchFreshData() = %#v", fresh)
 	}
 

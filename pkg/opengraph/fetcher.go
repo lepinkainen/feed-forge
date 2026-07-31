@@ -99,7 +99,8 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 			data = newFailurePlaceholder(targetURL)
 		}
 	} else if data != nil {
-		cleanupData(data, targetURL)
+		// cleanupData already ran inside the singleflight function in
+		// doFetchConditional; the returned pointer is shared between waiters.
 		slog.Debug("Successfully fetched OpenGraph data", "url", targetURL, "title", data.Title)
 	}
 

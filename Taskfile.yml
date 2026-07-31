@@ -13,6 +13,11 @@ tasks:
     cmds:
       - go test ./...
 
+  test-race:
+    desc: "Run tests with the race detector"
+    cmds:
+      - go test -race -tags=ci ./...
+
   lint:
     desc: "Run linter and formatter"
     cmds:
