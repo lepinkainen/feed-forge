@@ -26,6 +26,7 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/notifications"
 	"github.com/lepinkainen/feed-forge/pkg/preview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
+	"github.com/lepinkainen/feed-forge/pkg/version"
 
 	"github.com/lepinkainen/feed-forge/internal/bulletin"
 
@@ -42,12 +43,13 @@ import (
 
 // CLI structure
 var CLI struct {
-	Config            string `help:"Configuration file path" default:"config.yaml"`
-	Debug             bool   `help:"Enable debug logging" default:"false"`
-	OutputDir         string `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
-	FeedBaseURL       string `help:"Public base URL for generated feeds and OPML" default:"https://endymion.xyz/rss/" yaml:"feed-base-url"`
-	CacheDir          string `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
-	DiscordWebhookURL string `help:"Discord webhook URL for failure notifications" default:"" yaml:"discord-webhook-url"`
+	Version           kong.VersionFlag `help:"Print version and exit"`
+	Config            string           `help:"Configuration file path" default:"config.yaml"`
+	Debug             bool             `help:"Enable debug logging" default:"false"`
+	OutputDir         string           `help:"Base output directory for all generated feeds" default:"" yaml:"output-dir"`
+	FeedBaseURL       string           `help:"Public base URL for generated feeds and OPML" default:"https://endymion.xyz/rss/" yaml:"feed-base-url"`
+	CacheDir          string           `help:"Directory for cache databases" default:"" yaml:"cache-dir"`
+	DiscordWebhookURL string           `help:"Discord webhook URL for failure notifications" default:"" yaml:"discord-webhook-url"`
 
 	Reddit struct {
 		Outfile     string `help:"Output file path" short:"o" default:"reddit.xml"`
@@ -744,6 +746,7 @@ func main() {
 		kong.Description("A unified RSS feed generator with multiple provider support."),
 		kong.UsageOnError(),
 		kong.Configuration(kongyaml.Loader, configPath),
+		kong.Vars{"version": version.Version},
 	)
 
 	// Configure logging level based on debug flag

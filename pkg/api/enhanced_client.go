@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/version"
 )
 
 // EnhancedClientConfig configures the enhanced HTTP client
@@ -56,7 +58,7 @@ func NewEnhancedClient(config *EnhancedClientConfig) *EnhancedClient {
 		config.RetryPolicy = DefaultRetryPolicy()
 	}
 	if config.UserAgent == "" {
-		config.UserAgent = "FeedForge/1.0"
+		config.UserAgent = "FeedForge/" + version.Version
 	}
 	if config.DefaultHeaders == nil {
 		config.DefaultHeaders = make(map[string]string)
@@ -344,7 +346,7 @@ func NewRedditClient(baseClient *http.Client) *EnhancedClient {
 		BaseClient:  baseClient,
 		RateLimiter: NewSimpleRateLimiter(2 * time.Second), // Reddit rate limit - generous to avoid 429s
 		RetryPolicy: DefaultRetryPolicy(),
-		UserAgent:   "FeedForge/1.0 by theshrike79",
+		UserAgent:   "FeedForge/" + version.Version + " by theshrike79",
 		DefaultHeaders: map[string]string{
 			"Accept": "application/json",
 		},
@@ -357,7 +359,7 @@ func NewHackerNewsClient() *EnhancedClient {
 		BaseClient:  &http.Client{Timeout: 30 * time.Second},
 		RateLimiter: NewSimpleRateLimiter(500 * time.Millisecond), // Conservative rate limit
 		RetryPolicy: ConservativeRetryPolicy(),
-		UserAgent:   "FeedForge/1.0",
+		UserAgent:   "FeedForge/" + version.Version,
 		DefaultHeaders: map[string]string{
 			"Accept": "application/json",
 		},
@@ -370,6 +372,6 @@ func NewGenericClient() *EnhancedClient {
 		BaseClient:  &http.Client{Timeout: 30 * time.Second},
 		RateLimiter: NewNoOpRateLimiter(), // No rate limiting by default
 		RetryPolicy: ConservativeRetryPolicy(),
-		UserAgent:   "FeedForge/1.0",
+		UserAgent:   "FeedForge/" + version.Version,
 	})
 }
