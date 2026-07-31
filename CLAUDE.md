@@ -76,49 +76,29 @@ Read the Bulletin Pipeline section before you change these.
 feed-forge is a CLI Atom feed generator for many sources. Each source is a provider.
 All providers implement one interface, so the CLI treats them the same way.
 
-### Provider interface
+### Provider model
 
-`pkg/providers/provider.go` defines the contract:
+`pkg/providers/provider.go` defines the `FeedProvider` contract. `BaseProvider`
+(`pkg/providers/base.go`) holds the shared database connections, and every provider
+embeds it. Most providers build `GenerateFeed` with `providerfeed.BuildGenerator` and
+install it with `BaseProvider.SetGenerateFeedFunc`. Each provider self-registers in an
+`init()` function with `providers.MustRegister`. Eight providers are registered:
+`reddit`, `hackernews`, `fingerpori`, `feissarimokat`, `oglaf`, `tildes`, `lobsters`,
+and `youtube`. The code is in `internal/<name>/`. The Reddit package directory is
+`internal/reddit-json/`.
 
-```go
-type FeedProvider interface {
-    GenerateFeed(outfile string) error
-    FetchItems(limit int) ([]FeedItem, error)
-}
-```
-
-`FeedItem` is an interface for one feed entry. It exposes Title, Link, Score, and
-other common fields.
-
-`BaseProvider` (`pkg/providers/base.go`) holds the shared database connections. Every
-provider embeds it. `NewBaseProvider` takes a `DatabaseConfig`. `BaseProvider` always
-opens the OpenGraph database and the HTTP validator cache. The content database is
-optional.
-
-Most providers do not write `GenerateFeed` themselves. They build it with
-`providerfeed.BuildGenerator` and install it with `BaseProvider.SetGenerateFeedFunc`.
-
-### Provider registry
-
-Each provider registers itself in an `init()` function with
-`providers.MustRegister(name, &providers.ProviderInfo{...})`. `ProviderInfo` carries
-the name, description, version, a `Factory`, a `ConfigFactory`, and `Preview`
-metadata. `cmd/feed-forge/main.go` imports every provider package to trigger these
-`init()` functions.
-
-Eight providers are registered: `reddit`, `hackernews`, `fingerpori`,
-`feissarimokat`, `oglaf`, `tildes`, `lobsters`, and `youtube`. The code is in
-`internal/<name>/`. The Reddit package directory is `internal/reddit-json/`.
+For the full architecture — provider contract, registry, package roles, feed
+templates, and preview — read `ai-docs/01-runtime-architecture.md`,
+`ai-docs/02-provider-contract.md`, and `ai-docs/04-feeds-templates-preview.md`.
+Confirm a fact in the source before you act on it.
 
 To add a provider, use the `add-provider` skill in
-`.claude/skills/add-provider/SKILL.md`. The long form is
-`docs/adding-a-provider.md`.
+`.claude/skills/add-provider/SKILL.md`. The long form is `docs/adding-a-provider.md`.
 
 ### CLI entry point
 
 `cmd/feed-forge/main.go` parses the command line with Kong. It loads YAML through
-`kong-yaml`, not Viper. There is no `internal/config/` package. The configuration
-helpers are in `pkg/config/loader.go`.
+`kong-yaml`, not Viper. The configuration helpers are in `pkg/config/loader.go`.
 
 **IMPORTANT**: Kong populates the CLI sub-struct of the active command only. When you
 run `generate` or `preview`, Kong leaves the provider sub-structs such as
@@ -130,91 +110,18 @@ the provider section straight from YAML. Every provider `Config` struct must car
 output file is newer than its `interval`. When `output-dir` is set, it also writes
 `index.html` and `feeds.opml`.
 
-### Packages
-
-| Package | Contents |
-|---|---|
-| `pkg/api/` | Enhanced HTTP client with rate limiting, retries, and typed errors. |
-| `pkg/config/` | Configuration loading with URL and file fallback. |
-| `pkg/database/` | SQLite helpers and caching. |
-| `pkg/dbinterfaces/` | Database interface definitions. |
-| `pkg/feed/` | Template-based Atom generation. |
-| `pkg/feedmeta/` | Feed metadata helpers. |
-| `pkg/filesystem/` | Path and file helpers. |
-| `pkg/httpcache/` | Conditional GET cache with ETag and stale support. |
-| `pkg/llm/` | Shared Anthropic configuration and client. |
-| `pkg/notifications/` | Discord failure notifications. |
-| `pkg/opengraph/` | OpenGraph metadata fetching and caching. |
-| `pkg/preview/` | Interactive preview TUI. |
-| `pkg/providerfeed/` | `BuildGenerator`, the shared `GenerateFeed` builder. |
-| `pkg/providers/` | Provider interfaces, `BaseProvider`, and the registry. |
-| `pkg/testutil/` | Golden file test helpers. |
-| `pkg/urlutils/` | URL helpers. |
-
-### Feed output
-
-Feeds are Atom XML from Go templates in `templates/`. `templates/embedded.go` embeds
-them. The template loader prefers a local `templates/` directory and falls back to
-the embedded copy.
-
-Provider metadata uses standard Atom categories. There are no custom XML namespaces,
-so ordinary RSS readers can parse the output.
-
-Useful entry points in `pkg/feed/`:
-
-- `feed.GenerateAtomFeedWithEmbeddedTemplate()` renders a feed to a string.
-- `feed.SaveAtomFeedToFileWithEmbeddedTemplate()` renders a feed to a file.
-- `feed.NewTemplateGenerator()` gives lower-level control.
-
-Each has a `WithContext` variant.
-
 ## Bulletin Pipeline (`internal/bulletin/`)
 
 The bulletin is a separate code path. It does not implement `FeedProvider`, and
 `generate` does not discover it. It aggregates many high-frequency outlets into
-periodic summarized digests. This replaces one feed per source.
+periodic summarized digests through three decoupled stages: `bulletin-fetch`
+accumulates items, `bulletin-generate` turns the unpublished backlog into one stored
+bulletin, and `bulletin-publish` renders the stored bulletins into HTML and Atom.
+`bulletin-generate` and `bulletin-summarize` call the model and need
+`ANTHROPIC_API_KEY`.
 
-State lives in `bulletin.db`. An item with `bulletin_id IS NULL` is unpublished. That
-means no generated bulletin includes it yet.
-
-**Three decoupled stages.** `bulletin-fetch` accumulates items. `bulletin-generate`
-turns the unpublished backlog into one stored bulletin. `bulletin-publish` renders
-the stored bulletins into HTML and Atom.
-
-`bulletin-generate` is idempotent and catches up, because it consumes everything that
-is unpublished. `bulletin-publish` is a pure render with no writes. To rebuild every
-HTML page, for example after a template change, run `bulletin-publish` again.
-
-**Fetch** (`fetch.go`) parses each source feed with `gofeed`. It fetches each new
-article page through `httpcache.CachedGetWithStale`, which reuses conditional GET and
-ETag. It extracts the full text with `go-shiori/go-readability`. If the extracted text
-is thin, it falls back to the content in the feed. `HasItem` skips URLs that are
-already stored, so article pages are not fetched twice.
-
-**Dedup** (`simhash.go`, `dedup.go`) computes a 64-bit SimHash over the full text with
-stopwords stripped. A greedy single-pass clustering groups stories within
-`simhash-threshold` Hamming distance. The default is 3. Fingerprints are stored as
-SQLite INTEGER, as the int64 bit pattern.
-
-**Generate** (`publish.go`, `bulletin.Generate`) is the only stage that calls the model
-and the only stage that writes bulletins. Dedup runs before summarization to save
-tokens. The cluster representatives and their source URLs go to Anthropic in a single
-call (`claude-haiku-4-5`, `summarize.go`). The call returns one topic-grouped HTML
-digest. `store.CreateBulletin` inserts the bulletin row and marks its items published
-in one transaction. To override the prompt, set `prompt-file`.
-
-**Publish** (`publish.go`, `bulletin.Publish`) reads all stored bulletins. It renders
-one Atom `<entry>` per digest through `templates/bulletin-atom.tmpl`, limited to the
-newest `feedEntryLimit`. When `output-dir` is set, it also exports HTML pages to
-`<output-dir>/html/` through `templates/bulletin-page.html.tmpl`. It writes a dated
-archive page per bulletin plus a stable `bulletin-latest.html`. The `index.html` from
-the `generate` command links to `html/bulletin-latest.html` when that file exists.
-
-**Configuration** comes from the `bulletin:` section of `config.yaml` through
-`loadProviderConfigFromYAML`. The Anthropic API key comes from the top-level
-`anthropic:` section (`pkg/llm.Config`, key `api-key`). `llm.Config.ResolveAPIKey`
-resolves it and falls back to the `ANTHROPIC_API_KEY` environment variable. The
-`anthropic:` section is shared. Any future processor that calls a model can use it.
+Read `ai-docs/07-bulletin-pipeline.md` for the stage internals, the SimHash dedup, the
+prompt, and the configuration. Read it before you change these commands.
 
 ## Critical Rules
 
@@ -297,7 +204,7 @@ Every feature needs unit tests.
 
 ## Git
 
-- Never commit to `main` directly. Use a feature branch.
+- Never commit to `main` directly without user approval. Use a feature branch.
 - Use Conventional Commits, for example `feat:`, `fix:`, `refactor:`, `chore:`. Keep
   the subject near 70 characters. Describe behavior changes in the body.
 - Keep commits small and focused.
@@ -309,28 +216,19 @@ Every feature needs unit tests.
 
 ## Project Structure
 
-```text
-feed-forge/
-├── cmd/feed-forge/       # CLI entry point, Kong command structs, generate command
-├── internal/
-│   ├── bulletin/         # Bulletin pipeline (not a FeedProvider)
-│   ├── feissarimokat/    # Providers, one package each
-│   ├── fingerpori/
-│   ├── hackernews/
-│   ├── lobsters/
-│   ├── oglaf/
-│   ├── reddit-json/      # Registered as "reddit"
-│   ├── tildes/
-│   └── youtube/
-├── pkg/                  # Shared packages, see the Packages table
-├── templates/            # Atom and HTML templates, embedded by embedded.go
-├── testdata/             # Shared fixtures. Golden files sit beside their code
-├── configs/              # Sample configurations
-├── docs/                 # Human documentation
-├── ai-docs/              # Agent-only repository map
-├── proxy/                # Reddit proxy helper
-└── llm-shared/           # Shared conventions submodule
-```
+- `cmd/feed-forge/` — CLI entry point, Kong command structs, and the `generate`
+  command.
+- `internal/<name>/` — one package per provider. `internal/reddit-json/` registers as
+  `reddit`. `internal/bulletin/` is the bulletin pipeline, not a provider.
+- `pkg/` — shared packages.
+- `templates/` — Atom and HTML templates, embedded by `embedded.go`.
+- `testdata/` — shared fixtures. Golden files sit beside their code.
+- `configs/` — sample configurations. `proxy/` — Reddit proxy helper.
+- `docs/` — human documentation. `ai-docs/` — agent-only repository map.
+  `llm-shared/` — shared conventions submodule.
+
+Read `ai-docs/00-index.md` and `ai-docs/01-runtime-architecture.md` for the full tree
+and the package roles.
 
 ## Documentation Map
 

@@ -19,10 +19,12 @@ Audience: language models/agents only. Human readability not goal. Treat docs as
 - `ai-docs/04-feeds-templates-preview.md`: template data, feed generation, preview TUI.
 - `ai-docs/05-cache-network-storage.md`: caches, DBs, HTTP clients, SSRF protections.
 - `ai-docs/06-build-test-change-recipes.md`: commands, tests, common change paths, pitfalls.
+- `ai-docs/07-bulletin-pipeline.md`: bulletin fetch/dedup/generate/publish stages, state, config.
 
 ## Fast facts
 
-- Registered providers: `reddit`, `hackernews`, `fingerpori`, `feissarimokat`, `oglaf`, `tildes`, `youtube`.
+- Registered providers: `reddit`, `hackernews`, `fingerpori`, `feissarimokat`, `oglaf`, `tildes`, `lobsters`, `youtube`.
+- Bulletin pipeline (`internal/bulletin/`) is a separate code path, not a `FeedProvider`. See `ai-docs/07-bulletin-pipeline.md`.
 - Main command modes: provider-specific commands, `preview <provider>`, `generate`.
 - `generate` reads configured provider sections from YAML, runs providers concurrently, skips by outfile mtime + `interval`, writes `index.html` and `feeds.opml` when `output-dir` is set.
 - `BaseProvider` always opens OpenGraph DB + HTTP validator cache. Content DB optional.
