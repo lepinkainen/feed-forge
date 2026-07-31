@@ -89,14 +89,16 @@ youtube:
   interval: 30m
 
 # Bulletin aggregator (separate code path, not a registry provider).
-# Polls high-frequency source feeds, extracts full text, de-duplicates near
-# -identical stories via SimHash, then publishes an LLM-summarised digest as a
-# single Atom entry. Runs as two cron steps + one debug command:
-#   */30 * * * *  feed-forge bulletin-fetch      # accumulate items all day
-#   0 8,18 * * *  feed-forge bulletin-publish -o bulletin.xml
-#   feed-forge bulletin-summarize                # debug: print digest, no writes
-# Requires an Anthropic API key: set `anthropic.api-key` above or the
-# ANTHROPIC_API_KEY environment variable.
+# Polls high-frequency source feeds, extracts full text, de-duplicates
+# near-identical stories via SimHash, then publishes an LLM-summarised digest as
+# a single Atom entry. Three cron steps, in this order, plus one debug command:
+#   */30 *    * * *  feed-forge bulletin-fetch                    # accumulate items all day
+#   45   7,17 * * *  feed-forge bulletin-generate                 # summarise the backlog (calls the model)
+#   50   7,17 * * *  feed-forge bulletin-publish -o bulletin.xml  # render HTML + Atom (no model, no writes)
+#   feed-forge bulletin-summarize                                 # debug: print digest, no writes
+# bulletin-generate and bulletin-summarize need an Anthropic API key: set
+# `anthropic.api-key` above or the ANTHROPIC_API_KEY environment variable.
+# bulletin-publish is a pure render, so re-run it to rebuild every HTML page.
 bulletin:
   model: claude-haiku-4-5 # Anthropic model used for summarisation
   simhash-threshold: 3 # Max Hamming distance (of 64) to treat stories as duplicates

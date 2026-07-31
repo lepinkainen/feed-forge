@@ -135,9 +135,8 @@ Preserve:
 
 ## Known drift / verify spots
 
-- README and `Taskfile.yml` mention `hacker-news`; current CLI struct tag in `main.go` appears `cmd:"hackernews"` unless changed. Verify before modifying docs/tasks.
+- `hacker-news` is gone. Command, registry name, and YAML key are all `hackernews` (fixed by adding `name:"hackernews"` to the CLI struct tag).
 - `docs/adding-a-provider.md` contains older `GenerateFeed(outfile string, _ bool)` example; current interface is `GenerateFeed(outfile string) error`.
-- Project guidelines mention `internal/pkg/providers`, but actual shared provider package is `pkg/providers`.
 - `go.mod` says Go `1.26.1`; ensure local toolchain supports it before running full commands.
 
 ## Lint/style rules
