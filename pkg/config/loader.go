@@ -42,7 +42,10 @@ func DefaultLoaderConfig() *LoaderConfig {
 	}
 }
 
-// LoadOrFetch loads configuration with fallback priority: local file -> remote URL
+// LoadOrFetch loads configuration with fallback priority: remote URL -> local file.
+// Note that the parameter order is the reverse of the precedence: remoteURL is tried
+// first and localPath is read only after the remote request fails. Pass an empty
+// remoteURL when localPath must take priority.
 // This is the main function providers should use for configuration loading
 func LoadOrFetch(localPath, remoteURL string, target any) error {
 	config := DefaultLoaderConfig()

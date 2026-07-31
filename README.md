@@ -87,8 +87,13 @@ When you set `output-dir`, `generate` also writes an `index.html` page and a
 
 `preview` takes the same provider name as the generate command.
 
-The preview fetches live items and shows them in the terminal. It writes no files. To
-print the Atom XML for one item, add `--index 0`.
+The preview fetches live items and shows them in the terminal. To print the Atom XML
+for one item, add `--index 0`.
+
+Preview writes no feed file. It does write the shared cache databases, because it
+creates a real provider: `opengraph.db` and `http_cache.db` every time, plus a content
+database such as `hackernews.db` for the providers that keep one. These files land in
+`--cache-dir`. Preview is therefore not a read-only command.
 
 ### Get a YouTube feed URL
 
