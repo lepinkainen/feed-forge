@@ -168,8 +168,10 @@ Source docs also exist at `docs/adding-a-provider.md`, but may be stale; follow 
 
 ## Provider naming conventions
 
-- Registry names are lower no spaces; existing mixed style: `hackernews` (not `hacker-news`), `reddit`, `youtube`.
-- CLI command for Hacker News is `hackernews` in current `main.go` tags? Check tags before changing. README/Taskfile may contain stale `hacker-news` references.
+- Registry names are lowercase, no spaces, no hyphens: `hackernews`, `reddit`, `youtube`.
+- One name per provider. Registry name == Kong command name == `config.yaml` section key == `preview` arg.
+- Kong derives command name from the struct FIELD name (`HackerNews` -> `hacker-news`). `cmd:"x"` value does NOT set it. Add explicit `name:"x"`. Mismatch => `ctx.Command()` matches no `dispatchCommand` branch => `panic(command)`.
+- Guards: `TestProviderCommandNamesMatchRegistry`, `TestProviderCommandsDispatch` in `cmd/feed-forge/main_test.go`.
 - Template names use `<provider>-atom` with hyphens in some cases.
 
 ## Error handling expectations

@@ -1,53 +1,56 @@
-# Configuration System
+# pkg/config
 
-## Overview
-The feed-forge configuration system has three distinct layers:
+This package loads a configuration document from a local file or a remote URL, with
+fallback between them. It does not handle the main `config.yaml`.
 
-1. **Central Configuration** (`internal/config/config.go`)
-   - Application-wide settings (log level, data directory)
-   - Provider configuration (API keys, endpoints)
-   - Loaded from YAML file using Viper
-   - Manages OAuth2 tokens and persistent state
+## What loads what
 
-2. **Provider Configuration** (e.g., `internal/reddit/config.go`)
-   - Provider-specific configuration loading utilities
-   - Handles remote configuration fetching with fallbacks
-   - JSON-based configuration for specific features
+feed-forge has two separate configuration paths. Do not confuse them.
 
-3. **External Configuration** (e.g., HackerNews domain categorization)
-   - External data loaded from URLs
-   - Cached locally with fallback
-   - Used for dynamic configuration that may be updated remotely
+**1. The main configuration: `config.yaml`.** Kong and `kong-yaml` load it in
+`cmd/feed-forge/main.go`. Viper is not used, and there is no `internal/config`
+package. A CLI flag always overrides a file value.
 
-## Usage Guidelines
+Kong fills the sub-struct of the active command only. The `generate` and `preview`
+commands therefore call `loadProviderConfigFromYAML()` in `main.go` to read a provider
+section directly. Every provider `Config` struct needs `yaml` tags for that to work.
 
-### Central Configuration
-- Use for settings that need to persist across application restarts
-- OAuth2 tokens and authentication state
-- API keys and credentials
-- Application-level settings
+**2. Reference data: this package.** Use it for data that lives outside `config.yaml`
+and can come from a URL. The only current caller is
+`internal/hackernews/config.go`, which loads the domain-to-category map.
 
-### Provider Configuration
-- Use for provider-specific settings that may be loaded from remote sources
-- Domain categorization rules
-- Feature flags and dynamic configuration
-- Settings that may be updated without restarting the application
+## API
 
-### External Configuration
-- Use for configuration that may be updated remotely
-- Reference data (like domain categorization rules)
-- Settings that should be shared across multiple instances
+```go
+// Try localPath, then remoteURL. Unmarshal into target.
+func LoadOrFetch(localPath, remoteURL string, target any) error
 
-## Configuration Files
+// The same, with explicit timeout, retry, and fallback options.
+func LoadFromURLWithFallback(config *LoaderConfig, target any) error
 
-- `config.yaml` - Central application configuration (Viper-managed)
-- `reddit.json` - Reddit provider-specific state (optional, for local overrides)
-- Remote configuration URLs - For dynamic external configuration
+// Defaults: 10s timeout, 3 retries, fallback on.
+func DefaultLoaderConfig() *LoaderConfig
+```
 
-## Best Practices
+`LoadOrFetch` is the entry point for providers. It detects JSON or YAML from the
+content, so the caller does not name the format.
 
-1. **Separation of Concerns**: Keep authentication state separate from application settings
-2. **Fallback Strategy**: Always provide reasonable defaults and fallback mechanisms
-3. **Error Handling**: Configuration loading should be robust and provide clear error messages
-4. **Security**: Store sensitive information (API keys, tokens) securely
-5. **Documentation**: Always document configuration options and their purposes
+Remote fetches go through `pkg/api`, so they get rate limiting and retries.
+
+Errors: `ErrConfigNotFound`, `ErrConfigInvalid`, `ErrUnsupportedFormat`. Compare them
+with `errors.Is()`.
+
+## Pattern for reference data
+
+Give every remote source an embedded default. `internal/hackernews/config.go` shows
+the shape:
+
+1. If a local path is set, call `LoadOrFetch`.
+2. If that fails, read the copy embedded in `configs/`.
+3. If that also fails, log a warning and turn the feature off.
+
+A network failure must never stop feed generation.
+
+CAUTION: Do not put credentials in a file that this package fetches from a URL. API
+keys belong in `config.yaml` or in an environment variable. Read the `anthropic:`
+section of `config_example.yaml` for the pattern.

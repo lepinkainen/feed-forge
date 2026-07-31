@@ -1,196 +1,344 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file gives guidance to Claude Code (claude.ai/code) for work in this repository.
+
+Terminology in this file is fixed. "Make sure that" is the only verb phrase for a
+check. "Configuration" is the only noun for settings. "Run" is the only verb for
+running a command.
 
 ## Build and Development Commands
 
-**Primary build system**: Task (taskfile.dev) - use `task` commands instead of direct `go` commands
+Task (taskfile.dev) is the build system. Use `task` commands. Do not run `go build`,
+`go test`, or `go vet` directly.
 
-**Essential commands**:
+| Command | Action |
+|---|---|
+| `task build` | Build the binary. Runs `test` and `lint` first. |
+| `task test` | Run all tests. |
+| `task lint` | Run `gofmt`, `go vet`, `go mod tidy`, and `golangci-lint`. |
+| `task clean` | Remove build artifacts and generated feed files. |
+| `task build-linux` | Build for Linux AMD64. |
+| `task build-ci` | Build for CI with coverage. |
+| `task test-ci` | Run tests with the `ci` build tag and coverage. |
+| `task update-golden` | Update golden files. |
+| `task test-update` | Run tests and update golden files. |
+| `task vuln` | Run the vulnerability scanner. |
+| `task deadcode` | Report unreachable code. |
+| `task cognit` | Report cognitive complexity. |
+| `task help` | List all tasks. |
 
-- `task build` - Build the application (includes test and lint)
-- `task test` - Run all tests
-- `task lint` - Run linter and formatter (gofmt, go vet, go mod tidy)
-- `task clean` - Clean build artifacts
-- `task build-linux` - Build for Linux AMD64
-- `task build-ci` - Build for CI with coverage
-- `task test-ci` - Run tests with CI tags and coverage
-- `task update-golden` - Update golden files when tests are in stable state
+A change is not complete until `task build` succeeds.
 
-**Run commands**:
+Run tasks exist for some providers only: `run-reddit`, `run-hackernews`,
+`run-fingerpori`, `run-feissarimokat`, `run-oglaf`. Preview tasks exist for
+`reddit`, `hackernews`, `fingerpori`, and `feissarimokat`. For other providers, run
+the binary directly.
 
-- `task run-reddit` - Run Reddit feed generation
-- `task run-hackernews` - Run Hacker News feed generation
+### Direct execution
 
-**Direct execution**:
+```bash
+./build/feed-forge reddit -o output.xml --min-score 100
+./build/feed-forge hackernews -o output.xml --min-points 50
+./build/feed-forge generate                 # all providers in config.yaml
+./build/feed-forge preview hackernews       # interactive item preview
+```
 
-- `./build/feed-forge reddit -o output.xml --min-score 100` - Reddit feed
-- `./build/feed-forge hacker-news -o output.xml --min-points 50` - Hacker News feed
+One name identifies a provider everywhere: the CLI command, the `config.yaml` section
+key, the `preview` argument, and the registry name are the same string.
 
-**Bulletin aggregator** (see Bulletin Pipeline below):
+CAUTION: Kong derives a command name from the struct field name, so a field named
+`HackerNews` becomes the command `hacker-news`. A `cmd:"hackernews"` tag alone does
+**not** change the name. Add an explicit `name:"hackernews"` tag. When a command name
+and its registry name drift apart, `ctx.Command()` returns a string that no
+`dispatchCommand` branch matches, and the binary panics on a primary command.
+`TestProviderCommandNamesMatchRegistry` and `TestProviderCommandsDispatch` in
+`cmd/feed-forge/main_test.go` guard against this.
 
-- `./build/feed-forge bulletin-fetch` - Poll source feeds, extract full text, store items (cron every ~30m)
-- `./build/feed-forge bulletin-generate` - Dedup + summarise unpublished items into a new stored bulletin; the only stage that calls the model (cron at fixed slots, e.g. `45 7,17`). Requires `ANTHROPIC_API_KEY`.
-- `./build/feed-forge bulletin-publish -o bulletin.xml` - Render stored bulletins into HTML pages + the Atom feed; no model, no DB writes, so it can be re-run any time to rebuild every page (cron just after generate)
-- `./build/feed-forge bulletin-summarize` - Debug: print the digest for current unpublished items to stdout without writing or marking anything (for prompt/model iteration). Requires `ANTHROPIC_API_KEY`.
+Global flags: `--config`, `--debug`, `--output-dir`, `--feed-base-url`,
+`--cache-dir`, `--discord-webhook-url`.
+
+### Bulletin commands
+
+Read the Bulletin Pipeline section before you change these.
+
+| Command | Action |
+|---|---|
+| `bulletin-fetch` | Poll source feeds, extract full text, and store new items. Cron every 30 minutes. |
+| `bulletin-generate` | Deduplicate and summarize unpublished items into one stored bulletin. Cron at fixed slots, for example `45 7,17`. |
+| `bulletin-publish -o bulletin.xml` | Render stored bulletins into HTML pages and the Atom feed. Cron immediately after generate. |
+| `bulletin-summarize` | Print the digest for current unpublished items to stdout. Writes nothing. Use it to iterate on the prompt. |
+
+`bulletin-generate` and `bulletin-summarize` call the model. Both need
+`ANTHROPIC_API_KEY`.
 
 ## Architecture Overview
 
-Feed-Forge is a unified RSS feed generator. It uses a **provider-based architecture** with a common interface for different feed sources.
+feed-forge is a CLI Atom feed generator for many sources. Each source is a provider.
+All providers implement one interface, so the CLI treats them the same way.
 
-### Core Components
+### Provider interface
 
-**Provider Interface** (`pkg/providers/provider.go`):
+`pkg/providers/provider.go` defines the contract:
 
-- Core interface: `FeedProvider` with method `GenerateFeed(outfile string, reauth bool) error`
-- `FeedItem` interface for standardized feed entry handling with common fields (Title, Link, Score, etc.)
-- `BaseProvider` struct (`pkg/providers/base.go`) provides common functionality for all providers
-- Provider registry system with factory pattern for dynamic provider management and discovery
+```go
+type FeedProvider interface {
+    GenerateFeed(outfile string) error
+    FetchItems(limit int) ([]FeedItem, error)
+}
+```
 
-**CLI Entry Point** (`cmd/feed-forge/main.go`):
+`FeedItem` is an interface for one feed entry. It exposes Title, Link, Score, and
+other common fields.
 
-- Uses Kong for command-line parsing
-- Supports `reddit` and `hacker-news` subcommands
-- Handles configuration loading and provider instantiation
-- **IMPORTANT**: Kong only populates CLI sub-struct fields for the active command. When running `generate` or `preview`, the provider-specific sub-structs (e.g., `CLI.Reddit.*`) are NOT populated. The `generate` and `preview` commands use `loadProviderConfigFromYAML()` to load provider config directly from YAML instead. Provider Config structs must have `yaml` tags for this to work.
+`BaseProvider` (`pkg/providers/base.go`) holds the shared database connections. Every
+provider embeds it. `NewBaseProvider` takes a `DatabaseConfig`. `BaseProvider` always
+opens the OpenGraph database and the HTTP validator cache. The content database is
+optional.
 
-**Configuration System** (`internal/config/config.go` and `pkg/config/loader.go`):
+Most providers do not write `GenerateFeed` themselves. They build it with
+`providerfeed.BuildGenerator` and install it with `BaseProvider.SetGenerateFeedFunc`.
 
-- Viper-based YAML configuration with fallback to defaults
-- Unified config structure for all providers with CLI flag overrides
-- Automatic config file creation and OAuth2 token persistence
+### Provider registry
 
-**Provider Implementations**:
+Each provider registers itself in an `init()` function with
+`providers.MustRegister(name, &providers.ProviderInfo{...})`. `ProviderInfo` carries
+the name, description, version, a `Factory`, a `ConfigFactory`, and `Preview`
+metadata. `cmd/feed-forge/main.go` imports every provider package to trigger these
+`init()` functions.
 
-- `internal/reddit-json/` - Reddit feed access, simplified authentication-free approach (public feeds only)
-- `internal/hackernews/` - Hacker News API integration, categorization, story caching
+Eight providers are registered: `reddit`, `hackernews`, `fingerpori`,
+`feissarimokat`, `oglaf`, `tildes`, `lobsters`, and `youtube`. The code is in
+`internal/<name>/`. The Reddit package directory is `internal/reddit-json/`.
 
-**Shared Package Libraries**:
+To add a provider, use the `add-provider` skill in
+`.claude/skills/add-provider/SKILL.md`. The long form is
+`docs/adding-a-provider.md`.
 
-- `pkg/api/` - Enhanced HTTP client with rate limiting, retries, and standardized error handling
-- `pkg/config/` - Configuration loading utilities with URL/file fallback support
-- `pkg/database/` - SQLite caching, provider utilities, and database interfaces
-- `pkg/feed/` - Template-based Atom feed generation and feed helpers
-- `pkg/opengraph/` - OpenGraph metadata fetching and caching
-- `pkg/filesystem/` - File system utilities and path management
-- `pkg/providers/` - Provider interfaces and base implementations
-- `pkg/utils/` - URL utilities and common helper functions
-- `pkg/testutil/` - Golden file testing utilities
-- `pkg/interfaces/` - Shared interface definitions
+### CLI entry point
 
-### Key Architecture Patterns
+`cmd/feed-forge/main.go` parses the command line with Kong. It loads YAML through
+`kong-yaml`, not Viper. There is no `internal/config/` package. The configuration
+helpers are in `pkg/config/loader.go`.
 
-**BaseProvider Pattern**:
+**IMPORTANT**: Kong populates the CLI sub-struct of the active command only. When you
+run `generate` or `preview`, Kong leaves the provider sub-structs such as
+`CLI.Reddit.*` empty. These two commands call `loadProviderConfigFromYAML()` to read
+the provider section straight from YAML. Every provider `Config` struct must carry
+`yaml` tags, or `generate` and `preview` will read zero values.
 
-- All providers inherit from `providers.BaseProvider` with shared database connections
-- `DatabaseConfig` pattern for configuring provider-specific database needs
-- Reddit provider: `UseContentDB: false` (stateless JSON parsing)
-- HackerNews provider: `UseContentDB: true` with "hackernews.db" (story caching)
-- All providers share OpenGraph database for metadata caching
+`generate` runs the configured providers concurrently. It skips a provider when the
+output file is newer than its `interval`. When `output-dir` is set, it also writes
+`index.html` and `feeds.opml`.
 
-**Database Integration**:
+### Packages
 
-- SQLite for caching (`modernc.org/sqlite`)
-- OpenGraph metadata caching (`pkg/opengraph/`) shared across all providers
-- Provider-specific content databases (optional, configurable per provider)
+| Package | Contents |
+|---|---|
+| `pkg/api/` | Enhanced HTTP client with rate limiting, retries, and typed errors. |
+| `pkg/config/` | Configuration loading with URL and file fallback. |
+| `pkg/database/` | SQLite helpers and caching. |
+| `pkg/dbinterfaces/` | Database interface definitions. |
+| `pkg/feed/` | Template-based Atom generation. |
+| `pkg/feedmeta/` | Feed metadata helpers. |
+| `pkg/filesystem/` | Path and file helpers. |
+| `pkg/httpcache/` | Conditional GET cache with ETag and stale support. |
+| `pkg/llm/` | Shared Anthropic configuration and client. |
+| `pkg/notifications/` | Discord failure notifications. |
+| `pkg/opengraph/` | OpenGraph metadata fetching and caching. |
+| `pkg/preview/` | Interactive preview TUI. |
+| `pkg/providerfeed/` | `BuildGenerator`, the shared `GenerateFeed` builder. |
+| `pkg/providers/` | Provider interfaces, `BaseProvider`, and the registry. |
+| `pkg/testutil/` | Golden file test helpers. |
+| `pkg/urlutils/` | URL helpers. |
 
-**Template-Based Feed Generation**:
+### Feed output
 
-- Go template-based Atom feeds with provider-specific customization
-- OpenGraph integration for rich content with concurrent fetching
-- Provider-specific metadata using standard Atom categories
-- Configurable filtering (score, comments, points)
-- Support for multiple link types and extended author information
-- RSS reader compatible (no custom namespaces)
+Feeds are Atom XML from Go templates in `templates/`. `templates/embedded.go` embeds
+them. The template loader prefers a local `templates/` directory and falls back to
+the embedded copy.
 
-### Bulletin Pipeline (`internal/bulletin/`)
+Provider metadata uses standard Atom categories. There are no custom XML namespaces,
+so ordinary RSS readers can parse the output.
 
-A **separate code path**, intentionally outside the provider registry — it does not implement `FeedProvider` and is not discovered by `generate`. It aggregates many high-frequency outlets into periodic summarised digests instead of one-feed-per-source.
+Useful entry points in `pkg/feed/`:
 
-- **Three decoupled stages**: `bulletin-fetch` (frequent cron) accumulates items; `bulletin-generate` (2×/day cron) turns the unpublished backlog into one stored bulletin; `bulletin-publish` (just after generate) renders the stored bulletins into HTML + Atom. State lives in `bulletin.db`; an item's `bulletin_id IS NULL` means unpublished (i.e. not yet folded into a generated bulletin). Generate is idempotent and catches up (it consumes everything unpublished); publish is a pure, side-effect-free render, so re-running it rebuilds every page from existing data — "recreate all the HTML" is just `bulletin-publish`.
-- **Fetch** (`fetch.go`): parses each source feed with `gofeed`, fetches each new article page through `httpcache.CachedGetWithStale` (conditional GET/ETag reused), extracts full text with `go-shiori/go-readability`, falls back to the feed's own content when extraction is thin. `HasItem` skips already-stored URLs so article pages aren't re-fetched.
-- **SimHash dedup** (`simhash.go`, `dedup.go`): 64-bit SimHash over stopword-stripped full text; greedy single-pass clustering groups stories within `simhash-threshold` Hamming distance (default 3). Fingerprints stored as SQLite INTEGER (int64 bit pattern).
-- **Generate** (`publish.go`, `bulletin.Generate`): the only stage that calls the model and the only one that writes bulletins. Dedup happens *before* summarisation to save tokens; cluster representatives + source URLs go to Anthropic (`claude-haiku-4-5`, `summarize.go`) in a **single call** that returns a topic-grouped HTML digest. `store.CreateBulletin` inserts the bulletin row and marks its items published in one transaction. Prompt overridable via `prompt-file` for iteration.
-- **Publish** (`publish.go`, `bulletin.Publish`): reads all stored bulletins (no model, no DB writes) and renders one Atom `<entry>` = whole digest via `templates/bulletin-atom.tmpl` (newest `feedEntryLimit`). When `output-dir` is set it also (re)exports HTML pages to `<output-dir>/html/` — a dated archive page per bulletin plus a stable `bulletin-latest.html` — via `templates/bulletin-page.html.tmpl`. Because it's a pure render over stored data it's safe to re-run to rebuild everything (e.g. after a template change). The `generate` **feed** command's `index.html` links to `html/bulletin-latest.html` when it exists.
-- **Config**: `bulletin:` section in `config.yaml`, loaded via `loadProviderConfigFromYAML`. The Anthropic API key comes from the shared top-level `anthropic:` section (`pkg/llm.Config`, key `api-key`), resolved via `llm.Config.ResolveAPIKey` which falls back to the `ANTHROPIC_API_KEY` env var. This general section is reusable by any future model-using processor, not bulletin-specific.
+- `feed.GenerateAtomFeedWithEmbeddedTemplate()` renders a feed to a string.
+- `feed.SaveAtomFeedToFileWithEmbeddedTemplate()` renders a feed to a file.
+- `feed.NewTemplateGenerator()` gives lower-level control.
 
-## Common Development Patterns
+Each has a `WithContext` variant.
 
-**Error Handling**: Use `log/slog` for structured logging throughout the codebase. Enhanced HTTP client provides standardized error handling with retry logic and structured error types.
+## Bulletin Pipeline (`internal/bulletin/`)
 
-**Database Timestamps**: **CRITICAL** - Use `time.Time` fields in Go structs and `TIMESTAMP` column affinity in SQLite. Let the `modernc.org/sqlite` driver handle serialization — it round-trips `time.Time` as RFC3339Nano text, which is lexicographically sortable so `ORDER BY ... DESC` equals chronological DESC. Never store raw upstream date strings (RFC1123Z, custom formats, day-first locales) in a sortable column: string-sort on non-ISO formats silently disagrees with chronological order and breaks feed ordering. Parse source timestamps into `time.Time` at the API/RSS boundary, never later. The `TIMESTAMP`/`DATETIME` column declaration is what triggers the driver's auto-scan back into `time.Time`; `TEXT` columns will not auto-convert on `rows.Scan`.
+The bulletin is a separate code path. It does not implement `FeedProvider`, and
+`generate` does not discover it. It aggregates many high-frequency outlets into
+periodic summarized digests. This replaces one feed per source.
 
-**HTTP Client Usage**: **CRITICAL** - Always use `pkg/api` enhanced clients for API calls. Provider-specific clients with built-in rate limiting and retry policies:
+State lives in `bulletin.db`. An item with `bulletin_id IS NULL` is unpublished. That
+means no generated bulletin includes it yet.
 
-- `api.NewRedditClient(baseClient)` - Reddit-optimized with 1-second rate limiting
-- `api.NewHackerNewsClient()` - HackerNews-optimized with conservative rate limiting
-- `api.NewGenericClient()` - General purpose with minimal configuration
+**Three decoupled stages.** `bulletin-fetch` accumulates items. `bulletin-generate`
+turns the unpublished backlog into one stored bulletin. `bulletin-publish` renders
+the stored bulletins into HTML and Atom.
 
-Never make direct HTTP calls - use these enhanced clients to avoid rate limiting and API failures.
+`bulletin-generate` is idempotent and catches up, because it consumes everything that
+is unpublished. `bulletin-publish` is a pure render with no writes. To rebuild every
+HTML page, for example after a template change, run `bulletin-publish` again.
 
-**Feed Generation**: Use unified template-based generation for rich feeds:
+**Fetch** (`fetch.go`) parses each source feed with `gofeed`. It fetches each new
+article page through `httpcache.CachedGetWithStale`, which reuses conditional GET and
+ETag. It extracts the full text with `go-shiori/go-readability`. If the extracted text
+is thin, it falls back to the content in the feed. `HasItem` skips URLs that are
+already stored, so article pages are not fetched twice.
 
-- `feed.GenerateAtomFeed()` - Unified feed generation with provider-agnostic logic
-- `feed.SaveAtomFeedToFile()` - Generate and save Atom feeds to file
-- `feed.NewTemplateGenerator()` - Create template generator for advanced use cases
+**Dedup** (`simhash.go`, `dedup.go`) computes a 64-bit SimHash over the full text with
+stopwords stripped. A greedy single-pass clustering groups stories within
+`simhash-threshold` Hamming distance. The default is 3. Fingerprints are stored as
+SQLite INTEGER, as the int64 bit pattern.
 
-**Configuration**: All providers use shared configuration utilities (`pkg/config`) with URL/file fallback, format detection (JSON/YAML), and unified config structure
+**Generate** (`publish.go`, `bulletin.Generate`) is the only stage that calls the model
+and the only stage that writes bulletins. Dedup runs before summarization to save
+tokens. The cluster representatives and their source URLs go to Anthropic in a single
+call (`claude-haiku-4-5`, `summarize.go`). The call returns one topic-grouped HTML
+digest. `store.CreateBulletin` inserts the bulletin row and marks its items published
+in one transaction. To override the prompt, set `prompt-file`.
 
-**Provider Factory Pattern**: Use provider registry (`providers.DefaultRegistry`) for dynamic provider discovery and instantiation. New providers register themselves with metadata and factory functions.
+**Publish** (`publish.go`, `bulletin.Publish`) reads all stored bulletins. It renders
+one Atom `<entry>` per digest through `templates/bulletin-atom.tmpl`, limited to the
+newest `feedEntryLimit`. When `output-dir` is set, it also exports HTML pages to
+`<output-dir>/html/` through `templates/bulletin-page.html.tmpl`. It writes a dated
+archive page per bulletin plus a stable `bulletin-latest.html`. The `index.html` from
+the `generate` command links to `html/bulletin-latest.html` when that file exists.
 
-**Testing**: Use `//go:build !ci` to skip tests in CI environments when needed
+**Configuration** comes from the `bulletin:` section of `config.yaml` through
+`loadProviderConfigFromYAML`. The Anthropic API key comes from the top-level
+`anthropic:` section (`pkg/llm.Config`, key `api-key`). `llm.Config.ResolveAPIKey`
+resolves it and falls back to the `ANTHROPIC_API_KEY` environment variable. The
+`anthropic:` section is shared. Any future processor that calls a model can use it.
 
-**Golden File Testing**: Use `task update-golden` to update test fixtures when implementation changes are stable and verified. Golden files are stored in testdata directories for consistent test results. Always review golden file diffs before committing - they represent expected output changes.
+## Critical Rules
 
-## Important Implementation Details
+### Database timestamps
 
-**Provider Instantiation**: Providers are created using factory functions:
+Use `time.Time` fields in Go structs and `TIMESTAMP` column affinity in SQLite. Let
+the `modernc.org/sqlite` driver serialize the value. The driver round-trips
+`time.Time` as RFC3339Nano text. That text sorts lexicographically, so
+`ORDER BY ... DESC` equals chronological DESC.
 
-- Reddit: `redditjson.NewRedditProvider()`
-- Hacker News: `hackernews.NewHackerNewsProvider()`
+CAUTION: Never store a raw upstream date string in a sortable column. RFC1123Z,
+custom formats, and day-first locales sort in an order that disagrees with
+chronological order, and feed ordering breaks silently.
 
-CLI flags override config file values. Each provider inherits from `BaseProvider` with database configuration.
+Parse a source timestamp into `time.Time` at the API or RSS boundary. Do not parse it
+later.
 
-**Enhanced HTTP Client**: All API calls use `pkg/api` enhanced client with configurable rate limiting, exponential backoff retries, and provider-specific policies
+The `TIMESTAMP` or `DATETIME` column declaration is what makes the driver scan the
+value back into `time.Time`. A `TEXT` column does not convert on `rows.Scan`.
 
-**Template-Based Feed Generation**: Providers use Go templates for flexible Atom feed generation with OpenGraph integration, multiple links, rich content, and provider-specific metadata using standard categories
+### HTTP clients
 
-**OpenGraph Integration**: Feed items are enhanced with OpenGraph metadata for better client compatibility, with concurrent fetching and caching.
+Make every outbound call through a `pkg/api` enhanced client. These clients add rate
+limiting, exponential backoff, and typed errors. A direct `http.Get` will hit rate
+limits and fail.
+
+- `api.NewRedditClient(baseClient)` — Reddit policy, 1-second rate limit.
+- `api.NewHackerNewsClient()` — conservative Hacker News policy.
+- `api.NewGenericClient()` — general purpose, minimal configuration.
+
+Send the user agent `feed-forge/[version]` on external calls.
+
+### Logging
+
+Use `log/slog` for all logging.
+
+### Configuration
+
+`config.yaml` is the single configuration file. CLI flags override its values. Copy
+`config_example.yaml` to `config.yaml` for local runs.
+
+CAUTION: Never commit real credentials. Pass secrets through environment variables or
+an untracked local configuration file. When you add a configuration key, document it
+in `config_example.yaml`.
+
+## Testing
+
+Golden file tests are the main form of output validation. Golden files live in a
+`testdata/` directory beside the code under test, such as `pkg/feed/testdata/` and
+`internal/lobsters/testdata/`. The root `testdata/` directory holds shared fixtures
+only.
+
+- Write table-driven tests for provider logic.
+- Name test files `<source>_test.go` and keep them beside the source.
+- Use relative paths to reach `testdata/`.
+- To refresh golden files, run `task update-golden`.
+- Read the golden file diff before you commit it. The diff is the change in expected
+  output.
+- To skip a test in CI, add the `//go:build !ci` constraint.
+
+Every feature needs unit tests.
+
+## Code Style
+
+- Go 1.26.1. Read `llm-shared/versions.md` for current version guidance.
+- After any Go change, run `goimports -w .`. Use `goimports`, not `gofmt`, because it
+  also fixes imports.
+- Write `any`, not `interface{}`.
+- Compare errors with `errors.Is()` and `errors.As()`. Wrap with `%w`.
+- Package names are lower case. Exported symbols are PascalCase. Tests are `TestXxx`.
+- Keep files focused. Split a file when it grows large.
+- Use `rg` instead of `grep` and `fd` instead of `find`.
+- Use `modernc.org/sqlite` for database access. It needs no CGO.
+
+## Git
+
+- Never commit to `main` directly. Use a feature branch.
+- Use Conventional Commits, for example `feat:`, `fix:`, `refactor:`, `chore:`. Keep
+  the subject near 70 characters. Describe behavior changes in the body.
+- Keep commits small and focused.
+- Before you open a pull request, run `task lint` and `task test`. Report any manual
+  feed check.
+- Link the related issue. Describe the observable change. Attach the diff when a feed
+  or a template changes.
+- Build artifacts belong in `build/`. Keep scratch files out of tracked directories.
 
 ## Project Structure
 
 ```text
 feed-forge/
-├── cmd/feed-forge/              # Main application entry point
+├── cmd/feed-forge/       # CLI entry point, Kong command structs, generate command
 ├── internal/
-│   ├── config/                  # Configuration management
-│   ├── hackernews/              # Hacker News provider implementation
-│   └── reddit-json/             # Reddit JSON provider implementation
-├── pkg/                         # Shared packages
-│   ├── api/                     # Enhanced HTTP client with rate limiting and retries
-│   ├── config/                  # Configuration loading utilities with fallback support
-│   ├── database/                # SQLite caching and database interfaces
-│   ├── feed/                    # Template-based Atom generation and feed helpers
-│   ├── filesystem/              # File system utilities
-│   ├── interfaces/              # Shared interface definitions
-│   ├── opengraph/               # OpenGraph metadata fetching and caching
-│   ├── providers/               # Provider interfaces and base implementations
-│   ├── testutil/                # Golden file testing utilities
-│   └── utils/                   # URL and common utilities
-├── testdata/                    # Test fixtures and golden files
-├── templates/                   # Go template files for feed generation
-└── llm-shared/                  # Development guidelines submodule
+│   ├── bulletin/         # Bulletin pipeline (not a FeedProvider)
+│   ├── feissarimokat/    # Providers, one package each
+│   ├── fingerpori/
+│   ├── hackernews/
+│   ├── lobsters/
+│   ├── oglaf/
+│   ├── reddit-json/      # Registered as "reddit"
+│   ├── tildes/
+│   └── youtube/
+├── pkg/                  # Shared packages, see the Packages table
+├── templates/            # Atom and HTML templates, embedded by embedded.go
+├── testdata/             # Shared fixtures. Golden files sit beside their code
+├── configs/              # Sample configurations
+├── docs/                 # Human documentation
+├── ai-docs/              # Agent-only repository map
+├── proxy/                # Reddit proxy helper
+└── llm-shared/           # Shared conventions submodule
 ```
 
-## Development Guidelines
+## Documentation Map
 
-This project follows `llm-shared` conventions:
+- `README.md` — installation and usage, for people.
+- `docs/adding-a-provider.md` — long form provider guide.
+- `ai-docs/` — dense agent-only repository map. `ai-docs/00-index.md` is the index.
+  Faster to read than the source, but it can be stale. Confirm a fact in the source
+  before you act on it.
+- `llm-shared/project_tech_stack.md` — shared technology preferences.
+- `llm-shared/utils/validate-docs/` — documentation and code consistency checker.
+- Function inventory: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`
 
-- Always run `goimports -w .` after Go code changes (preferred over `gofmt` for automatic import management)
-- Use `task build` instead of `go build` to ensure tests and linting
-- Requires Go 1.24+ for compilation and development
-- Tech stack guidelines: `llm-shared/project_tech_stack.md`
-- Function analysis: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`
+`AGENTS.md`, `GEMINI.md`, `CRUSH.md`, and `.github/copilot-instructions.md` are
+symlinks to this file. Edit this file only.
 
 # important-instruction-reminders
 
