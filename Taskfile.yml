@@ -170,7 +170,16 @@ tasks:
       - |
         host="${PUBLISH_DESTINATION%%:*}"
         dest="${PUBLISH_DESTINATION#*:}"
-        bin=$(ssh "$host" "test -d '$dest' && echo '$dest/feed-forge-linux' || echo '$dest'")
+        # Resolve leading ~ on the remote host before probing. The remote
+        # command single-quotes the literal path for safety, then expands a
+        # leading tilde against the remote $HOME (portable POSIX case).
+        probe="d='$dest'"'
+        case "$d" in
+          "~") d="$HOME" ;;
+          "~/"*) d="$HOME/${d#\~/}" ;;
+        esac
+        test -d "$d" && echo "$d/feed-forge-linux" || echo "$d"'
+        bin=$(ssh "$host" "$probe")
         echo "Remote version:"
         ssh "$host" "'$bin' --version"
 
