@@ -52,8 +52,8 @@ func TestNewRedditAPIAndFetchRedditHomepage(t *testing.T) {
 	if gotSecret != "secret" || gotFeedID != "feed123" || gotUser != "alice" {
 		t.Fatalf("proxy headers = (%q, %q, %q)", gotSecret, gotFeedID, gotUser)
 	}
-	if !strings.Contains(gotUA, "feed-forge/1.0") {
-		t.Fatalf("User-Agent = %q, want reddit client UA", gotUA)
+	if !strings.Contains(gotUA, "feed-forge/") || !strings.Contains(gotUA, "by /u/alice") {
+		t.Fatalf("User-Agent = %q, want versioned reddit client UA with username", gotUA)
 	}
 }
 
