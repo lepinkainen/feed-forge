@@ -3,7 +3,6 @@ package database
 import (
 	"database/sql"
 	"log/slog"
-	"strings"
 	"sync"
 	"time"
 
@@ -55,24 +54,8 @@ func NewDatabase(config Config) (*Database, error) {
 		config.Driver = "sqlite"
 	}
 
-	db, err := sql.Open(config.Driver, config.Path)
+	db, err := openForDriver(config)
 	if err != nil {
-		return nil, err
-	}
-
-	if config.Driver == "sqlite" {
-		if err := configureSQLitePragmas(db); err != nil {
-			closeDBOnError(db)
-			return nil, err
-		}
-	}
-
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(time.Hour)
-
-	if err := db.Ping(); err != nil {
-		closeDBOnError(db)
 		return nil, err
 	}
 
@@ -84,38 +67,35 @@ func NewDatabase(config Config) (*Database, error) {
 	return database, nil
 }
 
+// openForDriver opens the connection for the configured driver. SQLite goes
+// through the shared OpenSQLite helper; any other driver gets a plain connection
+// with the same pool limits and health check, because the pragmas are
+// SQLite-specific.
+func openForDriver(config Config) (*sql.DB, error) {
+	opts := SQLiteOptions{Path: config.Path, ConnMaxLifetime: time.Hour}
+	if config.Driver == "sqlite" {
+		return OpenSQLite(opts)
+	}
+
+	db, err := sql.Open(config.Driver, config.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	applyPoolLimits(db, opts)
+
+	if err := db.Ping(); err != nil {
+		closeDBOnError(db)
+		return nil, err
+	}
+
+	return db, nil
+}
+
 func closeDBOnError(db *sql.DB) {
 	if err := db.Close(); err != nil {
 		slog.Error("Failed to close database", "error", err)
 	}
-}
-
-func configureSQLitePragmas(db *sql.DB) error {
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		return err
-	}
-
-	var journalMode string
-	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
-		return err
-	}
-	if !strings.EqualFold(journalMode, "wal") {
-		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-			return err
-		}
-	}
-
-	pragmas := []string{
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA temp_store=memory",
-		"PRAGMA mmap_size=268435456",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Close closes the database connection

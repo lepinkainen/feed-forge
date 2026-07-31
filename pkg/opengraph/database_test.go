@@ -1,6 +1,7 @@
 package opengraph
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -145,6 +146,73 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 	}
 	if stats["expired_entries"] != 0 {
 		t.Fatalf("expired_entries after cleanup = %v, want 0", stats["expired_entries"])
+	}
+}
+
+// TestSaveCachedDataUnderWriteContention covers the failure seen in production:
+// the generate command runs its providers concurrently and every provider opens
+// its own handle on one shared opengraph.db, so a save can land while another
+// handle holds the write lock. The per-connection busy_timeout must make the save
+// wait instead of returning "database is locked (5) (SQLITE_BUSY)".
+func TestSaveCachedDataUnderWriteContention(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "opengraph.db")
+
+	writer, err := NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("NewDatabase(writer) error = %v", err)
+	}
+	t.Cleanup(func() { _ = writer.Close() })
+
+	blocker, err := NewDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("NewDatabase(blocker) error = %v", err)
+	}
+	t.Cleanup(func() { _ = blocker.Close() })
+
+	// Pin the writer's first connection so the save below runs on a connection the
+	// pool creates afterwards. Only that first connection would be configured if
+	// the pragmas were applied as statements instead of through the DSN.
+	pinned, err := writer.db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("Conn() error = %v", err)
+	}
+	t.Cleanup(func() { _ = pinned.Close() })
+
+	tx, err := blocker.db.Begin()
+	if err != nil {
+		t.Fatalf("Begin() error = %v", err)
+	}
+	if _, err := tx.Exec(
+		"INSERT OR REPLACE INTO opengraph_cache (url, expires_at) VALUES (?, CURRENT_TIMESTAMP)",
+		"https://example.com/blocker",
+	); err != nil {
+		t.Fatalf("blocker insert: %v", err)
+	}
+
+	released := make(chan struct{})
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		close(released)
+		if err := tx.Commit(); err != nil {
+			t.Errorf("blocker commit: %v", err)
+		}
+	}()
+
+	now := time.Now().UTC()
+	data := &Data{
+		URL:       "https://example.com/contended",
+		Title:     "Contended",
+		FetchedAt: now,
+		ExpiresAt: now.Add(24 * time.Hour),
+	}
+	if err := writer.SaveCachedData(data, true); err != nil {
+		t.Fatalf("SaveCachedData() failed instead of waiting for the write lock: %v", err)
+	}
+
+	select {
+	case <-released:
+	default:
+		t.Error("SaveCachedData() returned before the write lock was released")
 	}
 }
 

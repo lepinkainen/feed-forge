@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"github.com/lepinkainen/feed-forge/pkg/database"
 )
 
 // schema is applied idempotently on Store open. Timestamps use TIMESTAMP
@@ -55,12 +55,8 @@ type Store struct {
 // NewStore opens (creating if needed) the bulletin database at dbPath and
 // applies the schema.
 func NewStore(dbPath string) (*Store, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath})
 	if err != nil {
-		return nil, fmt.Errorf("open bulletin db: %w", err)
-	}
-	if err := configureSQLite(db); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	if _, err := db.ExecContext(context.Background(), schema); err != nil {
@@ -68,23 +64,6 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("apply bulletin schema: %w", err)
 	}
 	return &Store{db: db}, nil
-}
-
-// configureSQLite applies pragmas so that overlapping bulletin-fetch and
-// bulletin-publish processes sharing the database file wait for each other
-// instead of failing immediately with "database is locked".
-func configureSQLite(db *sql.DB) error {
-	ctx := context.Background()
-	for _, pragma := range []string{
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA synchronous=NORMAL",
-	} {
-		if _, err := db.ExecContext(ctx, pragma); err != nil {
-			return fmt.Errorf("configure bulletin db %q: %w", pragma, err)
-		}
-	}
-	return nil
 }
 
 // Close closes the underlying database.
