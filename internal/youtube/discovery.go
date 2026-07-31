@@ -68,7 +68,7 @@ func rssAlternateHref(t html.Token) (string, bool) {
 }
 
 func hasRel(rel, want string) bool {
-	for _, part := range strings.Fields(rel) {
+	for part := range strings.FieldsSeq(rel) {
 		if strings.EqualFold(part, want) {
 			return true
 		}

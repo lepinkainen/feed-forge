@@ -481,7 +481,7 @@ func TestFetchData_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	var done sync.WaitGroup
 	results := make([]*Data, n)
 	errs := make([]error, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		done.Add(1)
 		go func(i int) {
 			defer done.Done()
@@ -504,7 +504,7 @@ func TestFetchData_SingleflightCoalescesConcurrentFetches(t *testing.T) {
 	if got := hits.Load(); got != 1 {
 		t.Fatalf("server hits = %d, want 1 (singleflight did not coalesce)", got)
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if errs[i] != nil {
 			t.Fatalf("goroutine %d error = %v", i, errs[i])
 		}
@@ -530,7 +530,7 @@ func TestFetcher_FetchGroupReleasesAfterCompletion(t *testing.T) {
 	fetcher.client.Transport = rewriteHostTransport(server)
 
 	targetURL := "http://example.invalid/sequential"
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		data, err := fetcher.FetchData(targetURL)
 		if err != nil {
 			t.Fatalf("FetchData iter %d error = %v", i, err)

@@ -36,10 +36,7 @@ func (rl *SimpleRateLimiter) Wait() {
 // WaitContext blocks until it's safe to make another API call or the context is cancelled.
 func (rl *SimpleRateLimiter) WaitContext(ctx context.Context) error {
 	rl.mu.Lock()
-	waitFor := rl.minDelay - time.Since(rl.lastCall)
-	if waitFor < 0 {
-		waitFor = 0
-	}
+	waitFor := max(rl.minDelay-time.Since(rl.lastCall), 0)
 	nextCall := time.Now().Add(waitFor)
 	rl.lastCall = nextCall
 	rl.mu.Unlock()

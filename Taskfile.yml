@@ -25,6 +25,7 @@ tasks:
   lint:
     desc: "Run linter and formatter"
     cmds:
+      - go fix ./...
       - goimports -w .
       - golangci-lint run
       - go vet ./...
