@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/version"
 )
 
 func TestNewEnhancedClient(t *testing.T) {
@@ -21,7 +23,7 @@ func TestNewEnhancedClient(t *testing.T) {
 			config: &EnhancedClientConfig{},
 			want: func(ec *EnhancedClient) bool {
 				return ec.client.Timeout == 30*time.Second &&
-					ec.userAgent == "FeedForge/1.0" &&
+					ec.userAgent == "FeedForge/"+version.Version &&
 					ec.rateLimiter != nil &&
 					ec.retryPolicy != nil &&
 					ec.defaultHeaders != nil
@@ -276,7 +278,7 @@ func TestNewHackerNewsClient(t *testing.T) {
 		t.Errorf("NewHackerNewsClient() timeout incorrect")
 	}
 
-	if client.userAgent != "FeedForge/1.0" {
+	if client.userAgent != "FeedForge/"+version.Version {
 		t.Errorf("NewHackerNewsClient() user agent incorrect: %s", client.userAgent)
 	}
 
@@ -292,7 +294,7 @@ func TestNewGenericClient(t *testing.T) {
 		t.Errorf("NewGenericClient() timeout incorrect")
 	}
 
-	if client.userAgent != "FeedForge/1.0" {
+	if client.userAgent != "FeedForge/"+version.Version {
 		t.Errorf("NewGenericClient() user agent incorrect: %s", client.userAgent)
 	}
 

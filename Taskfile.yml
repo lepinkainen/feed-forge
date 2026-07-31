@@ -1,12 +1,16 @@
 version: "3"
 
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+
 tasks:
   build:
     desc: "Build the feed-forge binary"
     deps: [test, lint]
     cmds:
       - mkdir -p build
-      - go build -o build/feed-forge cmd/feed-forge/main.go
+      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge cmd/feed-forge/main.go
 
   test:
     desc: "Run tests"
@@ -54,13 +58,13 @@ tasks:
     deps: [test, lint]
     cmds:
       - mkdir -p build
-      - GOOS=linux GOARCH=amd64 go build -o build/feed-forge-linux cmd/feed-forge/main.go
+      - GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge-linux cmd/feed-forge/main.go
 
   build-ci:
     desc: "Build for CI environment"
     cmds:
       - mkdir -p build
-      - go build -o build/feed-forge cmd/feed-forge/main.go
+      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge cmd/feed-forge/main.go
 
   test-ci:
     desc: "Run tests with CI tags and coverage"
@@ -160,6 +164,12 @@ tasks:
     deps: [build-linux]
     cmds:
       - scp build/feed-forge-linux ${PUBLISH_DESTINATION}
+      - |
+        host="${PUBLISH_DESTINATION%%:*}"
+        dest="${PUBLISH_DESTINATION#*:}"
+        bin=$(ssh "$host" "test -d '$dest' && echo '$dest/feed-forge-linux' || echo '$dest'")
+        echo "Remote version:"
+        ssh "$host" "'$bin' --version"
 
   help:
     desc: "Show available tasks"
