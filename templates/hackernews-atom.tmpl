@@ -21,9 +21,6 @@
       <uri>https://news.ycombinator.com/user?id={{.Author | xmlEscape}}</uri>
     </author>
     {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
-    <category term="points:{{.Score}}" label="Points: {{.Score}}" scheme="hackernews-metadata"/>
-    <category term="comments:{{.Comments}}" label="Comments: {{.Comments}}" scheme="hackernews-metadata"/>
-    {{if .Domain}}<category term="domain:{{.Domain | xmlEscape}}" label="Domain: {{.Domain | xmlEscape}}" scheme="hackernews-metadata"/>{{end}}
 
     <content type="html"><![CDATA[
       <div class="metadata">

@@ -142,8 +142,6 @@ func TestHackerNewsTemplateGeneration(t *testing.T) {
 		"<feed",
 		"<title>Hacker News Top Stories</title>",
 		"<entry>",
-		`<category term="points:150" label="Points: 150" scheme="hackernews-metadata"/>`,
-		`<category term="comments:42" label="Comments: 42" scheme="hackernews-metadata"/>`,
 		"Template-based feed generation for HN",
 		"testuser",
 	}
@@ -152,11 +150,6 @@ func TestHackerNewsTemplateGeneration(t *testing.T) {
 		if !strings.Contains(templateResult, element) {
 			t.Errorf("Template output missing expected element: %s", element)
 		}
-	}
-
-	// Check that template output includes domain information
-	if !strings.Contains(templateResult, `<category term="domain:example.com" label="Domain: example.com" scheme="hackernews-metadata"/>`) {
-		t.Error("Template output missing domain metadata")
 	}
 
 	// Check that template output uses standard namespaces only
