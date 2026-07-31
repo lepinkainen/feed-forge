@@ -22,7 +22,7 @@ and can come from a URL. The only current caller is
 ## API
 
 ```go
-// Try localPath, then remoteURL. Unmarshal into target.
+// Try remoteURL, then localPath. Unmarshal into target.
 func LoadOrFetch(localPath, remoteURL string, target any) error
 
 // The same, with explicit timeout, retry, and fallback options.
@@ -34,6 +34,16 @@ func DefaultLoaderConfig() *LoaderConfig
 
 `LoadOrFetch` is the entry point for providers. It detects JSON or YAML from the
 content, so the caller does not name the format.
+
+CAUTION: The order is remote first, local second. `LoadFromURLWithFallback` tries
+`RemoteURL` and reads `LocalPath` only after the remote request fails. The parameter
+order of `LoadOrFetch` suggests the opposite, so a caller that passes both arguments
+and expects the local file to win gets remote values instead. Pass an empty
+`remoteURL` when the local file must take priority. The only current caller,
+`internal/hackernews/config.go`, does exactly that.
+
+When both sources fail and `FallbackToDefault` is true, the loader zeroes `target` and
+returns nil. It does not return an error. Check the fields you need after the call.
 
 Remote fetches go through `pkg/api`, so they get rate limiting and retries.
 

@@ -20,8 +20,8 @@ Task (taskfile.dev) is the build system. Use `task` commands. Do not run `go bui
 | `task build-linux` | Build for Linux AMD64. |
 | `task build-ci` | Build for CI with coverage. |
 | `task test-ci` | Run tests with the `ci` build tag and coverage. |
-| `task update-golden` | Update golden files. |
-| `task test-update` | Run tests and update golden files. |
+| `task update-golden` | Update golden files from the current code. Runs the tests. |
+| `task test-update` | Download fresh live snapshots into tracked `testdata/`. Runs no tests. |
 | `task vuln` | Run the vulnerability scanner. |
 | `task deadcode` | Report unreachable code. |
 | `task cognit` | Report cognitive complexity. |
@@ -270,10 +270,16 @@ only.
 - Write table-driven tests for provider logic.
 - Name test files `<source>_test.go` and keep them beside the source.
 - Use relative paths to reach `testdata/`.
-- To refresh golden files, run `task update-golden`.
+- To refresh golden files, run `task update-golden`. This regenerates them from the
+  current code and touches no network.
 - Read the golden file diff before you commit it. The diff is the change in expected
   output.
 - To skip a test in CI, add the `//go:build !ci` constraint.
+
+CAUTION: `task test-update` is not a test command. It downloads live snapshots from
+Oglaf, Feissarimokat, and the Hacker News Algolia API straight into tracked
+`testdata/` directories, and it runs no tests. Use it only to refresh those upstream
+fixtures on purpose, and read the diff before you commit it.
 
 Every feature needs unit tests.
 
