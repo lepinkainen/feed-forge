@@ -1,9 +1,13 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
+
+	"github.com/alecthomas/kong"
 
 	"github.com/lepinkainen/feed-forge/internal/feissarimokat"
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
@@ -293,5 +297,46 @@ func TestAllRegisteredProviders_HaveYAMLTags(t *testing.T) {
 				t.Errorf("GenerateConfig.Interval is empty after YAML loading — yaml tags may be missing or the inline embed is broken")
 			}
 		})
+	}
+}
+
+// TestProviderCommandNamesMatchRegistry asserts that every registered provider has
+// a Kong subcommand with exactly the registry name. Kong derives a command name
+// from the struct field name, so a field like HackerNews becomes "hacker-news"
+// unless an explicit name: tag overrides it. A `cmd:"..."` value alone does NOT
+// set the name. When the two drift, ctx.Command() returns a string that no
+// dispatchCommand branch matches and the binary panics on a primary command.
+func TestProviderCommandNamesMatchRegistry(t *testing.T) {
+	parser, err := kong.New(&CLI)
+	if err != nil {
+		t.Fatalf("build Kong parser: %v", err)
+	}
+
+	commands := make(map[string]bool)
+	for _, node := range parser.Model.Children {
+		if node.Type == kong.CommandNode {
+			commands[node.Name] = true
+		}
+	}
+
+	for _, name := range providers.DefaultRegistry.List() {
+		if !commands[name] {
+			t.Errorf("registered provider %q has no Kong subcommand of that name; add name:%q to its CLI struct tag (got commands: %v)",
+				name, name, slices.Sorted(maps.Keys(commands)))
+		}
+	}
+}
+
+// TestProviderCommandsDispatch asserts that each provider subcommand name is
+// reachable in dispatchCommand, so no provider command can fall through to the
+// panic in the default branch.
+func TestProviderCommandsDispatch(t *testing.T) {
+	for _, name := range providers.DefaultRegistry.List() {
+		if name == "reddit" {
+			continue // handled by its own switch branch, which needs feed-id/username
+		}
+		if _, ok := providerCmds()[name]; !ok {
+			t.Errorf("provider %q is not in the dispatchCommand provider map, so running it panics", name)
+		}
 	}
 }

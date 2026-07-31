@@ -66,7 +66,7 @@ var CLI struct {
 		MinPoints int    `help:"Minimum points threshold" default:"50"`
 		Limit     int    `help:"Maximum number of items" default:"30"`
 		Interval  string `help:"Minimum time between regenerations" yaml:"interval"`
-	} `cmd:"hackernews" help:"Generate RSS feed from Hacker News."`
+	} `cmd:"hackernews" name:"hackernews" help:"Generate RSS feed from Hacker News."`
 
 	Fingerpori struct {
 		Outfile  string `help:"Output file path" short:"o" default:"fingerpori.xml"`
@@ -80,7 +80,7 @@ var CLI struct {
 	} `cmd:"feissarimokat" help:"Generate RSS feed from Feissarimokat comics."`
 
 	Preview struct {
-		Provider string `arg:"" name:"provider" help:"Provider name (e.g. reddit, hacker-news, fingerpori, oglaf, feissarimokat, tildes, youtube)."`
+		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, lobsters, youtube)."`
 		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
 		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
@@ -762,12 +762,16 @@ func main() {
 	dispatchCommand(ctx.Command(), configPath)
 }
 
-func dispatchCommand(command, configPath string) {
-	type providerSpec struct {
-		key, name, outfile string
-		extra              []any
-	}
-	providerCmds := map[string]providerSpec{
+type providerSpec struct {
+	key, name, outfile string
+	extra              []any
+}
+
+// providerCmds maps a Kong subcommand name to the provider run it triggers. The
+// key must equal the registry name, which is also the Kong command name; see
+// TestProviderCommandNamesMatchRegistry.
+func providerCmds() map[string]providerSpec {
+	return map[string]providerSpec{
 		"hackernews":    {"hackernews", "Hacker News", CLI.HackerNews.Outfile, nil},
 		"fingerpori":    {"fingerpori", "Fingerpori", CLI.Fingerpori.Outfile, nil},
 		"feissarimokat": {"feissarimokat", "Feissarimokat", CLI.Feissarimokat.Outfile, nil},
@@ -776,7 +780,10 @@ func dispatchCommand(command, configPath string) {
 		"lobsters":      {"lobsters", "Lobsters", CLI.Lobsters.Outfile, nil},
 		"youtube":       {"youtube", "YouTube", CLI.YouTube.Outfile, nil},
 	}
-	if spec, ok := providerCmds[command]; ok {
+}
+
+func dispatchCommand(command, configPath string) {
+	if spec, ok := providerCmds()[command]; ok {
 		runProvider(spec.key, spec.name, spec.outfile, spec.extra...)
 		return
 	}
