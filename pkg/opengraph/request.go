@@ -105,6 +105,9 @@ func (f *Fetcher) doFetchConditional(ctx context.Context, targetURL, etag, lastM
 		ExpiresAt:    now.Add(time.Duration(DefaultCacheHours) * time.Hour),
 	}
 	extractOpenGraphTags(doc, data)
+	// Clean up inside the singleflight function: every waiter receives this same
+	// *Data pointer, so mutation must happen once, before the result is shared.
+	cleanupData(data, targetURL)
 	slog.Debug("Extracted OpenGraph data", "url", targetURL, "title", data.Title, "hasDescription", data.Description != "")
 	return data, nil
 }
