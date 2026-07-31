@@ -3,6 +3,8 @@ version: "3"
 vars:
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  GO_PACKAGES:
+    sh: go list ./... | grep -v '/llm-shared/' | tr '\n' ' '
 
 tasks:
   build:
@@ -25,7 +27,7 @@ tasks:
   lint:
     desc: "Run linter and formatter"
     cmds:
-      - go fix ./...
+      - go fix {{.GO_PACKAGES}}
       - goimports -w .
       - golangci-lint run
       - go vet ./...
