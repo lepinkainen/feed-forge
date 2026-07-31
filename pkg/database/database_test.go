@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
-
-	_ "modernc.org/sqlite"
 )
 
 func resetDBCache(t *testing.T) {

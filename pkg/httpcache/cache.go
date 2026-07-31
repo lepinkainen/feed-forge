@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
+	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
-	_ "modernc.org/sqlite" // SQLite driver
 )
 
 // ErrNotModified signals that upstream returned HTTP 304 Not Modified.
@@ -124,19 +124,12 @@ func NewStore(dbPath string) (*Store, error) {
 		}
 	}
 
-	if err := filesystem.EnsureDirectoryExists(dbPath); err != nil {
-		return nil, fmt.Errorf("create cache directory: %w", err)
-	}
-
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := database.OpenSQLite(database.SQLiteOptions{
+		Path:         dbPath,
+		MaxOpenConns: 5,
+		MaxIdleConns: 2,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("open http cache: %w", err)
-	}
-
-	if err := configureSQLite(db); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
-			slog.Error("Failed to close HTTP cache database", "error", closeErr)
-		}
 		return nil, err
 	}
 
@@ -149,37 +142,6 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	return store, nil
-}
-
-func configureSQLite(db *sql.DB) error {
-	ctx := context.Background()
-	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout=5000"); err != nil {
-		return fmt.Errorf("set busy timeout: %w", err)
-	}
-
-	var journalMode string
-	if err := db.QueryRowContext(ctx, "PRAGMA journal_mode;").Scan(&journalMode); err != nil {
-		return fmt.Errorf("read journal mode: %w", err)
-	}
-	if !strings.EqualFold(journalMode, "wal") {
-		if _, err := db.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
-			return fmt.Errorf("set journal mode: %w", err)
-		}
-	}
-
-	for _, pragma := range []string{
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA temp_store=memory",
-		"PRAGMA mmap_size=268435456",
-	} {
-		if _, err := db.ExecContext(ctx, pragma); err != nil {
-			return fmt.Errorf("set pragma %q: %w", pragma, err)
-		}
-	}
-
-	db.SetMaxOpenConns(5)
-	db.SetMaxIdleConns(2)
-	return nil
 }
 
 func (s *Store) createSchema() error {

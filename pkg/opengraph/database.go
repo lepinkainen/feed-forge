@@ -9,9 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/dbinterfaces"
-	"github.com/lepinkainen/feed-forge/pkg/filesystem"
-	_ "modernc.org/sqlite" // SQLite driver
 )
 
 // Database wraps database operations with thread safety
@@ -32,26 +31,9 @@ func NewDatabase(dbPath string) (*Database, error) {
 		dbPath = DefaultDBFile
 	}
 
-	if err := filesystem.EnsureDirectoryExists(dbPath); err != nil {
-		return nil, fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath})
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
-	}
-
-	if err := configureSQLite(db); err != nil {
-		closeDBOnError(db)
 		return nil, err
-	}
-
-	db.SetMaxOpenConns(10)
-	db.SetMaxIdleConns(5)
-
-	if err := db.Ping(); err != nil {
-		closeDBOnError(db)
-		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	ogDB := &Database{
@@ -59,46 +41,14 @@ func NewDatabase(dbPath string) (*Database, error) {
 		dbPath: dbPath,
 	}
 	if err := ogDB.createSchema(); err != nil {
-		closeDBOnError(db)
+		if closeErr := ogDB.Close(); closeErr != nil {
+			slog.Error("Failed to close database", "error", closeErr)
+		}
 		return nil, fmt.Errorf("failed to create schema: %w", err)
 	}
 
 	slog.Info("OpenGraph database initialized", "path", dbPath)
 	return ogDB, nil
-}
-
-func closeDBOnError(db *sql.DB) {
-	if err := db.Close(); err != nil {
-		slog.Error("Failed to close database", "error", err)
-	}
-}
-
-func configureSQLite(db *sql.DB) error {
-	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		return fmt.Errorf("failed to set busy timeout: %w", err)
-	}
-
-	var journalMode string
-	if err := db.QueryRow("PRAGMA journal_mode;").Scan(&journalMode); err != nil {
-		return fmt.Errorf("failed to read journal mode: %w", err)
-	}
-	if !strings.EqualFold(journalMode, "wal") {
-		if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-			return fmt.Errorf("failed to set journal mode: %w", err)
-		}
-	}
-
-	pragmas := []string{
-		"PRAGMA synchronous=NORMAL",
-		"PRAGMA temp_store=memory",
-		"PRAGMA mmap_size=268435456",
-	}
-	for _, pragma := range pragmas {
-		if _, err := db.Exec(pragma); err != nil {
-			return fmt.Errorf("failed to set pragma %q: %w", pragma, err)
-		}
-	}
-	return nil
 }
 
 // createSchema creates the necessary tables
