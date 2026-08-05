@@ -144,6 +144,99 @@ func TestFetchItemsAgainstFixture(t *testing.T) {
 	})
 }
 
+// TestParseItemCounts covers the counts line directly, including the signed
+// score a downvoted post carries. Without the sign a "-3 points" post parsed as
+// +3 and passed a positive --min-score.
+func TestParseItemCounts(t *testing.T) {
+	const header = `submitted by <a href="https://lemmy.world/u/someone">someone</a> to <a href="https://lemmy.world/c/test">test</a><br>`
+
+	tests := []struct {
+		name         string
+		description  string
+		wantScore    int
+		wantComments int
+		wantContent  string
+	}{
+		{
+			name:         "positive score",
+			description:  header + `42 points | <a href="https://lemmy.world/post/1">7 comments</a><br><p>body</p>`,
+			wantScore:    42,
+			wantComments: 7,
+			wantContent:  "<p>body</p>",
+		},
+		{
+			name:         "negative score",
+			description:  header + `-3 points | <a href="https://lemmy.world/post/1">7 comments</a><br><p>body</p>`,
+			wantScore:    -3,
+			wantComments: 7,
+			wantContent:  "<p>body</p>",
+		},
+		{
+			name:         "zero score",
+			description:  header + `0 points | <a href="https://lemmy.world/post/1">0 comments</a><br><p>body</p>`,
+			wantScore:    0,
+			wantComments: 0,
+			wantContent:  "<p>body</p>",
+		},
+		{
+			name:         "counts line missing",
+			description:  header + `<p>body</p>`,
+			wantScore:    0,
+			wantComments: 0,
+			wantContent:  "<p>body</p>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := parseItem(rssItem{
+				Title:       "Test",
+				Guid:        "https://lemmy.world/post/1",
+				Description: tt.description,
+				Creator:     "https://lemmy.world/u/someone",
+			}, "lemmy.world")
+
+			if item.Score() != tt.wantScore {
+				t.Errorf("Score() = %d, want %d", item.Score(), tt.wantScore)
+			}
+			if item.CommentCount() != tt.wantComments {
+				t.Errorf("CommentCount() = %d, want %d", item.CommentCount(), tt.wantComments)
+			}
+			if item.Content() != tt.wantContent {
+				t.Errorf("Content() = %q, want %q", item.Content(), tt.wantContent)
+			}
+			if strings.Contains(item.Content(), "points") || strings.Contains(item.Content(), "submitted by") {
+				t.Errorf("Content() still contains the header: %q", item.Content())
+			}
+		})
+	}
+}
+
+// TestDownvotedPostIsFiltered is the behavioral consequence of parsing the
+// score as signed: a downvoted post falls below any threshold of 0 or more.
+// Before the sign was handled, "-3 points" parsed as +3 and survived both.
+func TestDownvotedPostIsFiltered(t *testing.T) {
+	item := parseItem(rssItem{
+		Title:       "Unpopular",
+		Guid:        "https://lemmy.world/post/1",
+		Description: `submitted by <a href="https://lemmy.world/u/x">x</a> to <a href="https://lemmy.world/c/test">test</a><br>-3 points | <a href="https://lemmy.world/post/1">1 comments</a><br>`,
+	}, "lemmy.world")
+
+	if item.Score() != -3 {
+		t.Fatalf("Score() = %d, want -3", item.Score())
+	}
+	for _, minScore := range []int{0, 1, 25} {
+		if !(&Provider{MinScore: minScore}).skip(item) {
+			t.Errorf("a post at %d points should be dropped by MinScore %d", item.Score(), minScore)
+		}
+	}
+	// A negative threshold still lets it through, which is how a reader opts
+	// into seeing downvoted posts.
+	if (&Provider{MinScore: -10}).skip(item) {
+		t.Error("MinScore -10 should keep a post at -3 points")
+	}
+}
+
 func TestBuildFrontFeedURL(t *testing.T) {
 	tests := []struct {
 		name     string

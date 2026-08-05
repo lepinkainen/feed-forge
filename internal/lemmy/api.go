@@ -22,7 +22,12 @@ var (
 
 	// pointsCommentsRegex matches the "N points | <a …>M comments</a>" counts
 	// line. Lemmy renders it as HTML text, not as feed extension elements.
-	pointsCommentsRegex = regexp.MustCompile(`(\d+)\s+points\s*\|\s*<a href="[^"]*">(\d+)\s+comments</a>`)
+	//
+	// The score is signed: a downvoted post renders "-3 points". Without the
+	// optional minus the digits still match, so the score would come back as +3
+	// and a downvoted post would pass a positive --min-score. The comment count
+	// is never negative.
+	pointsCommentsRegex = regexp.MustCompile(`(-?\d+)\s+points\s*\|\s*<a href="[^"]*">(\d+)\s+comments</a>`)
 
 	// leadingAnchorRegex matches the bare link or image anchor that Lemmy puts
 	// directly after the counts line for link and image posts. Group 1 is the
