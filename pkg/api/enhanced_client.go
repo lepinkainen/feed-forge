@@ -97,6 +97,7 @@ func (ec *EnhancedClient) GetAndDecodeWithContext(ctx context.Context, url strin
 		duration := time.Since(start)
 
 		if err != nil {
+			err = RedactURLInError(err, url)
 			ec.logAPICall(url, duration, false, err)
 			return fmt.Errorf("failed to perform GET request: %w", err)
 		}
@@ -116,7 +117,7 @@ func (ec *EnhancedClient) GetAndDecodeWithContext(ctx context.Context, url strin
 		return nil
 	}
 
-	return ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url))
+	return ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", SanitizeURLForLog(url)))
 }
 
 // Get performs an HTTP GET request with rate limiting and retries, returning the response.
@@ -145,6 +146,7 @@ func (ec *EnhancedClient) GetWithContext(ctx context.Context, url string, additi
 		duration := time.Since(start)
 
 		if err != nil {
+			err = RedactURLInError(err, url)
 			ec.logAPICall(url, duration, false, err)
 			return fmt.Errorf("failed to perform GET request: %w", err)
 		}
@@ -162,7 +164,7 @@ func (ec *EnhancedClient) GetWithContext(ctx context.Context, url string, additi
 		return nil
 	}
 
-	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url)); err != nil {
+	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", SanitizeURLForLog(url))); err != nil {
 		return nil, err
 	}
 
@@ -195,6 +197,7 @@ func (ec *EnhancedClient) GetConditional(ctx context.Context, url string, prev C
 		res, err := ec.client.Do(req)
 		duration := time.Since(start)
 		if err != nil {
+			err = RedactURLInError(err, url)
 			ec.logAPICall(url, duration, false, err)
 			return fmt.Errorf("failed to perform GET request: %w", err)
 		}
@@ -224,7 +227,7 @@ func (ec *EnhancedClient) GetConditional(ctx context.Context, url string, prev C
 		return nil
 	}
 
-	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", url)); err != nil {
+	if err := ExecuteWithRetryContext(ctx, operation, ec.retryPolicy, fmt.Sprintf("GET %s", SanitizeURLForLog(url))); err != nil {
 		return nil, err
 	}
 
@@ -287,7 +290,7 @@ func (ec *EnhancedClient) logAPICall(url string, duration time.Duration, success
 	}
 
 	fields := []any{
-		"url", url,
+		"url", SanitizeURLForLog(url),
 		"duration", duration,
 		"status", status,
 	}
