@@ -68,6 +68,17 @@ lobsters:
   outfile: lobsters.xml
   interval: 30m
 
+lemmy:
+  instance: "https://sopuli.xyz"
+  sort: TopDay
+  jwt-token: "config-token"
+  min-score: 25
+  min-comments: 5
+  ignore-communities: ["memes", "!politics@lemmy.world"]
+  limit: 40
+  outfile: lemmy.xml
+  interval: 30m
+
 youtube:
   feed-urls:
     - "https://www.youtube.com/feeds/videos.xml?channel_id=UC1111111111111111111111"
