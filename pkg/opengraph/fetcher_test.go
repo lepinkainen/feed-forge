@@ -62,6 +62,10 @@ func TestFetchData_InvalidAndBlockedURLs(t *testing.T) {
 		t.Fatalf("FetchData(blocked) = (%#v, %v), want (nil, nil)", data, err)
 	}
 
+	if data, err := fetcher.FetchData("https://lemmy.world/pictrs/image/x.jpeg"); err != nil || data != nil {
+		t.Fatalf("FetchData(image) = (%#v, %v), want (nil, nil)", data, err)
+	}
+
 	if fetcher.isBlockedURL("https://evil.example/?next=twitter.com") {
 		t.Fatal("isBlockedURL(query containing blocked hostname) = true, want false")
 	}
@@ -107,6 +111,76 @@ func TestFetchData_UsesCacheAndRecentFailure(t *testing.T) {
 	data, err := fetcher.FetchData(failedURL)
 	if err != nil || data != nil {
 		t.Fatalf("FetchData(recent failure) = (%#v, %v), want (nil, nil)", data, err)
+	}
+}
+
+func TestIsNonPageURL(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{name: "jpeg image", url: "https://lemmy.world/pictrs/image/08675766.jpeg", want: true},
+		{name: "jpg image", url: "https://media.piefed.world/posts/vW/3u/vW3u8B3uA5VbHFh.jpg", want: true},
+		{name: "png image", url: "https://i.redd.it/abc123.png", want: true},
+		{name: "webp image", url: "https://lemmy.blahaj.zone/pictrs/image/d95ad6ca.webp", want: true},
+		{name: "video", url: "https://example.com/clip.mp4", want: true},
+		{name: "audio", url: "https://example.com/episode.mp3", want: true},
+		{name: "pdf document", url: "https://example.com/paper.pdf", want: true},
+		{name: "archive", url: "https://example.com/release.tar.gz", want: true},
+		{name: "upper-case extension", url: "https://example.com/PHOTO.JPG", want: true},
+		{name: "query string after the extension", url: "https://example.com/image.jpeg?format=webp&w=800", want: true},
+
+		{name: "article", url: "https://futurism.com/artificial-intelligence/boomers-facebook", want: false},
+		{name: "html page", url: "https://example.com/index.html", want: false},
+		// Older pictrs URLs carry no extension, so the content-type check in
+		// fetchFreshData still has to catch those.
+		{name: "extensionless media", url: "https://lemmy.world/pictrs/image/08675766", want: false},
+		{name: "fragment containing a dot", url: "https://example.com/page#section.png", want: false},
+		{name: "dot in a path segment, no extension", url: "https://example.com/v1.2/release-notes", want: false},
+		// Must stay false so FetchDataWithContext still reports it as invalid
+		// rather than silently skipping it.
+		{name: "unparseable url", url: "://bad.jpg", want: false},
+		{name: "empty string", url: "", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isNonPageURL(tt.url); got != tt.want {
+				t.Errorf("isNonPageURL(%q) = %v, want %v", tt.url, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFetchData_NonPageURLMakesNoRequest proves the extension check happens
+// before any network work: the handler must never run.
+func TestFetchData_NonPageURLMakesNoRequest(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Content-Type", "image/jpeg")
+		_, _ = w.Write([]byte("not html"))
+	}))
+	defer server.Close()
+
+	var lookups atomic.Int32
+	fetcher := NewFetcher(newTestOGDB(t))
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		lookups.Add(1)
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	data, err := fetcher.FetchData("http://example.invalid/pictrs/image/abc.jpeg")
+	if err != nil || data != nil {
+		t.Fatalf("FetchData(image) = (%#v, %v), want (nil, nil)", data, err)
+	}
+	if got := hits.Load(); got != 0 {
+		t.Errorf("server was hit %d times, want 0", got)
+	}
+	if got := lookups.Load(); got != 0 {
+		t.Errorf("hostname was resolved %d times, want 0", got)
 	}
 }
 

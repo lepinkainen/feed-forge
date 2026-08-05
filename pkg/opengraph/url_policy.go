@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -53,6 +54,41 @@ func (f *Fetcher) isBlockedURL(targetURL string) bool {
 	}
 
 	return false
+}
+
+// nonPageExtensions are path extensions whose content can never carry OpenGraph
+// tags. A feed item linking to one of these is usually pointing at its own
+// media — a Lemmy pictrs image, an i.redd.it upload — so a request would spend a
+// DNS lookup, a connect and a header read only to learn what the extension
+// already said.
+var nonPageExtensions = map[string]struct{}{
+	// Images
+	".jpg": {}, ".jpeg": {}, ".png": {}, ".gif": {}, ".webp": {},
+	".avif": {}, ".bmp": {}, ".svg": {}, ".ico": {}, ".tif": {}, ".tiff": {},
+	// Video
+	".mp4": {}, ".webm": {}, ".mkv": {}, ".mov": {}, ".avi": {}, ".m4v": {},
+	// Audio
+	".mp3": {}, ".ogg": {}, ".oga": {}, ".opus": {}, ".flac": {}, ".wav": {}, ".m4a": {},
+	// Documents and archives
+	".pdf": {}, ".zip": {}, ".gz": {}, ".tgz": {}, ".tar": {}, ".7z": {}, ".rar": {},
+}
+
+// isNonPageURL reports whether targetURL points at a file that cannot carry
+// OpenGraph tags, judged from its path extension.
+//
+// A URL that does not parse returns false, so FetchDataWithContext keeps
+// reporting it as an invalid fetch URL instead of silently skipping it.
+func isNonPageURL(targetURL string) bool {
+	parsedURL, err := url.Parse(targetURL)
+	if err != nil {
+		return false
+	}
+
+	// Take the extension from the parsed path so a query string or a fragment
+	// cannot be mistaken for one, as in "/image.jpeg?format=webp".
+	ext := strings.ToLower(path.Ext(parsedURL.Path))
+	_, nonPage := nonPageExtensions[ext]
+	return nonPage
 }
 
 func hostnameFromURL(targetURL string) (string, error) {
