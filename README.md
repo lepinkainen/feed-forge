@@ -5,8 +5,8 @@ traffic to read one item at a time.
 
 ## What it does
 
-- **Eight sources.** Reddit, Hacker News, lobste.rs, Tildes, YouTube channels, and the
-  Fingerpori, Feissarimokat, and Oglaf comics.
+- **Nine sources.** Reddit, Hacker News, lobste.rs, Tildes, Lemmy, YouTube channels, and
+  the Fingerpori, Feissarimokat, and Oglaf comics.
 - **One CLI.** Every source is a subcommand. `generate` builds all configured feeds in
   one run.
 - **Filters.** Set a minimum score, a minimum comment count, or an item limit per
@@ -59,6 +59,7 @@ with their defaults.
 ./build/feed-forge hackernews -o hackernews.xml --min-points 100 --limit 20
 ./build/feed-forge lobsters -o lobsters.xml --min-score 10 --tags go --tags rust
 ./build/feed-forge tildes -o tildes.xml --topic tech
+./build/feed-forge lemmy -o lemmy.xml --min-score 25 # needs LEMMY_JWT
 ./build/feed-forge youtube -o youtube.xml --channel-ids UCT5C7yaO3RVuOgwP8JVAujQ
 ./build/feed-forge fingerpori -o fingerpori.xml
 ./build/feed-forge feissarimokat -o feissarimokat.xml
@@ -134,6 +135,14 @@ lobsters:
   outfile: lobsters.xml
   interval: 30m
 
+lemmy:
+  instance: https://lemmy.world
+  sort: Active
+  min-score: 25
+  ignore-communities: [] # for example [memes]
+  outfile: lemmy.xml
+  interval: 30m
+
 fingerpori:
   limit: 100
   outfile: fingerpori.xml
@@ -149,6 +158,25 @@ list.
 CAUTION: If `config.yaml` holds a real API key, do not commit the file. Set
 `ANTHROPIC_API_KEY` in the environment instead. If you must put the key in the file,
 run `chmod 600 config.yaml` first.
+
+### Lemmy front page feed
+
+The Lemmy provider reads your subscribed front page, which needs your account JWT. Get
+it from the browser cookie named `jwt` after you log in, or from the login API:
+
+```bash
+curl -s -X POST https://YOUR.INSTANCE/api/v3/user/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username_or_email":"USER","password":"PASS"}' | jq -r .jwt
+```
+
+Set it as `LEMMY_JWT`. The `lemmy.jwt-token` configuration key is a fallback, and the
+environment variable wins when both are set.
+
+CAUTION: The JWT is a full-access session for your Lemmy account, and it does not
+expire on its own. A password change is the only way to revoke it. Keep it out of
+`config.yaml`, and out of shell history. feed-forge redacts the token from its own logs
+and from error messages, and never writes it to the generated feed.
 
 ### Global flags
 
@@ -230,6 +258,7 @@ feed-forge/
 │   ├── feissarimokat/  # One package per provider
 │   ├── fingerpori/
 │   ├── hackernews/
+│   ├── lemmy/
 │   ├── lobsters/
 │   ├── oglaf/
 │   ├── reddit-json/    # Registered as "reddit"

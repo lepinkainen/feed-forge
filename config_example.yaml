@@ -78,6 +78,24 @@ lobsters:
   min-score: 10
   tags: [] # e.g. [go, rust] -> /t/go.json, /t/rust.json
 
+# Lemmy provider configuration
+# The front page feed needs your account JWT. Set it with the LEMMY_JWT
+# environment variable. The jwt-token key is a fallback only: the JWT is a
+# full-access session for your account, it does not expire on its own, and a
+# password change is the only way to revoke it. Do not commit it.
+# Get the token from the browser cookie named "jwt" after you log in, or from
+# POST <instance>/api/v3/user/login.
+lemmy:
+  instance: https://lemmy.world
+  sort: Active # Active | Hot | New | TopDay | TopWeek | ...
+  jwt-token: "" # prefer LEMMY_JWT
+  min-score: 0
+  min-comments: 0
+  ignore-communities: [] # e.g. [memes, microblogmemes]
+  limit: 0 # 0 = no client-side limit
+  outfile: lemmy.xml
+  interval: 30m
+
 # YouTube provider configuration
 # Shorts are filtered out by default when entries link to /shorts/<video_id>.
 youtube:

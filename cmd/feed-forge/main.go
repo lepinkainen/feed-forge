@@ -34,6 +34,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/feissarimokat"
 	"github.com/lepinkainen/feed-forge/internal/fingerpori"
 	"github.com/lepinkainen/feed-forge/internal/hackernews"
+	"github.com/lepinkainen/feed-forge/internal/lemmy"
 	"github.com/lepinkainen/feed-forge/internal/lobsters"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
@@ -82,7 +83,7 @@ var CLI struct {
 	} `cmd:"feissarimokat" help:"Generate RSS feed from Feissarimokat comics."`
 
 	Preview struct {
-		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, lobsters, youtube)."`
+		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, lobsters, lemmy, youtube)."`
 		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
 		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
@@ -105,6 +106,18 @@ var CLI struct {
 		MinScore int      `help:"Minimum score threshold" default:"0" yaml:"min-score"`
 		Interval string   `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"lobsters" help:"Generate RSS feed from lobste.rs."`
+
+	Lemmy struct {
+		Outfile           string   `help:"Output file path" short:"o" default:"lemmy.xml"`
+		Instance          string   `help:"Lemmy instance base URL" default:"https://lemmy.world" yaml:"instance"`
+		Sort              string   `help:"Sort order, e.g. Active, Hot, New, TopDay, TopWeek" default:"Active" yaml:"sort"`
+		JWTToken          string   `name:"jwt-token" help:"Lemmy account JWT (prefer the LEMMY_JWT environment variable)" yaml:"jwt-token"`
+		MinScore          int      `help:"Minimum score threshold" default:"0" yaml:"min-score"`
+		MinComments       int      `help:"Minimum comment count threshold" default:"0" yaml:"min-comments"`
+		IgnoreCommunities []string `name:"ignore-communities" help:"Community names to drop, repeat to ignore several" yaml:"ignore-communities"`
+		Limit             int      `help:"Maximum number of items (0 = all)" default:"0" yaml:"limit"`
+		Interval          string   `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"lemmy" name:"lemmy" help:"Generate RSS feed from a Lemmy account front page (needs LEMMY_JWT)."`
 
 	YouTube struct {
 		Outfile       string   `help:"Output file path" short:"o" default:"youtube.xml"`
@@ -252,6 +265,20 @@ func buildProviderConfig(name string) any {
 			},
 			Tags:     CLI.Lobsters.Tags,
 			MinScore: CLI.Lobsters.MinScore,
+		}
+	case "lemmy":
+		return &lemmy.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.Lemmy.Outfile,
+				Interval: CLI.Lemmy.Interval,
+			},
+			Instance:          CLI.Lemmy.Instance,
+			Sort:              CLI.Lemmy.Sort,
+			JWTToken:          CLI.Lemmy.JWTToken,
+			MinScore:          CLI.Lemmy.MinScore,
+			MinComments:       CLI.Lemmy.MinComments,
+			IgnoreCommunities: CLI.Lemmy.IgnoreCommunities,
+			Limit:             CLI.Lemmy.Limit,
 		}
 	case "youtube":
 		return &youtube.Config{
@@ -781,6 +808,7 @@ func providerCmds() map[string]providerSpec {
 		"oglaf":         {"oglaf", "Oglaf", CLI.Oglaf.Outfile, nil},
 		"tildes":        {"tildes", "Tildes", CLI.Tildes.Outfile, nil},
 		"lobsters":      {"lobsters", "Lobsters", CLI.Lobsters.Outfile, nil},
+		"lemmy":         {"lemmy", "Lemmy", CLI.Lemmy.Outfile, nil},
 		"youtube":       {"youtube", "YouTube", CLI.YouTube.Outfile, nil},
 	}
 }
