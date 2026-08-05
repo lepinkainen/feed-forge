@@ -66,13 +66,41 @@ func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 	return f.FetchDataWithContext(context.Background(), targetURL)
 }
 
-// FetchDataWithContext fetches OpenGraph data from a URL with caching.
-func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*Data, error) {
+// precheckURL decides whether targetURL is worth fetching at all. It returns
+// skip for a URL that has no OpenGraph data to offer, which callers report as
+// "no data" rather than as an error, and an error for a URL that must not be
+// fetched.
+func (f *Fetcher) precheckURL(ctx context.Context, targetURL string) (skip bool, err error) {
+	// Rejected first, and without resolving anything: a relative URL, a
+	// non-HTTP scheme, localhost, or a literal IP is an error whether or not it
+	// looks like a media file, so an unsafe URL cannot hide behind a .jpg.
+	if !urlutils.IsFetchableURLSyntax(targetURL) {
+		return false, fmt.Errorf("invalid or disallowed fetch URL: %s", targetURL)
+	}
+	// Then the extension check, still ahead of the resolving fetchability test:
+	// for a feed full of image links this skips the DNS lookups too, not just
+	// the HTTP requests.
+	if isNonPageURL(targetURL) {
+		slog.Debug("Skipping URL that cannot carry OpenGraph tags", "url", targetURL)
+		return true, nil
+	}
 	if !urlutils.IsFetchableURLWithContext(ctx, f.resolver, targetURL) {
-		return nil, fmt.Errorf("invalid or disallowed fetch URL: %s", targetURL)
+		return false, fmt.Errorf("invalid or disallowed fetch URL: %s", targetURL)
 	}
 	if f.isBlockedURL(targetURL) {
 		slog.Debug("Skipping blocked URL", "url", targetURL)
+		return true, nil
+	}
+	return false, nil
+}
+
+// FetchDataWithContext fetches OpenGraph data from a URL with caching.
+func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*Data, error) {
+	skipFetch, err := f.precheckURL(ctx, targetURL)
+	if err != nil {
+		return nil, err
+	}
+	if skipFetch {
 		return nil, nil
 	}
 

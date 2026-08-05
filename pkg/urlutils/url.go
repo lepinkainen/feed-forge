@@ -20,8 +20,16 @@ type LookupIPAddrsResolver interface {
 	LookupIPAddr(ctx context.Context, host string) ([]net.IPAddr, error)
 }
 
-// IsFetchableURLWithContext checks whether a URL is safe for outbound HTTP fetching.
-func IsFetchableURLWithContext(ctx context.Context, resolver LookupIPAddrsResolver, urlStr string) bool {
+// IsFetchableURLSyntax reports whether a URL is safe for outbound HTTP fetching
+// as far as inspection alone can tell, without resolving the hostname. It
+// rejects a relative URL, a non-HTTP scheme, localhost, and a literal IP
+// address.
+//
+// Callers that will not fetch the URL after all can use this to reject the
+// clearly-unsafe cases without paying for a DNS lookup. A true result does not
+// mean the URL is fetchable — only IsFetchableURLWithContext can say that,
+// because the hostname may still resolve to a blocked address.
+func IsFetchableURLSyntax(urlStr string) bool {
 	u, err := url.Parse(urlStr)
 	if err != nil || u.Host == "" {
 		return false
@@ -31,16 +39,38 @@ func IsFetchableURLWithContext(ctx context.Context, resolver LookupIPAddrsResolv
 		return false
 	}
 
+	return isFetchableHostnameSyntax(u.Hostname())
+}
+
+// isFetchableHostnameSyntax holds the checks that need no name resolution.
+func isFetchableHostnameSyntax(hostname string) bool {
+	if hostname == "" || strings.EqualFold(hostname, "localhost") {
+		return false
+	}
+
+	// A literal IP bypasses the resolve-then-check path below, so it is never
+	// accepted here.
+	_, err := netip.ParseAddr(hostname)
+	return err != nil
+}
+
+// IsFetchableURLWithContext checks whether a URL is safe for outbound HTTP fetching.
+func IsFetchableURLWithContext(ctx context.Context, resolver LookupIPAddrsResolver, urlStr string) bool {
+	if !IsFetchableURLSyntax(urlStr) {
+		return false
+	}
+
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return false
+	}
+
 	return IsFetchableHostname(ctx, resolver, u.Hostname())
 }
 
 // IsFetchableHostname checks whether a hostname is safe for outbound HTTP fetching.
 func IsFetchableHostname(ctx context.Context, resolver LookupIPAddrsResolver, hostname string) bool {
-	if hostname == "" || strings.EqualFold(hostname, "localhost") {
-		return false
-	}
-
-	if _, err := netip.ParseAddr(hostname); err == nil {
+	if !isFetchableHostnameSyntax(hostname) {
 		return false
 	}
 
