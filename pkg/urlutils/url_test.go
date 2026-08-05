@@ -34,6 +34,54 @@ func TestIsValidURL(t *testing.T) {
 	}
 }
 
+func TestIsFetchableURLSyntax(t *testing.T) {
+	tests := []struct {
+		name     string
+		url      string
+		expected bool
+	}{
+		{name: "https host", url: "https://example.com/page", expected: true},
+		{name: "http host", url: "http://example.com/image.jpg", expected: true},
+		{name: "host with port", url: "https://example.com:8443/page", expected: true},
+
+		{name: "relative path", url: "/x.jpg", expected: false},
+		{name: "bare domain, no scheme", url: "example.com/x.jpg", expected: false},
+		{name: "file scheme", url: "file:///tmp/x.jpg", expected: false},
+		{name: "ftp scheme", url: "ftp://files.example.com/x.jpg", expected: false},
+		{name: "localhost", url: "http://localhost/x.jpg", expected: false},
+		{name: "localhost, mixed case", url: "http://LocalHost/x.jpg", expected: false},
+		{name: "loopback literal", url: "http://127.0.0.1/x.jpg", expected: false},
+		{name: "private literal", url: "http://10.0.0.1/x.jpg", expected: false},
+		{name: "public literal IP is still rejected", url: "http://93.184.216.34/x.jpg", expected: false},
+		{name: "ipv6 literal", url: "http://[::1]/x.jpg", expected: false},
+		{name: "malformed", url: "://bad.jpg", expected: false},
+		{name: "empty", url: "", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if result := IsFetchableURLSyntax(tt.url); result != tt.expected {
+				t.Errorf("IsFetchableURLSyntax(%q) = %v, expected %v", tt.url, result, tt.expected)
+			}
+		})
+	}
+
+	t.Run("says nothing about resolution", func(t *testing.T) {
+		// A hostname that resolves to a blocked address passes the syntax check
+		// and is rejected only by IsFetchableURLWithContext.
+		const internal = "http://internal.example/page"
+		if !IsFetchableURLSyntax(internal) {
+			t.Fatalf("IsFetchableURLSyntax(%q) = false, want true", internal)
+		}
+		privateResolver := testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+			return []net.IPAddr{{IP: net.ParseIP("10.1.2.3")}}, nil
+		}}
+		if IsFetchableURLWithContext(context.Background(), privateResolver, internal) {
+			t.Errorf("IsFetchableURLWithContext(%q) = true, want false", internal)
+		}
+	})
+}
+
 func TestIsFetchableURLWithContext(t *testing.T) {
 	publicResolver := testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
 		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil

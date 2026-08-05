@@ -66,6 +66,20 @@ func TestFetchData_InvalidAndBlockedURLs(t *testing.T) {
 		t.Fatalf("FetchData(image) = (%#v, %v), want (nil, nil)", data, err)
 	}
 
+	// A media extension must not let an unsafe URL through as "no data": these
+	// stay errors, exactly as they were before the extension check existed.
+	for _, unsafe := range []string{
+		"http://127.0.0.1/x.jpg",
+		"http://localhost/x.jpg",
+		"file:///tmp/x.jpg",
+		"/x.jpg",
+		"://bad.jpg",
+	} {
+		if data, err := fetcher.FetchData(unsafe); err == nil || data != nil {
+			t.Errorf("FetchData(%q) = (%#v, %v), want error", unsafe, data, err)
+		}
+	}
+
 	if fetcher.isBlockedURL("https://evil.example/?next=twitter.com") {
 		t.Fatal("isBlockedURL(query containing blocked hostname) = true, want false")
 	}

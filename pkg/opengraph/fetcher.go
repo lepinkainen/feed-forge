@@ -71,9 +71,15 @@ func (f *Fetcher) FetchData(targetURL string) (*Data, error) {
 // "no data" rather than as an error, and an error for a URL that must not be
 // fetched.
 func (f *Fetcher) precheckURL(ctx context.Context, targetURL string) (skip bool, err error) {
-	// Checked before the fetchability test, which resolves the hostname: for a
-	// feed full of image links this skips the DNS lookups too, not just the
-	// HTTP requests.
+	// Rejected first, and without resolving anything: a relative URL, a
+	// non-HTTP scheme, localhost, or a literal IP is an error whether or not it
+	// looks like a media file, so an unsafe URL cannot hide behind a .jpg.
+	if !urlutils.IsFetchableURLSyntax(targetURL) {
+		return false, fmt.Errorf("invalid or disallowed fetch URL: %s", targetURL)
+	}
+	// Then the extension check, still ahead of the resolving fetchability test:
+	// for a feed full of image links this skips the DNS lookups too, not just
+	// the HTTP requests.
 	if isNonPageURL(targetURL) {
 		slog.Debug("Skipping URL that cannot carry OpenGraph tags", "url", targetURL)
 		return true, nil
