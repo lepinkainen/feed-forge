@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -106,7 +106,7 @@ func TestHackerNewsTemplateGeneration(t *testing.T) {
 	}
 
 	// Create OpenGraph data
-	ogData := map[string]*opengraph.Data{
+	ogData := map[string]*linkpreview.Data{
 		"https://example.com/article": {
 			Title:       "Template-based Feed Generation Guide",
 			Description: "A comprehensive guide to using Go templates for RSS/Atom feed generation",

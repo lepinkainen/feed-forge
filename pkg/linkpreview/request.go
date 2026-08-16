@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"compress/gzip"
@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
+	trafilatura "github.com/markusmobius/go-trafilatura"
 	"golang.org/x/net/html"
 )
 
@@ -91,11 +93,6 @@ func (f *Fetcher) doFetchConditional(ctx context.Context, targetURL, etag, lastM
 		return nil, err
 	}
 
-	doc, err := html.Parse(strings.NewReader(htmlContent))
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse HTML: %w", err)
-	}
-
 	now := time.Now()
 	data := &Data{
 		URL:          targetURL,
@@ -104,7 +101,7 @@ func (f *Fetcher) doFetchConditional(ctx context.Context, targetURL, etag, lastM
 		FetchedAt:    now,
 		ExpiresAt:    now.Add(time.Duration(DefaultCacheHours) * time.Hour),
 	}
-	extractOpenGraphTags(doc, data)
+	extractContent(htmlContent, targetURL, data)
 	// Clean up inside the singleflight function: every waiter receives this same
 	// *Data pointer, so mutation must happen once, before the result is shared.
 	cleanupData(data, targetURL)
@@ -175,4 +172,38 @@ func (f *Fetcher) readAndDecodeBody(resp *http.Response, contentType string) (st
 		return "", fmt.Errorf("failed to convert content to UTF-8: %w", err)
 	}
 	return htmlContent, nil
+}
+
+// extractContent runs go-trafilatura content extraction over htmlContent and
+// populates data's metadata and excerpt fields. Trafilatura yields a superset
+// of OpenGraph metadata plus a body excerpt, but some pages carry OG tags
+// with little or no extractable body; for those, backfill any field
+// trafilatura left empty using the classic OG meta parser.
+func extractContent(htmlContent, targetURL string, data *Data) {
+	parsed, _ := url.Parse(targetURL)
+	opts := trafilatura.Options{
+		OriginalURL:     parsed,
+		IncludeImages:   true,
+		IncludeLinks:    true,
+		EnableFallback:  true,
+		ExcludeComments: true,
+	}
+	if res, err := trafilatura.Extract(strings.NewReader(htmlContent), opts); err == nil && res != nil {
+		m := res.Metadata
+		data.Title = m.Title
+		data.Description = m.Description
+		data.Image = m.Image
+		data.SiteName = m.Sitename
+		if res.ContentNode != nil {
+			data.Excerpt = buildExcerpt(res.ContentNode, excerptBudget)
+		}
+	}
+	// Backfill any fields trafilatura left empty using the classic OG meta parser
+	// (applyOpenGraphProperty/applyMetaFallback only set empty fields), for pages
+	// trafilatura skips or that carry OG tags but little body.
+	if data.Title == "" || data.Description == "" || data.Image == "" {
+		if doc, perr := html.Parse(strings.NewReader(htmlContent)); perr == nil {
+			extractOpenGraphTags(doc, data)
+		}
+	}
 }

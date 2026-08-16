@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 
 func newTestOGDB(t *testing.T) *Database {
 	t.Helper()
-	db, err := NewDatabase(filepath.Join(t.TempDir(), "opengraph.db"))
+	db, err := NewDatabase(filepath.Join(t.TempDir(), "linkpreview.db"))
 	if err != nil {
 		t.Fatalf("NewDatabase() error = %v", err)
 	}
@@ -226,8 +226,9 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 		t.Fatalf("fetchFreshData() error = %v", err)
 	}
 	// fetchFreshData cleans the data inside the singleflight function, so the
-	// image URL is already resolved against the page URL here.
-	if fresh == nil || fresh.Title != "Fallback title" || fresh.Description != "OG Description" || fresh.Image != "http://example.invalid/img.png" {
+	// image URL is already resolved against the page URL here. trafilatura's
+	// metadata extraction prefers og:title over the plain <title> element.
+	if fresh == nil || fresh.Title != "OG Title" || fresh.Description != "OG Description" || fresh.Image != "http://example.invalid/img.png" {
 		t.Fatalf("fetchFreshData() = %#v", fresh)
 	}
 
@@ -379,7 +380,9 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 	if !strings.HasSuffix(data.Title, "...") || strings.Contains(data.Title, "\x00") || len(data.Title) > 205 {
 		t.Fatalf("cleanupData() title = %q", data.Title)
 	}
-	if !strings.HasSuffix(data.Description, "...") || strings.Contains(data.Description, "\x00") || len(data.Description) > 505 {
+	// Descriptions are never capped; cleanupData only trims whitespace and
+	// strips null bytes.
+	if strings.Contains(data.Description, "\x00") || len(data.Description) != 505 {
 		t.Fatalf("cleanupData() description = %q", data.Description)
 	}
 	if data.Image != "" {

@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"context"

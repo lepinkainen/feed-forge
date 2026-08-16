@@ -8,14 +8,14 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 )
 
 // BaseProvider provides common functionality for all feed providers
 type BaseProvider struct {
 	// Database connections
 	ContentDB *database.Database
-	OgDB      *opengraph.Database
+	OgDB      *linkpreview.Database
 	HTTPCache *httpcache.Store
 
 	generateFeed func(outfile string) error
@@ -47,11 +47,11 @@ func NewBaseProvider(dbConfig DatabaseConfig) (*BaseProvider, error) {
 		}
 	}()
 
-	ogDBPath, err := filesystem.GetDefaultPath("opengraph.db")
+	ogDBPath, err := filesystem.GetDefaultPath("linkpreview.db")
 	if err != nil {
 		return nil, err
 	}
-	base.OgDB, err = opengraph.NewDatabase(ogDBPath)
+	base.OgDB, err = linkpreview.NewDatabase(ogDBPath)
 	if err != nil {
 		return nil, err
 	}

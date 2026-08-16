@@ -11,7 +11,7 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
 	"github.com/lepinkainen/feed-forge/pkg/filesystem"
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -20,7 +20,7 @@ func BuildGenerator(
 	fetchItems func(limit int) ([]providers.FeedItem, error),
 	preview *providers.PreviewInfo,
 	configFunc func() feedmeta.Config,
-	ogDB *opengraph.Database,
+	ogDB *linkpreview.Database,
 ) func(string) error {
 	return func(outfile string) error {
 		if fetchItems == nil {

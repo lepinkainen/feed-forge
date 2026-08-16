@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"bytes"
@@ -86,9 +86,6 @@ func applyMetaFallback(data *Data, name, content string) {
 }
 
 func cleanupData(data *Data, baseURL string) {
-	if len(data.Description) > 500 {
-		data.Description = data.Description[:497] + "..."
-	}
 	if len(data.Title) > 200 {
 		data.Title = data.Title[:197] + "..."
 	}
@@ -114,6 +111,7 @@ func cleanupData(data *Data, baseURL string) {
 	data.Title = strings.ReplaceAll(data.Title, "\x00", "")
 	data.Description = strings.ReplaceAll(data.Description, "\x00", "")
 	data.SiteName = strings.ReplaceAll(data.SiteName, "\x00", "")
+	data.Excerpt = strings.ReplaceAll(data.Excerpt, "\x00", "")
 }
 
 func convertToUTF8(body []byte, contentType string) (string, error) {

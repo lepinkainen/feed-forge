@@ -33,7 +33,7 @@ linters:
       - path: ^pkg/testutil/.*$
         linters:
           - gosec
-      - path: ^(pkg/database/.*|pkg/opengraph/database\.go|internal/hackernews/database\.go|internal/oglaf/database\.go|internal/hackernews/api\.go)$
+      - path: ^(pkg/database/.*|pkg/linkpreview/database\.go|internal/hackernews/database\.go|internal/oglaf/database\.go|internal/hackernews/api\.go)$
         linters:
           - noctx
   settings:

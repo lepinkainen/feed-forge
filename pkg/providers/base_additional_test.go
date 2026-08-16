@@ -25,8 +25,8 @@ func TestNewBaseProvider_WithoutContentDB(t *testing.T) {
 	if base.ContentDB != nil {
 		t.Fatal("ContentDB != nil, want nil")
 	}
-	if _, err := os.Stat(filepath.Join(cacheDir, "opengraph.db")); err != nil {
-		t.Fatalf("opengraph db file missing: %v", err)
+	if _, err := os.Stat(filepath.Join(cacheDir, "linkpreview.db")); err != nil {
+		t.Fatalf("linkpreview db file missing: %v", err)
 	}
 }
 
@@ -47,7 +47,7 @@ func TestNewBaseProvider_WithContentDB(t *testing.T) {
 	if got := base.ContentDB.Path(); got != filepath.Join(cacheDir, "content.db") {
 		t.Fatalf("ContentDB.Path() = %q, want %q", got, filepath.Join(cacheDir, "content.db"))
 	}
-	for _, path := range []string{filepath.Join(cacheDir, "opengraph.db"), filepath.Join(cacheDir, "content.db")} {
+	for _, path := range []string{filepath.Join(cacheDir, "linkpreview.db"), filepath.Join(cacheDir, "content.db")} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected db file %q missing: %v", path, err)
 		}
