@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
@@ -75,16 +74,6 @@ func (db *Database) createSchema() error {
 
 	if _, err := db.db.Exec(schema); err != nil {
 		return err
-	}
-
-	for _, migration := range []string{
-		`ALTER TABLE linkpreview_cache ADD COLUMN etag TEXT DEFAULT ''`,
-		`ALTER TABLE linkpreview_cache ADD COLUMN last_modified TEXT DEFAULT ''`,
-		`ALTER TABLE linkpreview_cache ADD COLUMN excerpt TEXT DEFAULT ''`,
-	} {
-		if _, err := db.db.Exec(migration); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return err
-		}
 	}
 
 	return nil
