@@ -51,6 +51,10 @@ feissarimokat:
   outfile: feissarimokat.xml
   interval: 48h
 
+xkcd:
+  outfile: xkcd.xml
+  interval: 6h
+
 oglaf:
   feed-url: "https://custom.oglaf.com/rss/"
   outfile: oglaf.xml

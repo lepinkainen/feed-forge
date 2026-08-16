@@ -58,6 +58,11 @@ feissarimokat:
   outfile: feissarimokat.xml
   interval: 24h # Weekly updates, daily check is plenty
 
+# xkcd provider configuration
+xkcd:
+  outfile: xkcd.xml
+  interval: 6h # New comics land ~3x/week; a few checks a day is plenty
+
 # Oglaf provider configuration
 oglaf:
   outfile: oglaf.xml

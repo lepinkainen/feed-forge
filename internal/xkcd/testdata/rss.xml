@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>xkcd.com</title>
+    <link>https://xkcd.com/</link>
+    <description>xkcd.com: A webcomic of romance and math humor.</description>
+    <language>en</language>
+    <item>
+      <title>Accretionary Arc</title>
+      <link>https://xkcd.com/3285/</link>
+      <description>&lt;img src="https://imgs.xkcd.com/comics/accretionary_arc.png" title="The late Triassic rifting was caused by a dinosaur trying to use the control panel to escape a predator." alt="The late Triassic rifting was caused by a dinosaur trying to use the control panel to escape a predator." /&gt;</description>
+      <pubDate>Fri, 14 Aug 2026 04:00:00 -0000</pubDate>
+      <guid>https://xkcd.com/3285/</guid>
+    </item>
+    <item>
+      <title>Older Comic</title>
+      <link>https://xkcd.com/3284/</link>
+      <description>&lt;img src="https://imgs.xkcd.com/comics/older_comic.png" title="Mouseover joke goes here." alt="Mouseover joke goes here." /&gt;</description>
+      <pubDate>Wed, 12 Aug 2026 04:00:00 -0000</pubDate>
+      <guid>https://xkcd.com/3284/</guid>
+    </item>
+  </channel>
+</rss>

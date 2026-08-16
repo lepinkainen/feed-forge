@@ -39,6 +39,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 	"github.com/lepinkainen/feed-forge/internal/tildes"
+	"github.com/lepinkainen/feed-forge/internal/xkcd"
 	"github.com/lepinkainen/feed-forge/internal/youtube"
 )
 
@@ -81,6 +82,11 @@ var CLI struct {
 		Outfile  string `help:"Output file path" short:"o" default:"feissarimokat.xml"`
 		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"feissarimokat" help:"Generate RSS feed from Feissarimokat comics."`
+
+	XKCD struct {
+		Outfile  string `help:"Output file path" short:"o" default:"xkcd.xml"`
+		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
+	} `cmd:"xkcd" name:"xkcd" help:"Generate RSS feed from xkcd comics."`
 
 	Preview struct {
 		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, lobsters, lemmy, youtube)."`
@@ -238,6 +244,13 @@ func buildProviderConfig(name string) any {
 			GenerateConfig: providers.GenerateConfig{
 				Outfile:  CLI.Feissarimokat.Outfile,
 				Interval: CLI.Feissarimokat.Interval,
+			},
+		}
+	case "xkcd":
+		return &xkcd.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.XKCD.Outfile,
+				Interval: CLI.XKCD.Interval,
 			},
 		}
 	case "oglaf":
@@ -805,6 +818,7 @@ func providerCmds() map[string]providerSpec {
 		"hackernews":    {"hackernews", "Hacker News", CLI.HackerNews.Outfile, nil},
 		"fingerpori":    {"fingerpori", "Fingerpori", CLI.Fingerpori.Outfile, nil},
 		"feissarimokat": {"feissarimokat", "Feissarimokat", CLI.Feissarimokat.Outfile, nil},
+		"xkcd":          {"xkcd", "xkcd", CLI.XKCD.Outfile, nil},
 		"oglaf":         {"oglaf", "Oglaf", CLI.Oglaf.Outfile, nil},
 		"tildes":        {"tildes", "Tildes", CLI.Tildes.Outfile, nil},
 		"lobsters":      {"lobsters", "Lobsters", CLI.Lobsters.Outfile, nil},

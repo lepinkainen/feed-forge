@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>{{.FeedTitle | xmlEscape}}</title>
+  <link href="{{.FeedLink | xmlEscape}}"/>
+  <id>{{.FeedID | xmlEscape}}</id>
+  <updated>{{.Updated}}</updated>
+  <author><name>{{.FeedAuthor | xmlEscape}}</name></author>
+  <subtitle>{{.FeedDescription | xmlEscape}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator | xmlEscape}}</generator>
+
+{{range .Items}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.Link | xmlEscape}}"/>
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <author>
+      <name>{{.Author | xmlEscape}}</name>
+    </author>
+    {{range .Categories}}<category term="{{. | xmlEscape}}" label="{{. | xmlEscape}}"/>{{end}}
+
+    <content type="html"><![CDATA[
+      <div class="comic">
+        {{.Content}}
+      </div>
+      <div class="links">
+        <p><a href="{{.Link | xmlEscape}}">View on xkcd</a></p>
+      </div>
+    ]]></content>
+
+    {{if .ImageURL}}<link rel="enclosure" type="image/png" href="{{.ImageURL | xmlEscape}}"/>{{end}}
+    {{if .ImageURL}}<media:thumbnail url="{{.ImageURL | xmlEscape}}"/>{{end}}
+  </entry>
+{{end}}
+</feed>
