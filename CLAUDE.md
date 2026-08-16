@@ -82,10 +82,11 @@ All providers implement one interface, so the CLI treats them the same way.
 (`pkg/providers/base.go`) holds the shared database connections, and every provider
 embeds it. Most providers build `GenerateFeed` with `providerfeed.BuildGenerator` and
 install it with `BaseProvider.SetGenerateFeedFunc`. Each provider self-registers in an
-`init()` function with `providers.MustRegister`. Eight providers are registered:
-`reddit`, `hackernews`, `fingerpori`, `feissarimokat`, `oglaf`, `tildes`, `lobsters`,
-and `youtube`. The code is in `internal/<name>/`. The Reddit package directory is
-`internal/reddit-json/`.
+`init()` function with `providers.MustRegister`. The registry is the source of truth
+for which providers exist; at present the set is `reddit`, `hackernews`, `fingerpori`,
+`feissarimokat`, `oglaf`, `tildes`, `lobsters`, `lemmy`, and `youtube`, but check the
+`MustRegister` calls rather than trusting this list. The code is in `internal/<name>/`.
+The Reddit package directory is `internal/reddit-json/`.
 
 For the full architecture — provider contract, registry, package roles, feed
 templates, and preview — read `ai-docs/01-runtime-architecture.md`,

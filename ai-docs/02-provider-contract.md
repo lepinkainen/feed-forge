@@ -30,6 +30,32 @@ Optional item methods consumed by feed generation:
 - `Subreddit() string` => `TemplateItem.Subreddit`
 - `ItemDomain() string` => `TemplateItem.Domain`
 
+## Output field expectations by provider shape
+
+What a feed entry should carry, by the kind of source. This is the intent a
+provider fills; the template renders it (see `04-feeds-templates-preview.md`).
+Populate every field that is relevant and available for the source; return the
+zero value from a `FeedItem` method when the source has no such data, and the
+template omits it.
+
+Social aggregators (Reddit, Hacker News, lobste.rs, Tildes, Lemmy):
+
+- `Score()` and `CommentCount()` — score and comment count.
+- `ImageURL()` plus OpenGraph title/description/image/link, folded in from
+  `OpenGraphData` keyed on `Link()`.
+- `Link()` to the original item and `CommentsLink()` to the discussion.
+- `Categories()` — original source domain/tag carried as `<category>`.
+
+Comics (Fingerpori, Feissarimokat, Oglaf):
+
+- `Title()`.
+- `Content()` / `Summary` — description.
+- `ImageURL()` — the full comic image.
+- `Link()` to the original comic.
+
+Video (YouTube) reuses the social shape where it applies; a new shape adds its
+own row here.
+
 ## ProviderInfo / registry
 
 Provider registration uses global `providers.DefaultRegistry`.
