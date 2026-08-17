@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -18,24 +18,24 @@ import (
 type Config = feedmeta.Config
 
 // GenerateAtomFeedWithEmbeddedTemplate creates an Atom RSS feed using embedded templates with local override.
-func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
+func GenerateAtomFeedWithEmbeddedTemplate(items []providers.FeedItem, templateName string, config Config, ogDB *linkpreview.Database) (string, error) {
 	return GenerateAtomFeedWithEmbeddedTemplateWithContext(context.Background(), items, templateName, config, ogDB)
 }
 
 // GenerateAtomFeedWithEmbeddedTemplateWithContext creates an Atom RSS feed using embedded templates with local override.
-func GenerateAtomFeedWithEmbeddedTemplateWithContext(ctx context.Context, items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database) (string, error) {
+func GenerateAtomFeedWithEmbeddedTemplateWithContext(ctx context.Context, items []providers.FeedItem, templateName string, config Config, ogDB *linkpreview.Database) (string, error) {
 	return generateAtomFeed(ctx, items, templateName, config, ogDB, func(generator *TemplateGenerator) error {
 		return generator.LoadTemplateWithFallback(templateName)
 	})
 }
 
 // SaveAtomFeedToFileWithEmbeddedTemplate generates and saves an Atom feed using embedded templates with local override.
-func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *opengraph.Database) error {
+func SaveAtomFeedToFileWithEmbeddedTemplate(items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *linkpreview.Database) error {
 	return SaveAtomFeedToFileWithEmbeddedTemplateWithContext(context.Background(), items, templateName, outputPath, config, ogDB)
 }
 
 // SaveAtomFeedToFileWithEmbeddedTemplateWithContext generates and saves an Atom feed using embedded templates with local override.
-func SaveAtomFeedToFileWithEmbeddedTemplateWithContext(ctx context.Context, items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *opengraph.Database) error {
+func SaveAtomFeedToFileWithEmbeddedTemplateWithContext(ctx context.Context, items []providers.FeedItem, templateName, outputPath string, config Config, ogDB *linkpreview.Database) error {
 	slog.Debug("Generating and saving Atom feed with embedded template", "outputPath", outputPath, "itemCount", len(items))
 
 	atomContent, err := GenerateAtomFeedWithEmbeddedTemplateWithContext(ctx, items, templateName, config, ogDB)
@@ -47,7 +47,7 @@ func SaveAtomFeedToFileWithEmbeddedTemplateWithContext(ctx context.Context, item
 	return os.WriteFile(outputPath, []byte(atomContent), 0o600)
 }
 
-func generateAtomFeed(ctx context.Context, items []providers.FeedItem, templateName string, config Config, ogDB *opengraph.Database, loadTemplate func(*TemplateGenerator) error) (string, error) {
+func generateAtomFeed(ctx context.Context, items []providers.FeedItem, templateName string, config Config, ogDB *linkpreview.Database, loadTemplate func(*TemplateGenerator) error) (string, error) {
 	slog.Debug("Generating Atom feed", "templateName", templateName, "itemCount", len(items))
 
 	templateGenerator := NewTemplateGenerator()
@@ -58,7 +58,7 @@ func generateAtomFeed(ctx context.Context, items []providers.FeedItem, templateN
 
 	urls := externalItemURLs(items)
 
-	var ogData map[string]*opengraph.Data
+	var ogData map[string]*linkpreview.Data
 	if ogDB != nil {
 		ogFetcher := createOGFetcher(ogDB, config)
 		slog.Debug("Fetching OpenGraph data", "url_count", len(urls))
@@ -96,19 +96,19 @@ func externalItemURLs(items []providers.FeedItem) []string {
 }
 
 // createOGFetcher creates an OpenGraph fetcher, optionally with proxy support.
-func createOGFetcher(ogDB *opengraph.Database, config Config) *opengraph.Fetcher {
+func createOGFetcher(ogDB *linkpreview.Database, config Config) *linkpreview.Fetcher {
 	if config.ProxyURL != "" && config.ProxySecret != "" {
-		return opengraph.NewFetcherWithProxy(ogDB, &opengraph.ProxyConfig{
+		return linkpreview.NewFetcherWithProxy(ogDB, &linkpreview.ProxyConfig{
 			URL:    config.ProxyURL,
 			Secret: config.ProxySecret,
 		})
 	}
-	return opengraph.NewFetcher(ogDB)
+	return linkpreview.NewFetcher(ogDB)
 }
 
 // createGenericFeedData converts FeedItems to template data structure.
 // This replaces the provider-specific CreateRedditFeedData and CreateHackerNewsFeedData functions.
-func createGenericFeedData(items []providers.FeedItem, config Config, ogData map[string]*opengraph.Data) *TemplateData {
+func createGenericFeedData(items []providers.FeedItem, config Config, ogData map[string]*linkpreview.Data) *TemplateData {
 	now := time.Now()
 
 	data := &TemplateData{
@@ -119,7 +119,7 @@ func createGenericFeedData(items []providers.FeedItem, config Config, ogData map
 		FeedID:          config.ID,
 		Updated:         now.Format(time.RFC3339),
 		Generator:       "Feed Forge",
-		OpenGraphData:   ogData,
+		LinkPreviews:    ogData,
 		Items:           make([]TemplateItem, len(items)),
 	}
 

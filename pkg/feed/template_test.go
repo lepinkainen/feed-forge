@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -24,7 +24,7 @@ func TestCreateGenericFeedData_Reddit(t *testing.T) {
 		},
 	}
 
-	ogData := map[string]*opengraph.Data{
+	ogData := map[string]*linkpreview.Data{
 		"https://example.com/article": {
 			Title:       "Test Article",
 			Description: "Test description",
@@ -83,7 +83,7 @@ func TestCreateGenericFeedData_HackerNews(t *testing.T) {
 		},
 	}
 
-	ogData := map[string]*opengraph.Data{
+	ogData := map[string]*linkpreview.Data{
 		"https://example.com/article": {
 			Title:       "Test Article",
 			Description: "Test description",

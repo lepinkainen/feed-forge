@@ -1,12 +1,12 @@
-// Package opengraph provides OpenGraph metadata fetching and caching.
-package opengraph
+// Package linkpreview fetches and caches link-preview data: full-text
+// extraction via go-trafilatura, backfilled with OpenGraph metadata.
+package linkpreview
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
@@ -54,13 +54,14 @@ func NewDatabase(dbPath string) (*Database, error) {
 // createSchema creates the necessary tables
 func (db *Database) createSchema() error {
 	schema := `
-	CREATE TABLE IF NOT EXISTS opengraph_cache (
+	CREATE TABLE IF NOT EXISTS linkpreview_cache (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		url TEXT NOT NULL UNIQUE,
 		title TEXT DEFAULT '',
 		description TEXT DEFAULT '',
 		image TEXT DEFAULT '',
 		site_name TEXT DEFAULT '',
+		excerpt TEXT DEFAULT '',
 		etag TEXT DEFAULT '',
 		last_modified TEXT DEFAULT '',
 		fetched_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -68,21 +69,12 @@ func (db *Database) createSchema() error {
 		fetch_success BOOLEAN DEFAULT 0
 	);
 	
-	CREATE INDEX IF NOT EXISTS idx_opengraph_url ON opengraph_cache(url);
-	CREATE INDEX IF NOT EXISTS idx_opengraph_expires ON opengraph_cache(expires_at);
+	CREATE INDEX IF NOT EXISTS idx_linkpreview_url ON linkpreview_cache(url);
+	CREATE INDEX IF NOT EXISTS idx_linkpreview_expires ON linkpreview_cache(expires_at);
 	`
 
 	if _, err := db.db.Exec(schema); err != nil {
 		return err
-	}
-
-	for _, migration := range []string{
-		`ALTER TABLE opengraph_cache ADD COLUMN etag TEXT DEFAULT ''`,
-		`ALTER TABLE opengraph_cache ADD COLUMN last_modified TEXT DEFAULT ''`,
-	} {
-		if _, err := db.db.Exec(migration); err != nil && !strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
-			return err
-		}
 	}
 
 	return nil
@@ -105,8 +97,8 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 	defer db.mu.RUnlock()
 
 	query := `
-	SELECT url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at, fetch_success
-	FROM opengraph_cache 
+	SELECT url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at, fetch_success
+	FROM linkpreview_cache
 	WHERE url = ? AND expires_at > CURRENT_TIMESTAMP AND fetch_success = 1
 	`
 
@@ -119,6 +111,7 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 		&data.Description,
 		&data.Image,
 		&data.SiteName,
+		&data.Excerpt,
 		&data.ETag,
 		&data.LastModified,
 		&data.FetchedAt,
@@ -146,9 +139,9 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 	defer db.mu.Unlock()
 
 	query := `
-	INSERT OR REPLACE INTO opengraph_cache 
-	(url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at, fetch_success)
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT OR REPLACE INTO linkpreview_cache
+	(url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at, fetch_success)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := db.db.Exec(query,
@@ -157,6 +150,7 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 		data.Description,
 		data.Image,
 		data.SiteName,
+		data.Excerpt,
 		data.ETag,
 		data.LastModified,
 		data.FetchedAt,
@@ -186,8 +180,8 @@ func (db *Database) GetExpiredData(url string) (*Data, error) {
 	defer db.mu.RUnlock()
 
 	query := `
-	SELECT url, title, description, image, site_name, etag, last_modified, fetched_at, expires_at
-	FROM opengraph_cache
+	SELECT url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at
+	FROM linkpreview_cache
 	WHERE url = ? AND expires_at <= CURRENT_TIMESTAMP AND fetch_success = 1
 	`
 
@@ -198,6 +192,7 @@ func (db *Database) GetExpiredData(url string) (*Data, error) {
 		&data.Description,
 		&data.Image,
 		&data.SiteName,
+		&data.Excerpt,
 		&data.ETag,
 		&data.LastModified,
 		&data.FetchedAt,
@@ -217,7 +212,7 @@ func (db *Database) CleanupExpired() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	query := `DELETE FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP AND etag = '' AND last_modified = ''`
+	query := `DELETE FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP AND etag = '' AND last_modified = ''`
 	result, err := db.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup expired entries: %w", err)
@@ -240,7 +235,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Total entries
 	var totalEntries int
-	err := db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache").Scan(&totalEntries)
+	err := db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache").Scan(&totalEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total entries: %w", err)
 	}
@@ -248,7 +243,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Successful entries
 	var successfulEntries int
-	err = db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache WHERE fetch_success = 1").Scan(&successfulEntries)
+	err = db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE fetch_success = 1").Scan(&successfulEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get successful entries: %w", err)
 	}
@@ -256,7 +251,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Expired entries
 	var expiredEntries int
-	err = db.db.QueryRow("SELECT COUNT(*) FROM opengraph_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
+	err = db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expired entries: %w", err)
 	}
@@ -271,7 +266,7 @@ func (db *Database) HasRecentFailure(url string) (bool, error) {
 	defer db.mu.RUnlock()
 
 	query := `
-	SELECT COUNT(*) FROM opengraph_cache 
+	SELECT COUNT(*) FROM linkpreview_cache 
 	WHERE url = ? AND fetch_success = 0 AND fetched_at > datetime('now', '-1 hour')
 	`
 

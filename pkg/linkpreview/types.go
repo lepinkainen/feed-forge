@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import "time"
 
@@ -9,6 +9,7 @@ type Data struct {
 	Description  string    `json:"description"`
 	Image        string    `json:"image"`
 	SiteName     string    `json:"site_name"`
+	Excerpt      string    `json:"excerpt"`
 	ETag         string    `json:"etag"`
 	LastModified string    `json:"last_modified"`
 	FetchedAt    time.Time `json:"fetched_at"`
@@ -18,5 +19,5 @@ type Data struct {
 // Constants for OpenGraph caching
 const (
 	DefaultCacheHours = 24
-	DefaultDBFile     = "opengraph.db"
+	DefaultDBFile     = "linkpreview.db"
 )

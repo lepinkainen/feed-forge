@@ -11,7 +11,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 )
 
 // Template processing errors
@@ -41,7 +41,7 @@ type TemplateData struct {
 	Items []TemplateItem
 
 	// OpenGraph data map (URL -> OpenGraph data)
-	OpenGraphData map[string]*opengraph.Data
+	LinkPreviews map[string]*linkpreview.Data
 }
 
 // TemplateItem represents a feed item for template rendering

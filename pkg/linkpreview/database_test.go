@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestDatabaseCacheLifecycle(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opengraph.db")
+	dbPath := filepath.Join(t.TempDir(), "linkpreview.db")
 	db, err := NewDatabase(dbPath)
 	if err != nil {
 		t.Fatalf("NewDatabase() error = %v", err)
@@ -69,7 +69,7 @@ func TestDatabaseCacheLifecycle(t *testing.T) {
 }
 
 func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opengraph.db")
+	dbPath := filepath.Join(t.TempDir(), "linkpreview.db")
 	db, err := NewDatabase(dbPath)
 	if err != nil {
 		t.Fatalf("NewDatabase() error = %v", err)
@@ -151,11 +151,11 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 
 // TestSaveCachedDataUnderWriteContention covers the failure seen in production:
 // the generate command runs its providers concurrently and every provider opens
-// its own handle on one shared opengraph.db, so a save can land while another
+// its own handle on one shared linkpreview.db, so a save can land while another
 // handle holds the write lock. The per-connection busy_timeout must make the save
 // wait instead of returning "database is locked (5) (SQLITE_BUSY)".
 func TestSaveCachedDataUnderWriteContention(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "opengraph.db")
+	dbPath := filepath.Join(t.TempDir(), "linkpreview.db")
 
 	writer, err := NewDatabase(dbPath)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestSaveCachedDataUnderWriteContention(t *testing.T) {
 		t.Fatalf("Begin() error = %v", err)
 	}
 	if _, err := tx.Exec(
-		"INSERT OR REPLACE INTO opengraph_cache (url, expires_at) VALUES (?, CURRENT_TIMESTAMP)",
+		"INSERT OR REPLACE INTO linkpreview_cache (url, expires_at) VALUES (?, CURRENT_TIMESTAMP)",
 		"https://example.com/blocker",
 	); err != nil {
 		t.Fatalf("blocker insert: %v", err)

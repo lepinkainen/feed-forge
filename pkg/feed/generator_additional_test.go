@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lepinkainen/feed-forge/pkg/opengraph"
+	"github.com/lepinkainen/feed-forge/pkg/linkpreview"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -88,7 +88,7 @@ func TestCreateGenericFeedData_PreservesOptionalFields(t *testing.T) {
 		subreddit:    "test",
 		domain:       "example.com",
 	}}
-	ogData := map[string]*opengraph.Data{"https://example.com/post": {Title: "OG title"}}
+	ogData := map[string]*linkpreview.Data{"https://example.com/post": {Title: "OG title"}}
 	config := Config{Title: "Feed", Link: "https://feed.example", Description: "Desc", Author: "Forge", ID: "feed-id"}
 
 	data := createGenericFeedData(items, config, ogData)
@@ -109,7 +109,7 @@ func TestCreateGenericFeedData_PreservesOptionalFields(t *testing.T) {
 	if item.Updated != createdAt.Format(time.RFC3339) || item.Published != createdAt.Format(time.RFC3339) {
 		t.Fatalf("timestamps not formatted from CreatedAt: %#v", item)
 	}
-	if data.OpenGraphData["https://example.com/post"].Title != "OG title" {
-		t.Fatalf("OpenGraphData not attached: %#v", data.OpenGraphData)
+	if data.LinkPreviews["https://example.com/post"].Title != "OG title" {
+		t.Fatalf("LinkPreviews not attached: %#v", data.LinkPreviews)
 	}
 }

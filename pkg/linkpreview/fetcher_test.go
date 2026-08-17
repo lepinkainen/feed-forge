@@ -1,4 +1,4 @@
-package opengraph
+package linkpreview
 
 import (
 	"bytes"
@@ -21,7 +21,7 @@ import (
 
 func newTestOGDB(t *testing.T) *Database {
 	t.Helper()
-	db, err := NewDatabase(filepath.Join(t.TempDir(), "opengraph.db"))
+	db, err := NewDatabase(filepath.Join(t.TempDir(), "linkpreview.db"))
 	if err != nil {
 		t.Fatalf("NewDatabase() error = %v", err)
 	}
@@ -226,8 +226,9 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 		t.Fatalf("fetchFreshData() error = %v", err)
 	}
 	// fetchFreshData cleans the data inside the singleflight function, so the
-	// image URL is already resolved against the page URL here.
-	if fresh == nil || fresh.Title != "Fallback title" || fresh.Description != "OG Description" || fresh.Image != "http://example.invalid/img.png" {
+	// image URL is already resolved against the page URL here. trafilatura's
+	// metadata extraction prefers og:title over the plain <title> element.
+	if fresh == nil || fresh.Title != "OG Title" || fresh.Description != "OG Description" || fresh.Image != "http://example.invalid/img.png" {
 		t.Fatalf("fetchFreshData() = %#v", fresh)
 	}
 
@@ -379,7 +380,9 @@ func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 	if !strings.HasSuffix(data.Title, "...") || strings.Contains(data.Title, "\x00") || len(data.Title) > 205 {
 		t.Fatalf("cleanupData() title = %q", data.Title)
 	}
-	if !strings.HasSuffix(data.Description, "...") || strings.Contains(data.Description, "\x00") || len(data.Description) > 505 {
+	// Descriptions are never capped; cleanupData only trims whitespace and
+	// strips null bytes.
+	if strings.Contains(data.Description, "\x00") || len(data.Description) != 505 {
 		t.Fatalf("cleanupData() description = %q", data.Description)
 	}
 	if data.Image != "" {
@@ -451,6 +454,77 @@ func TestFetchDataConditionalNotModifiedRefreshesExpiredCache(t *testing.T) {
 	}
 	if fresh == nil || !fresh.ExpiresAt.After(time.Now().UTC()) {
 		t.Fatalf("refreshed cache = %#v", fresh)
+	}
+}
+
+// TestFetchData_ConcurrentFetchesSaveOnce proves the fix for redundant cache
+// writes: singleflight coalesces the HTTP fetch, so the resulting row must be
+// persisted once, not once per coalesced waiter. Every waiter re-saving the
+// shared result hammers the single SQLite write lock — the exact SQLITE_BUSY
+// contention the busy_timeout was added to survive. sqlite_sequence.seq counts
+// the total inserts into the AUTOINCREMENT table, i.e. the number of saves.
+func TestFetchData_ConcurrentFetchesSaveOnce(t *testing.T) {
+	var hits atomic.Int32
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseServer := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseServer()
+
+	arrived := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>OG</title></head></html>`))
+	}))
+	defer server.Close()
+
+	db := newTestOGDB(t)
+	fetcher := NewFetcher(db)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	const n = 8
+	targetURL := "http://example.invalid/save-once"
+	var startGate sync.WaitGroup
+	startGate.Add(1)
+	var done sync.WaitGroup
+	for range n {
+		done.Go(func() {
+			startGate.Wait()
+			_, _ = fetcher.FetchData(targetURL)
+		})
+	}
+	time.Sleep(20 * time.Millisecond)
+	startGate.Done()
+
+	select {
+	case <-arrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no request reached server")
+	}
+	time.Sleep(100 * time.Millisecond)
+	releaseServer()
+	done.Wait()
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server hits = %d, want 1 (singleflight did not coalesce)", got)
+	}
+
+	var saves int
+	if err := db.db.QueryRow(
+		"SELECT seq FROM sqlite_sequence WHERE name = 'linkpreview_cache'",
+	).Scan(&saves); err != nil {
+		t.Fatalf("read sqlite_sequence: %v", err)
+	}
+	if saves != 1 {
+		t.Fatalf("cache writes = %d, want 1 (each coalesced waiter re-saved)", saves)
 	}
 }
 
