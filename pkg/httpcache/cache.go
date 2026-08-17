@@ -126,8 +126,7 @@ func NewStore(dbPath string) (*Store, error) {
 
 	db, err := database.OpenSQLite(database.SQLiteOptions{
 		Path:         dbPath,
-		MaxOpenConns: 5,
-		MaxIdleConns: 2,
+		MaxOpenConns: 1,
 	})
 	if err != nil {
 		return nil, err
@@ -214,6 +213,11 @@ func (s *Store) Close() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.db.Close()
+}
+
+// DBStats returns the underlying database connection pool statistics.
+func (s *Store) DBStats() sql.DBStats {
+	return s.db.Stats()
 }
 
 // Get returns cached validators for URL.

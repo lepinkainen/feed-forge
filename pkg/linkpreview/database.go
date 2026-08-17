@@ -31,7 +31,7 @@ func NewDatabase(dbPath string) (*Database, error) {
 		dbPath = DefaultDBFile
 	}
 
-	db, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath})
+	db, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1})
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +89,11 @@ func (db *Database) Close() error {
 		return db.db.Close()
 	}
 	return nil
+}
+
+// DBStats returns the underlying database connection pool statistics.
+func (db *Database) DBStats() sql.DBStats {
+	return db.db.Stats()
 }
 
 // GetCachedData retrieves cached OpenGraph data for a URL

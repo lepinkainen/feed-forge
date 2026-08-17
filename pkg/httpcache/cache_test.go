@@ -381,3 +381,15 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		}
 	}
 }
+
+func TestNewStoreCapsPoolToOne(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if got := store.DBStats().MaxOpenConnections; got != 1 {
+		t.Fatalf("DBStats().MaxOpenConnections = %d, want 1", got)
+	}
+}

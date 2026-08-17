@@ -1,7 +1,6 @@
 package linkpreview
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -169,15 +168,6 @@ func TestSaveCachedDataUnderWriteContention(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = blocker.Close() })
 
-	// Pin the writer's first connection so the save below runs on a connection the
-	// pool creates afterwards. Only that first connection would be configured if
-	// the pragmas were applied as statements instead of through the DSN.
-	pinned, err := writer.db.Conn(context.Background())
-	if err != nil {
-		t.Fatalf("Conn() error = %v", err)
-	}
-	t.Cleanup(func() { _ = pinned.Close() })
-
 	tx, err := blocker.db.Begin()
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
@@ -241,5 +231,21 @@ func TestNewDatabase_DefaultPathAndMissingCache(t *testing.T) {
 
 	if db.dbPath != DefaultDBFile {
 		t.Fatalf("dbPath = %q, want %q", db.dbPath, DefaultDBFile)
+	}
+}
+
+func TestNewDatabaseCapsPoolToOne(t *testing.T) {
+	db, err := NewDatabase(filepath.Join(t.TempDir(), "linkpreview.db"))
+	if err != nil {
+		t.Fatalf("NewDatabase() error = %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	if got := db.DBStats().MaxOpenConnections; got != 1 {
+		t.Fatalf("DBStats().MaxOpenConnections = %d, want 1", got)
 	}
 }
