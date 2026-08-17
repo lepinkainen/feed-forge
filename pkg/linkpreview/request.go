@@ -32,16 +32,10 @@ func (f *Fetcher) fetchFreshData(ctx context.Context, targetURL string) (*Data, 
 }
 
 func (f *Fetcher) fetchFreshDataConditional(ctx context.Context, targetURL, etag, lastModified string) (*Data, error) {
-	v, err, _ := f.fetchGroup.Do(targetURL, func() (any, error) {
-		return f.doFetchConditional(ctx, targetURL, etag, lastModified)
-	})
-	if err != nil {
-		return nil, err
-	}
-	if v == nil {
-		return nil, nil
-	}
-	return v.(*Data), nil
+	// Coalescing happens one level up, in FetchDataWithContext, so that the
+	// cache write is shared by the whole singleflight group too, not just the
+	// HTTP fetch.
+	return f.doFetchConditional(ctx, targetURL, etag, lastModified)
 }
 
 func (f *Fetcher) doFetchConditional(ctx context.Context, targetURL, etag, lastModified string) (*Data, error) {
@@ -201,7 +195,7 @@ func extractContent(htmlContent, targetURL string, data *Data) {
 	// Backfill any fields trafilatura left empty using the classic OG meta parser
 	// (applyOpenGraphProperty/applyMetaFallback only set empty fields), for pages
 	// trafilatura skips or that carry OG tags but little body.
-	if data.Title == "" || data.Description == "" || data.Image == "" {
+	if data.Title == "" || data.Description == "" || data.Image == "" || data.SiteName == "" {
 		if doc, perr := html.Parse(strings.NewReader(htmlContent)); perr == nil {
 			extractOpenGraphTags(doc, data)
 		}

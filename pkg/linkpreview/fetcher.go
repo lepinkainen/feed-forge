@@ -112,12 +112,35 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 		return nil, nil
 	}
 
-	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
+	// Coalesce the whole fetch-resolve-cache sequence, not just the HTTP fetch,
+	// so a burst of concurrent callers for one URL performs a single cache write
+	// instead of one write per waiter contending for the SQLite write lock. The
+	// singleflight function carries its outcome (including any error) in the
+	// return value, so Do itself never reports an error.
+	v, _, _ := f.fetchGroup.Do(targetURL, func() (any, error) {
+		fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		return f.fetchResolveAndCache(fetchCtx, targetURL, expired), nil
+	})
+	out := v.(fetchOutcome)
+	return out.data, out.err
+}
 
-	data, err := f.fetchWithExpiredHint(fetchCtx, targetURL, expired)
+// fetchOutcome is the result the singleflight group shares with every coalesced
+// caller: the data to return (nil when there is nothing to show) and the error
+// to report.
+type fetchOutcome struct {
+	data *Data
+	err  error
+}
+
+// fetchResolveAndCache performs the network fetch, resolves not-modified and
+// failure cases, and writes the cache exactly once. It runs inside the
+// singleflight group, so it executes a single time per coalesced burst.
+func (f *Fetcher) fetchResolveAndCache(ctx context.Context, targetURL string, expired *Data) fetchOutcome {
+	data, err := f.fetchWithExpiredHint(ctx, targetURL, expired)
 	if errors.Is(err, errNotModified) && expired != nil {
-		return f.refreshExpired(expired, targetURL), nil
+		return fetchOutcome{data: f.refreshExpired(expired, targetURL)}
 	}
 
 	fetchSuccess := err == nil && data != nil
@@ -127,8 +150,8 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 			data = newFailurePlaceholder(targetURL)
 		}
 	} else if data != nil {
-		// cleanupData already ran inside the singleflight function in
-		// doFetchConditional; the returned pointer is shared between waiters.
+		// cleanupData already ran inside doFetchConditional; the returned pointer
+		// is shared between waiters.
 		slog.Debug("Successfully fetched OpenGraph data", "url", targetURL, "title", data.Title)
 	}
 
@@ -139,7 +162,7 @@ func (f *Fetcher) FetchDataWithContext(ctx context.Context, targetURL string) (*
 	}
 
 	if fetchSuccess {
-		return data, nil
+		return fetchOutcome{data: data}
 	}
-	return nil, err
+	return fetchOutcome{err: err}
 }

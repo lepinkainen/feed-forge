@@ -457,6 +457,77 @@ func TestFetchDataConditionalNotModifiedRefreshesExpiredCache(t *testing.T) {
 	}
 }
 
+// TestFetchData_ConcurrentFetchesSaveOnce proves the fix for redundant cache
+// writes: singleflight coalesces the HTTP fetch, so the resulting row must be
+// persisted once, not once per coalesced waiter. Every waiter re-saving the
+// shared result hammers the single SQLite write lock — the exact SQLITE_BUSY
+// contention the busy_timeout was added to survive. sqlite_sequence.seq counts
+// the total inserts into the AUTOINCREMENT table, i.e. the number of saves.
+func TestFetchData_ConcurrentFetchesSaveOnce(t *testing.T) {
+	var hits atomic.Int32
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	releaseServer := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseServer()
+
+	arrived := make(chan struct{}, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits.Add(1)
+		select {
+		case arrived <- struct{}{}:
+		default:
+		}
+		<-release
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html><head><title>OG</title></head></html>`))
+	}))
+	defer server.Close()
+
+	db := newTestOGDB(t)
+	fetcher := NewFetcher(db)
+	fetcher.resolver = testutil.StubResolver{Lookup: func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}, nil
+	}}
+	fetcher.client.Transport = rewriteHostTransport(server)
+
+	const n = 8
+	targetURL := "http://example.invalid/save-once"
+	var startGate sync.WaitGroup
+	startGate.Add(1)
+	var done sync.WaitGroup
+	for range n {
+		done.Go(func() {
+			startGate.Wait()
+			_, _ = fetcher.FetchData(targetURL)
+		})
+	}
+	time.Sleep(20 * time.Millisecond)
+	startGate.Done()
+
+	select {
+	case <-arrived:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no request reached server")
+	}
+	time.Sleep(100 * time.Millisecond)
+	releaseServer()
+	done.Wait()
+
+	if got := hits.Load(); got != 1 {
+		t.Fatalf("server hits = %d, want 1 (singleflight did not coalesce)", got)
+	}
+
+	var saves int
+	if err := db.db.QueryRow(
+		"SELECT seq FROM sqlite_sequence WHERE name = 'linkpreview_cache'",
+	).Scan(&saves); err != nil {
+		t.Fatalf("read sqlite_sequence: %v", err)
+	}
+	if saves != 1 {
+		t.Fatalf("cache writes = %d, want 1 (each coalesced waiter re-saved)", saves)
+	}
+}
+
 func rewriteHostTransport(server *httptest.Server) *http.Transport {
 	serverAddr := server.Listener.Addr().String()
 

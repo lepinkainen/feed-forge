@@ -1,4 +1,5 @@
-// Package opengraph provides OpenGraph metadata fetching and caching.
+// Package linkpreview fetches and caches link-preview data: full-text
+// extraction via go-trafilatura, backfilled with OpenGraph metadata.
 package linkpreview
 
 import (
