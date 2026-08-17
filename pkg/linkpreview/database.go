@@ -16,6 +16,7 @@ import (
 // Database wraps database operations with thread safety
 type Database struct {
 	db     *sql.DB
+	handle *database.Handle
 	mu     sync.RWMutex
 	dbPath string
 }
@@ -31,13 +32,14 @@ func NewDatabase(dbPath string) (*Database, error) {
 		dbPath = DefaultDBFile
 	}
 
-	db, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1})
+	handle, err := database.AcquireSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1})
 	if err != nil {
 		return nil, err
 	}
 
 	ogDB := &Database{
-		db:     db,
+		db:     handle.DB,
+		handle: handle,
 		dbPath: dbPath,
 	}
 	if err := ogDB.createSchema(); err != nil {
@@ -80,13 +82,14 @@ func (db *Database) createSchema() error {
 	return nil
 }
 
-// Close closes the database connection
+// Close releases this database's reference to the shared handle. The underlying
+// connection is closed only when the last holder releases it.
 func (db *Database) Close() error {
 	db.mu.Lock()
 	defer db.mu.Unlock()
 
-	if db.db != nil {
-		return db.db.Close()
+	if db.handle != nil {
+		return db.handle.Release()
 	}
 	return nil
 }

@@ -110,6 +110,7 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 // Store persists HTTP validators by URL.
 type Store struct {
 	db     *sql.DB
+	handle *database.Handle
 	mu     sync.RWMutex
 	dbPath string
 }
@@ -124,7 +125,7 @@ func NewStore(dbPath string) (*Store, error) {
 		}
 	}
 
-	db, err := database.OpenSQLite(database.SQLiteOptions{
+	handle, err := database.AcquireSQLite(database.SQLiteOptions{
 		Path:         dbPath,
 		MaxOpenConns: 1,
 	})
@@ -132,9 +133,9 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	store := &Store{db: db, dbPath: dbPath}
+	store := &Store{db: handle.DB, handle: handle, dbPath: dbPath}
 	if err := store.createSchema(); err != nil {
-		if closeErr := db.Close(); closeErr != nil {
+		if closeErr := handle.Release(); closeErr != nil {
 			slog.Error("Failed to close HTTP cache database", "error", closeErr)
 		}
 		return nil, fmt.Errorf("create http cache schema: %w", err)
@@ -204,15 +205,16 @@ func (s *Store) ensureBodyColumn() error {
 	return nil
 }
 
-// Close closes the backing database.
+// Close releases this store's reference to the shared handle. The underlying
+// connection is closed only when the last holder releases it.
 func (s *Store) Close() error {
-	if s == nil || s.db == nil {
+	if s == nil || s.handle == nil {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.db.Close()
+	return s.handle.Release()
 }
 
 // DBStats returns the underlying database connection pool statistics.
