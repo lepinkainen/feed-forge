@@ -2,7 +2,12 @@ version: "3"
 
 vars:
   VERSION:
-    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+    # Like `git describe --dirty`, but a moved llm-shared submodule pointer
+    # alone does not mark the build dirty.
+    sh: |
+      v=$(git describe --tags --always 2>/dev/null) || { echo dev; exit 0; }
+      git diff --quiet HEAD -- ':(exclude)llm-shared' || v="$v-dirty"
+      echo "$v"
   GO_PACKAGES:
     sh: go list ./... | grep -v '/llm-shared/' | tr '\n' ' '
 
