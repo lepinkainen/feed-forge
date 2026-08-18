@@ -1,36 +1,36 @@
 # Feed Forge — Project Purpose
 
-This document says *why* the project exists and how to stay aligned with its
-scope. Build commands, architecture, and conventions live in `CLAUDE.md`; this
-file does not repeat them.
+This document tells you why the project exists and how to keep work in its
+scope. `CLAUDE.md` gives the build commands, the architecture, and the
+conventions. This document does not repeat them.
 
 ## What it is
 
-A generator of Atom feeds for sites that have no feed, a bad feed, or far too
-much traffic to read item by item. It turns a firehose into something a feed
-reader can present calmly. Output stays standard Atom with no custom namespaces,
-so any reader can parse it.
+Feed Forge makes Atom feeds for sites that have no feed, a bad feed, or too
+much traffic to read item by item. It turns a large flow of items into a feed
+that a feed reader can show calmly. The output is standard Atom with no custom
+namespaces. As a result, all feed readers can parse it.
 
-The second half of the idea is the **bulletin pipeline**: collect many news
-feeds, drop near-duplicate stories, and publish one summarized digest twice a
-day instead of hundreds of headlines.
+The second part of the project is the **bulletin pipeline**. This pipeline
+collects many news feeds and removes near-duplicate stories. Then it publishes
+one summarized digest two times each day, not hundreds of headlines.
 
 ## Scope — a single-user personal project
 
-This runs for one person on local machines. Optimise for that reality and treat
-anything that only pays off for many users or an operations team as out of
-scope. In particular, do not add:
+One person runs this project on local machines. Make your design decisions for
+that condition. A feature that helps only many users or an operations team is
+out of scope. Do not add these features:
 
 - User accounts, authentication, multi-tenancy, or per-user settings.
-- An elaborate database migration framework. The databases are small,
-  single-user, and rebuildable; hand over a one-off migrate command when a
-  schema changes instead of building migration machinery.
+- A database migration framework. The databases are small, and the user can
+  build them again. When a schema changes, give the user a one-off migrate
+  command.
 - Horizontal scaling, job queues, or service infrastructure.
 
-When in doubt, prefer the simplest thing that works for one person.
+If you are not sure, select the simplest design that works for one person.
 
 ## Direction
 
-Adding a source should stay cheap: a package under `internal/`, the provider
-interface, one registration. Effort belongs in the bulletin pipeline's dedup and
-summarization quality.
+A new source must stay cheap to add: one package in `internal/`, the provider
+interface, and one registration. Put your effort into the dedup quality and
+the summarization quality of the bulletin pipeline.
