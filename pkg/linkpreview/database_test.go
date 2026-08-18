@@ -150,20 +150,22 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 	}
 }
 
-// newIsolatedDatabase opens a Database on dbPath with a private, unregistered
-// handle so a test can hold two real handles on one file. NewDatabase shares one
-// pooled handle per path, which two providers in the same process now do; two
-// separate processes (for example bulletin-fetch and generate) still open
-// independent handles, and that cross-handle contention is what this exercises.
+// newIsolatedDatabase opens a Database on dbPath with a private, unpooled handle
+// so a test can hold two real handles on one file. It bypasses NewDatabase (which
+// shares one pooled handle per path, as two providers in the same process now do)
+// by opening the file directly with OpenSQLite and wrapping it in a standalone
+// Handle. Two separate processes (for example bulletin-fetch and generate) still
+// open independent handles, and that cross-handle contention is what this
+// exercises.
 func newIsolatedDatabase(t *testing.T, dbPath string) *Database {
 	t.Helper()
-	handle, err := database.AcquireSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1, Isolated: true})
+	rawDB, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1})
 	if err != nil {
-		t.Fatalf("AcquireSQLite(isolated) error = %v", err)
+		t.Fatalf("OpenSQLite(isolated) error = %v", err)
 	}
-	db := &Database{db: handle.DB, handle: handle, dbPath: dbPath}
+	db := &Database{handle: &database.Handle{DB: rawDB}, dbPath: dbPath}
 	if err := db.createSchema(); err != nil {
-		_ = handle.Release()
+		_ = db.Close()
 		t.Fatalf("createSchema() error = %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
@@ -180,7 +182,7 @@ func TestSaveCachedDataUnderWriteContention(t *testing.T) {
 	writer := newIsolatedDatabase(t, dbPath)
 	blocker := newIsolatedDatabase(t, dbPath)
 
-	tx, err := blocker.db.Begin()
+	tx, err := blocker.handle.Begin()
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
 	}
@@ -257,8 +259,8 @@ func TestNewDatabaseCapsPoolToOne(t *testing.T) {
 		}
 	}()
 
-	if got := db.DBStats().MaxOpenConnections; got != 1 {
-		t.Fatalf("DBStats().MaxOpenConnections = %d, want 1", got)
+	if got := db.handle.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("handle.Stats().MaxOpenConnections = %d, want 1", got)
 	}
 }
 
@@ -278,7 +280,7 @@ func TestNewDatabaseSharesHandlePerPath(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = b.Close() })
 
-	if a.db != b.db {
+	if a.handle.DB != b.handle.DB {
 		t.Fatal("two NewDatabase on one path returned distinct handles, want a shared *sql.DB")
 	}
 

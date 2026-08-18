@@ -55,11 +55,6 @@ type SQLiteOptions struct {
 	// BusyTimeout is how long a connection waits for a lock before it returns
 	// SQLITE_BUSY. Zero means DefaultBusyTimeout.
 	BusyTimeout time.Duration
-	// Isolated forces AcquireSQLite to open a private, unregistered handle
-	// instead of the shared per-path handle. It is only read by AcquireSQLite;
-	// OpenSQLite ignores it. Used by tests that need two real handles on one
-	// path to reproduce cross-handle write contention.
-	Isolated bool
 }
 
 // dsn builds the connection string. The pragmas ride along as query parameters so

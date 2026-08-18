@@ -518,7 +518,7 @@ func TestFetchData_ConcurrentFetchesSaveOnce(t *testing.T) {
 	}
 
 	var saves int
-	if err := db.db.QueryRow(
+	if err := db.handle.QueryRow(
 		"SELECT seq FROM sqlite_sequence WHERE name = 'linkpreview_cache'",
 	).Scan(&saves); err != nil {
 		t.Fatalf("read sqlite_sequence: %v", err)

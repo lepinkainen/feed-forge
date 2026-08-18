@@ -15,7 +15,6 @@ import (
 
 // Database wraps database operations with thread safety
 type Database struct {
-	db     *sql.DB
 	handle *database.Handle
 	mu     sync.RWMutex
 	dbPath string
@@ -38,7 +37,6 @@ func NewDatabase(dbPath string) (*Database, error) {
 	}
 
 	ogDB := &Database{
-		db:     handle.DB,
 		handle: handle,
 		dbPath: dbPath,
 	}
@@ -75,7 +73,7 @@ func (db *Database) createSchema() error {
 	CREATE INDEX IF NOT EXISTS idx_linkpreview_expires ON linkpreview_cache(expires_at);
 	`
 
-	if _, err := db.db.Exec(schema); err != nil {
+	if _, err := db.handle.Exec(schema); err != nil {
 		return err
 	}
 
@@ -94,11 +92,6 @@ func (db *Database) Close() error {
 	return nil
 }
 
-// DBStats returns the underlying database connection pool statistics.
-func (db *Database) DBStats() sql.DBStats {
-	return db.db.Stats()
-}
-
 // GetCachedData retrieves cached OpenGraph data for a URL
 func (db *Database) GetCachedData(url string) (*Data, error) {
 	db.mu.RLock()
@@ -113,7 +106,7 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 	var data Data
 	var fetchSuccess bool
 
-	err := db.db.QueryRow(query, url).Scan(
+	err := db.handle.QueryRow(query, url).Scan(
 		&data.URL,
 		&data.Title,
 		&data.Description,
@@ -152,7 +145,7 @@ func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
-	_, err := db.db.Exec(query,
+	_, err := db.handle.Exec(query,
 		data.URL,
 		data.Title,
 		data.Description,
@@ -194,7 +187,7 @@ func (db *Database) GetExpiredData(url string) (*Data, error) {
 	`
 
 	var data Data
-	err := db.db.QueryRow(query, url).Scan(
+	err := db.handle.QueryRow(query, url).Scan(
 		&data.URL,
 		&data.Title,
 		&data.Description,
@@ -221,7 +214,7 @@ func (db *Database) CleanupExpired() error {
 	defer db.mu.Unlock()
 
 	query := `DELETE FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP AND etag = '' AND last_modified = ''`
-	result, err := db.db.Exec(query)
+	result, err := db.handle.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to cleanup expired entries: %w", err)
 	}
@@ -243,7 +236,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Total entries
 	var totalEntries int
-	err := db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache").Scan(&totalEntries)
+	err := db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache").Scan(&totalEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get total entries: %w", err)
 	}
@@ -251,7 +244,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Successful entries
 	var successfulEntries int
-	err = db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE fetch_success = 1").Scan(&successfulEntries)
+	err = db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE fetch_success = 1").Scan(&successfulEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get successful entries: %w", err)
 	}
@@ -259,7 +252,7 @@ func (db *Database) GetStats() (map[string]any, error) {
 
 	// Expired entries
 	var expiredEntries int
-	err = db.db.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
+	err = db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expired entries: %w", err)
 	}
@@ -279,7 +272,7 @@ func (db *Database) HasRecentFailure(url string) (bool, error) {
 	`
 
 	var count int
-	err := db.db.QueryRow(query, url).Scan(&count)
+	err := db.handle.QueryRow(query, url).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check recent failure: %w", err)
 	}

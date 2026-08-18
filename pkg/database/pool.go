@@ -44,12 +44,12 @@ type Handle struct {
 // path. The path is canonicalized with filepath.Abs so two spellings of one file
 // share a handle.
 //
-// An in-memory (":memory:"), empty, or Isolated path is never shared: every
+// An in-memory (":memory:") or empty path is never shared: every
 // in-memory open is a distinct database, so keying them together would silently
 // merge unrelated databases. Those cases return a standalone handle whose Release
 // simply closes it.
 func AcquireSQLite(opts SQLiteOptions) (*Handle, error) {
-	if opts.Isolated || opts.Path == "" || opts.Path == ":memory:" {
+	if opts.Path == "" || opts.Path == ":memory:" {
 		db, err := OpenSQLite(opts)
 		if err != nil {
 			return nil, err

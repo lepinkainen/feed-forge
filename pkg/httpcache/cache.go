@@ -109,7 +109,6 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 
 // Store persists HTTP validators by URL.
 type Store struct {
-	db     *sql.DB
 	handle *database.Handle
 	mu     sync.RWMutex
 	dbPath string
@@ -133,7 +132,7 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	store := &Store{db: handle.DB, handle: handle, dbPath: dbPath}
+	store := &Store{handle: handle, dbPath: dbPath}
 	if err := store.createSchema(); err != nil {
 		if closeErr := handle.Release(); closeErr != nil {
 			slog.Error("Failed to close HTTP cache database", "error", closeErr)
@@ -154,7 +153,7 @@ func (s *Store) createSchema() error {
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);
 	`
-	if _, err := s.db.ExecContext(context.Background(), schema); err != nil {
+	if _, err := s.handle.ExecContext(context.Background(), schema); err != nil {
 		return err
 	}
 	return s.ensureBodyColumn()
@@ -164,7 +163,7 @@ func (s *Store) createSchema() error {
 // caching existed. ALTER TABLE ADD COLUMN is a no-op-safe migration for existing rows.
 func (s *Store) ensureBodyColumn() error {
 	ctx := context.Background()
-	rows, err := s.db.QueryContext(ctx, "PRAGMA table_info(http_validators)")
+	rows, err := s.handle.QueryContext(ctx, "PRAGMA table_info(http_validators)")
 	if err != nil {
 		return fmt.Errorf("inspect http cache schema: %w", err)
 	}
@@ -192,7 +191,7 @@ func (s *Store) ensureBodyColumn() error {
 	}
 
 	if !hasBody {
-		if _, err := s.db.ExecContext(ctx, "ALTER TABLE http_validators ADD COLUMN body BLOB"); err != nil {
+		if _, err := s.handle.ExecContext(ctx, "ALTER TABLE http_validators ADD COLUMN body BLOB"); err != nil {
 			// Providers run concurrently and each opens its own store on the same
 			// database file, so another goroutine may have added the column between
 			// the PRAGMA check and this ALTER.
@@ -217,11 +216,6 @@ func (s *Store) Close() error {
 	return s.handle.Release()
 }
 
-// DBStats returns the underlying database connection pool statistics.
-func (s *Store) DBStats() sql.DBStats {
-	return s.db.Stats()
-}
-
 // Get returns cached validators for URL.
 func (s *Store) Get(url string) (api.CacheValidators, bool) {
 	return s.GetContext(context.Background(), url)
@@ -229,7 +223,7 @@ func (s *Store) Get(url string) (api.CacheValidators, bool) {
 
 // GetContext returns cached validators for URL.
 func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators, bool) {
-	if s == nil || s.db == nil || url == "" {
+	if s == nil || s.handle == nil || url == "" {
 		return api.CacheValidators{}, false
 	}
 
@@ -237,7 +231,7 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 	defer s.mu.RUnlock()
 
 	var v api.CacheValidators
-	err := s.db.QueryRowContext(ctx, `SELECT etag, last_modified FROM http_validators WHERE url = ?`, url).Scan(&v.ETag, &v.LastModified)
+	err := s.handle.QueryRowContext(ctx, `SELECT etag, last_modified FROM http_validators WHERE url = ?`, url).Scan(&v.ETag, &v.LastModified)
 	if errors.Is(err, sql.ErrNoRows) {
 		return api.CacheValidators{}, false
 	}
@@ -255,7 +249,7 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 // GetBodyContext returns the cached response body for URL and the time it was
 // last fetched or verified via 304, if one was stored.
 func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, time.Time, bool) {
-	if s == nil || s.db == nil || url == "" {
+	if s == nil || s.handle == nil || url == "" {
 		return nil, time.Time{}, false
 	}
 
@@ -264,7 +258,7 @@ func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, time.Ti
 
 	var body []byte
 	var fetchedAt sql.NullTime
-	err := s.db.QueryRowContext(ctx, `SELECT body, updated_at FROM http_validators WHERE url = ?`, url).Scan(&body, &fetchedAt)
+	err := s.handle.QueryRowContext(ctx, `SELECT body, updated_at FROM http_validators WHERE url = ?`, url).Scan(&body, &fetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, time.Time{}, false
 	}
@@ -281,14 +275,14 @@ func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, time.Ti
 // TouchContext refreshes the updated_at timestamp for URL, marking the cached
 // body as verified-current (used after an HTTP 304).
 func (s *Store) TouchContext(ctx context.Context, url string) error {
-	if s == nil || s.db == nil || url == "" {
+	if s == nil || s.handle == nil || url == "" {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `UPDATE http_validators SET updated_at = ? WHERE url = ?`, time.Now().UTC(), url)
+	_, err := s.handle.ExecContext(ctx, `UPDATE http_validators SET updated_at = ? WHERE url = ?`, time.Now().UTC(), url)
 	if err != nil {
 		return fmt.Errorf("touch HTTP cache entry: %w", err)
 	}
@@ -297,14 +291,14 @@ func (s *Store) TouchContext(ctx context.Context, url string) error {
 
 // SaveBodyContext stores validators and the response body for URL.
 func (s *Store) SaveBodyContext(ctx context.Context, url string, v api.CacheValidators, body []byte) error {
-	if s == nil || s.db == nil || url == "" {
+	if s == nil || s.handle == nil || url == "" {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.handle.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, body, updated_at)
 	VALUES (?, ?, ?, ?, ?)
 	ON CONFLICT(url) DO UPDATE SET
@@ -326,14 +320,14 @@ func (s *Store) Save(url string, v api.CacheValidators) error {
 
 // SaveContext stores validators for URL.
 func (s *Store) SaveContext(ctx context.Context, url string, v api.CacheValidators) error {
-	if s == nil || s.db == nil || url == "" {
+	if s == nil || s.handle == nil || url == "" {
 		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.handle.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, updated_at)
 	VALUES (?, ?, ?, CURRENT_TIMESTAMP)
 	ON CONFLICT(url) DO UPDATE SET
