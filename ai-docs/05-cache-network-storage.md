@@ -51,6 +51,47 @@ Caution:
 - `Close()` removes connection from cache and closes DB.
 - Multiple providers sharing path could get same pointer; close timing matters.
 
+## Shared SQLite handle pool
+
+File: `pkg/database/pool.go`
+
+`database.AcquireSQLite(SQLiteOptions)` returns a refcounted `*database.Handle`
+shared per absolute path. `linkpreview.db` and `http_cache.db` are opened by many
+providers that `generate` runs concurrently; the pool opens each file once and
+closes it only when the last holder releases it. `httpcache.NewStore` and
+`linkpreview.NewDatabase` acquire through it. The content DB in `types.go` does
+NOT use this pool; it has its own separate `dbCache`.
+
+In-memory (`:memory:`) and empty paths are never shared: each returns a standalone
+handle whose `Release` just closes it.
+
+Caution — release, never close:
+
+- `Handle` embeds `*sql.DB`, so `Close()` is promoted onto the handle. Calling
+  `handle.Close()` (or letting a wrapper close the embedded DB) shuts the
+  underlying handle for every other holder AND bypasses the refcount, leaving a
+  stale `refs > 0` entry in `poolByKey` that points at a closed DB. The next
+  `AcquireSQLite` on that path then hands back the already-closed handle, so every
+  query returns `sql: database is closed`.
+- Always release with `Handle.Release()`. It is idempotent (guarded by a
+  `sync.Once`), so a wrapper may release from its own `Close` with no double-close
+  guard. Wrapper `Close` methods must call `handle.Release()`, never `handle.Close()`
+  or `handle.DB.Close()`.
+
+Caution — options are read once per path (first acquirer wins):
+
+- `AcquireSQLite` keys only on the resolved path. When a path is already pooled it
+  returns the existing `*sql.DB` and silently discards the later caller's other
+  `SQLiteOptions` (`MaxOpenConns`, `MaxIdleConns`, `BusyTimeout`, `ConnMaxLifetime`).
+  The first opener's settings win for every later holder, with no error and no log.
+- Every acquirer of one path must therefore pass identical options. Today
+  `http_cache.db` and `linkpreview.db` are each opened by exactly one wrapper type,
+  both with `MaxOpenConns: 1`, so all acquirers agree. A new caller that acquires an
+  already-open path expecting a different pool size or busy timeout would silently
+  get the first opener's pool instead. If you need per-path settings to be
+  authoritative, change `AcquireSQLite`, do not rely on passing options on a later
+  acquire.
+
 ## HTTP validator cache
 
 File: `pkg/httpcache/cache.go`
