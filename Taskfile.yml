@@ -170,16 +170,19 @@ tasks:
       - |
         host="${PUBLISH_DESTINATION%%:*}"
         dest="${PUBLISH_DESTINATION#*:}"
-        # Resolve leading ~ on the remote host before probing. The remote
-        # command single-quotes the literal path for safety, then expands a
-        # leading tilde against the remote $HOME (portable POSIX case).
-        probe="d='$dest'"'
-        case "$d" in
-          "~") d="$HOME" ;;
-          "~/"*) d="$HOME/${d#\~/}" ;;
+        # Resolve leading ~ on the remote host before probing. Pipe the probe
+        # to a remote POSIX sh over stdin so it runs regardless of the remote
+        # login shell (fish rejects sh assignment/case syntax). The local dest
+        # is expanded here; remote expansions are escaped to survive to sh.
+        bin=$(ssh "$host" sh <<EOF
+        d='$dest'
+        case "\$d" in
+          "~") d="\$HOME" ;;
+          "~/"*) d="\$HOME/\${d#\~/}" ;;
         esac
-        test -d "$d" && echo "$d/feed-forge-linux" || echo "$d"'
-        bin=$(ssh "$host" "$probe")
+        test -d "\$d" && echo "\$d/feed-forge-linux" || echo "\$d"
+        EOF
+        )
         echo "Remote version:"
         ssh "$host" "'$bin' --version"
 
