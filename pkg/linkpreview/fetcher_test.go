@@ -368,6 +368,44 @@ func TestExtractOpenGraphTagsAndProcessMetaTag(t *testing.T) {
 	}
 }
 
+func TestCleanupDataDeduplicatesSiteName(t *testing.T) {
+	tests := []struct {
+		name     string
+		siteName string
+		want     string
+	}{
+		{
+			name:     "repeated JSON-LD organization names collapse to one",
+			siteName: strings.TrimSuffix(strings.Repeat("Artificial Analysis; ", 13), "; "),
+			want:     "Artificial Analysis",
+		},
+		{
+			name:     "distinct names are preserved",
+			siteName: "Artificial Analysis; Hugging Face",
+			want:     "Artificial Analysis; Hugging Face",
+		},
+		{
+			name:     "duplicates removed while order kept",
+			siteName: "A; B; A; C; B",
+			want:     "A; B; C",
+		},
+		{
+			name:     "plain site name untouched",
+			siteName: "Example Site",
+			want:     "Example Site",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := &Data{SiteName: tt.siteName}
+			cleanupData(data, "https://example.com/post")
+			if data.SiteName != tt.want {
+				t.Fatalf("cleanupData() site name = %q, want %q", data.SiteName, tt.want)
+			}
+		})
+	}
+}
+
 func TestCleanupDataAndConvertToUTF8AndURLHelpers(t *testing.T) {
 	fetcher := NewFetcher(nil)
 	data := &Data{

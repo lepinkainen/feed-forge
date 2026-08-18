@@ -106,12 +106,32 @@ func cleanupData(data *Data, baseURL string) {
 
 	data.Title = strings.TrimSpace(data.Title)
 	data.Description = strings.TrimSpace(data.Description)
-	data.SiteName = strings.TrimSpace(data.SiteName)
+	data.SiteName = dedupeSiteName(strings.TrimSpace(data.SiteName))
 
 	data.Title = strings.ReplaceAll(data.Title, "\x00", "")
 	data.Description = strings.ReplaceAll(data.Description, "\x00", "")
 	data.SiteName = strings.ReplaceAll(data.SiteName, "\x00", "")
 	data.Excerpt = strings.ReplaceAll(data.Excerpt, "\x00", "")
+}
+
+// dedupeSiteName removes duplicate "; "-separated site names. trafilatura's
+// JSON-LD fallback joins the organization name of every ld+json block on the
+// page with "; " and never deduplicates, so a page with one Dataset block per
+// chart yields "Artificial Analysis; Artificial Analysis; ..." as its site name.
+func dedupeSiteName(siteName string) string {
+	if !strings.Contains(siteName, "; ") {
+		return siteName
+	}
+	seen := make(map[string]struct{})
+	var unique []string
+	for part := range strings.SplitSeq(siteName, "; ") {
+		if _, ok := seen[part]; ok {
+			continue
+		}
+		seen[part] = struct{}{}
+		unique = append(unique, part)
+	}
+	return strings.Join(unique, "; ")
 }
 
 func convertToUTF8(body []byte, contentType string) (string, error) {
