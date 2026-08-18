@@ -170,17 +170,26 @@ tasks:
       - |
         host="${PUBLISH_DESTINATION%%:*}"
         dest="${PUBLISH_DESTINATION#*:}"
-        # Resolve leading ~ on the remote host before probing. Pipe the probe
-        # to a remote POSIX sh over stdin so it runs regardless of the remote
-        # login shell (fish rejects sh assignment/case syntax). The local dest
-        # is expanded here; remote expansions are escaped to survive to sh.
+        # Resolve the destination to an absolute remote path before probing:
+        # expand a leading ~, anchor a relative path at $HOME (scp's default
+        # base), and drop any trailing slash. Pipe the probe to a remote POSIX
+        # sh over stdin so it runs regardless of the remote login shell (fish
+        # rejects sh assignment/case syntax). The local dest is expanded here;
+        # remote expansions are escaped to survive to sh. scp preserves the
+        # permissions of a pre-existing destination file, so ensure the
+        # uploaded binary is executable before probing its version.
         bin=$(ssh "$host" sh <<EOF
         d='$dest'
         case "\$d" in
           "~") d="\$HOME" ;;
           "~/"*) d="\$HOME/\${d#\~/}" ;;
+          /*) ;;
+          *) d="\$HOME/\$d" ;;
         esac
-        test -d "\$d" && echo "\$d/feed-forge-linux" || echo "\$d"
+        d="\${d%/}"
+        test -d "\$d" && d="\$d/feed-forge-linux"
+        chmod +x "\$d"
+        echo "\$d"
         EOF
         )
         echo "Remote version:"
