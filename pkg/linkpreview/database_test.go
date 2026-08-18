@@ -1,11 +1,12 @@
 package linkpreview
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/database"
 )
 
 func TestDatabaseCacheLifecycle(t *testing.T) {
@@ -149,36 +150,39 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 	}
 }
 
+// newIsolatedDatabase opens a Database on dbPath with a private, unpooled handle
+// so a test can hold two real handles on one file. It bypasses NewDatabase (which
+// shares one pooled handle per path, as two providers in the same process now do)
+// by opening the file directly with OpenSQLite and wrapping it in a standalone
+// Handle. Two separate processes (for example bulletin-fetch and generate) still
+// open independent handles, and that cross-handle contention is what this
+// exercises.
+func newIsolatedDatabase(t *testing.T, dbPath string) *Database {
+	t.Helper()
+	rawDB, err := database.OpenSQLite(database.SQLiteOptions{Path: dbPath, MaxOpenConns: 1})
+	if err != nil {
+		t.Fatalf("OpenSQLite(isolated) error = %v", err)
+	}
+	db := &Database{handle: &database.Handle{DB: rawDB}, dbPath: dbPath}
+	if err := db.createSchema(); err != nil {
+		_ = db.Close()
+		t.Fatalf("createSchema() error = %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return db
+}
+
 // TestSaveCachedDataUnderWriteContention covers the failure seen in production:
-// the generate command runs its providers concurrently and every provider opens
-// its own handle on one shared linkpreview.db, so a save can land while another
-// handle holds the write lock. The per-connection busy_timeout must make the save
-// wait instead of returning "database is locked (5) (SQLITE_BUSY)".
+// two independent handles open one shared linkpreview.db, so a save can land
+// while another handle holds the write lock. The per-connection busy_timeout must
+// make the save wait instead of returning "database is locked (5) (SQLITE_BUSY)".
 func TestSaveCachedDataUnderWriteContention(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "linkpreview.db")
 
-	writer, err := NewDatabase(dbPath)
-	if err != nil {
-		t.Fatalf("NewDatabase(writer) error = %v", err)
-	}
-	t.Cleanup(func() { _ = writer.Close() })
+	writer := newIsolatedDatabase(t, dbPath)
+	blocker := newIsolatedDatabase(t, dbPath)
 
-	blocker, err := NewDatabase(dbPath)
-	if err != nil {
-		t.Fatalf("NewDatabase(blocker) error = %v", err)
-	}
-	t.Cleanup(func() { _ = blocker.Close() })
-
-	// Pin the writer's first connection so the save below runs on a connection the
-	// pool creates afterwards. Only that first connection would be configured if
-	// the pragmas were applied as statements instead of through the DSN.
-	pinned, err := writer.db.Conn(context.Background())
-	if err != nil {
-		t.Fatalf("Conn() error = %v", err)
-	}
-	t.Cleanup(func() { _ = pinned.Close() })
-
-	tx, err := blocker.db.Begin()
+	tx, err := blocker.handle.Begin()
 	if err != nil {
 		t.Fatalf("Begin() error = %v", err)
 	}
@@ -241,5 +245,49 @@ func TestNewDatabase_DefaultPathAndMissingCache(t *testing.T) {
 
 	if db.dbPath != DefaultDBFile {
 		t.Fatalf("dbPath = %q, want %q", db.dbPath, DefaultDBFile)
+	}
+}
+
+func TestNewDatabaseCapsPoolToOne(t *testing.T) {
+	db, err := NewDatabase(filepath.Join(t.TempDir(), "linkpreview.db"))
+	if err != nil {
+		t.Fatalf("NewDatabase() error = %v", err)
+	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			t.Fatalf("Close() error = %v", err)
+		}
+	}()
+
+	if got := db.handle.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("handle.Stats().MaxOpenConnections = %d, want 1", got)
+	}
+}
+
+// TestNewDatabaseSharesHandlePerPath asserts the refcounted pool: two providers
+// opening the same file share one *sql.DB, and closing the first leaves the
+// handle usable for the second.
+func TestNewDatabaseSharesHandlePerPath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "linkpreview.db")
+
+	a, err := NewDatabase(path)
+	if err != nil {
+		t.Fatalf("NewDatabase(a) error = %v", err)
+	}
+	b, err := NewDatabase(path)
+	if err != nil {
+		t.Fatalf("NewDatabase(b) error = %v", err)
+	}
+	t.Cleanup(func() { _ = b.Close() })
+
+	if a.handle.DB != b.handle.DB {
+		t.Fatal("two NewDatabase on one path returned distinct handles, want a shared *sql.DB")
+	}
+
+	if err := a.Close(); err != nil {
+		t.Fatalf("a.Close() error = %v", err)
+	}
+	if _, err := b.GetStats(); err != nil {
+		t.Fatalf("shared handle closed while b still held it: %v", err)
 	}
 }

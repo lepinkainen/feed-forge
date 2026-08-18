@@ -254,7 +254,7 @@ func TestCachedGetWithStaleRejectsCopyOlderThanMaxStale(t *testing.T) {
 	}
 
 	// Age the cached copy past the window; the error must now surface.
-	if _, err := store.db.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
+	if _, err := store.handle.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
 		t.Fatalf("age cache entry: %v", err)
 	}
 
@@ -300,7 +300,7 @@ func TestCachedGetWithStaleNotModifiedRefreshesTimestamp(t *testing.T) {
 
 	// Backdate the entry beyond the stale window, then hit the 304: the
 	// timestamp must refresh because the cached copy was verified current.
-	if _, err := store.db.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
+	if _, err := store.handle.Exec(`UPDATE http_validators SET updated_at = ?`, time.Now().UTC().Add(-72*time.Hour)); err != nil {
 		t.Fatalf("age cache entry: %v", err)
 	}
 
@@ -379,5 +379,17 @@ func TestStoreConcurrentAccess(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+func TestNewStoreCapsPoolToOne(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatalf("NewStore() error = %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	if got := store.handle.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("handle.Stats().MaxOpenConnections = %d, want 1", got)
 	}
 }
