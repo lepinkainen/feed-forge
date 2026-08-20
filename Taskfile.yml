@@ -168,37 +168,10 @@ tasks:
         curl -L --fail --show-error --silent "https://hn.algolia.com/api/v1/items/$$item_id" -o internal/hackernews/testdata/item_live_snapshot.json
 
   publish:
-    desc: "Copy binary to remote Linux server"
+    desc: "Deploy binary to remote Linux server (atomic, version-verified)"
     deps: [build-linux]
     cmds:
-      - scp build/feed-forge-linux ${PUBLISH_DESTINATION}
-      - |
-        host="${PUBLISH_DESTINATION%%:*}"
-        dest="${PUBLISH_DESTINATION#*:}"
-        # Resolve the destination to an absolute remote path before probing:
-        # expand a leading ~, anchor a relative path at $HOME (scp's default
-        # base), and drop any trailing slash. Pipe the probe to a remote POSIX
-        # sh over stdin so it runs regardless of the remote login shell (fish
-        # rejects sh assignment/case syntax). The local dest is expanded here;
-        # remote expansions are escaped to survive to sh. scp preserves the
-        # permissions of a pre-existing destination file, so ensure the
-        # uploaded binary is executable before probing its version.
-        bin=$(ssh "$host" sh <<EOF
-        d='$dest'
-        case "\$d" in
-          "~") d="\$HOME" ;;
-          "~/"*) d="\$HOME/\${d#\~/}" ;;
-          /*) ;;
-          *) d="\$HOME/\$d" ;;
-        esac
-        d="\${d%/}"
-        test -d "\$d" && d="\$d/feed-forge-linux"
-        chmod +x "\$d"
-        echo "\$d"
-        EOF
-        )
-        echo "Remote version:"
-        ssh "$host" "'$bin' --version"
+      - scripts/publish.sh {{.VERSION}}
 
   help:
     desc: "Show available tasks"
