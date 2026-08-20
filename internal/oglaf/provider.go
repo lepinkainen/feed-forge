@@ -161,7 +161,10 @@ func init() {
 		Version:     "1.0.0",
 		Factory:     factory,
 		ConfigFactory: func() any {
-			return &Config{FeedURL: "https://www.oglaf.com/feeds/rss/"}
+			return &Config{
+				GenerateConfig: providers.GenerateConfig{Interval: "12h"},
+				FeedURL:        "https://www.oglaf.com/feeds/rss/",
+			}
 		},
 		Preview: previewInfo,
 	})

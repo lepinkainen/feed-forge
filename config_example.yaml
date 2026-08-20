@@ -47,26 +47,20 @@ hackernews:
   outfile: hackernews.xml
   interval: 15m
 
-# Fingerpori provider configuration
+# Simple providers need only their key to be enabled. Defaults:
+# outfile <provider>.xml, and per-provider intervals set in code.
+
+# Fingerpori provider configuration (defaults: limit 100, interval 24h)
 fingerpori:
-  limit: 100 # Maximum number of items
-  outfile: fingerpori.xml
-  interval: 24h # Daily comic, no need to check often
 
-# Feissarimokat provider configuration
+# Feissarimokat provider configuration (default interval 24h)
 feissarimokat:
-  outfile: feissarimokat.xml
-  interval: 24h # Weekly updates, daily check is plenty
 
-# xkcd provider configuration
+# xkcd provider configuration (default interval 6h)
 xkcd:
-  outfile: xkcd.xml
-  interval: 6h # New comics land ~3x/week; a few checks a day is plenty
 
-# Oglaf provider configuration
+# Oglaf provider configuration (default interval 12h)
 oglaf:
-  outfile: oglaf.xml
-  interval: 24h # Weekly comic, daily check is plenty
 
 # Tildes provider configuration
 # Use either topic for one group or topics for multiple groups.

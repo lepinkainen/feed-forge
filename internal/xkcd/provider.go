@@ -47,7 +47,9 @@ func init() {
 		Version:     "1.0.0",
 		Factory:     factory,
 		ConfigFactory: func() any {
-			return &Config{}
+			return &Config{
+				GenerateConfig: providers.GenerateConfig{Interval: "6h"},
+			}
 		},
 		Preview: previewInfo,
 	})

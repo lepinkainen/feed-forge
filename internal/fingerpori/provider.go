@@ -77,7 +77,8 @@ func init() {
 		Factory:     factory,
 		ConfigFactory: func() any {
 			return &Config{
-				Limit: 100,
+				GenerateConfig: providers.GenerateConfig{Interval: "24h"},
+				Limit:          100,
 			}
 		},
 		Preview: previewInfo,
