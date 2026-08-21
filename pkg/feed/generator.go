@@ -107,7 +107,6 @@ func createOGFetcher(ogDB *linkpreview.Database, config Config) *linkpreview.Fet
 }
 
 // createGenericFeedData converts FeedItems to template data structure.
-// This replaces the provider-specific CreateRedditFeedData and CreateHackerNewsFeedData functions.
 func createGenericFeedData(items []providers.FeedItem, config Config, ogData map[string]*linkpreview.Data) *TemplateData {
 	now := time.Now()
 

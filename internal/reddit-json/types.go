@@ -148,5 +148,3 @@ type RedditListing struct {
 		After    string       `json:"after"`
 	} `json:"data"`
 }
-
-// OAuth2 variables are no longer needed - Reddit provider uses public JSON API

@@ -145,9 +145,8 @@ func TestExtractFullComicURLRequestError(t *testing.T) {
 }
 
 // oglafRSSFixture returns an RSS body with three items whose links point at
-// the given base URL path. Plain-text titles/descriptions match the regex
-// parser's preferred path (the CDATA alternative in the existing regex does
-// not match real Oglaf output).
+// the given base URL. The third item has no <pubDate>, so parsing drops it —
+// callers expect two parsed items.
 func oglafRSSFixture(base string) string {
 	return `<?xml version="1.0"?>
 <rss version="2.0"><channel>

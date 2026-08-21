@@ -197,11 +197,11 @@ func TestUpdateItemStatsWritesToDatabase(t *testing.T) {
 		t.Errorf("item 100 stats = (%d, %d), want (999, 77)", points, comments)
 	}
 
-	// 200 returned 410 Gone. fetchItemStats flags it isDeadItem with err=nil,
-	// which updateItemStats currently treats as a successful stats update,
-	// writing points=0/comments=0 rather than deleting. This test pins that
-	// observed behavior — the apparent mismatch with the "dead item" branch
-	// (which only runs when err != nil) is a latent bug worth a separate fix.
+	// 200 returned 410 Gone. fetchItemStats reports isDeadItem with err == nil,
+	// so updateItemStats takes the success path and writes points=0/comments=0
+	// instead of deleting the row.
+	// TODO: the dead-item deletion branch only runs when err != nil, so dead
+	// items are never deleted. Fix that and update this assertion.
 	if err := db.DB().QueryRow(`SELECT points, comment_count FROM items WHERE item_hn_id = ?`, "200").Scan(&points, &comments); err != nil {
 		t.Fatalf("scan 200: %v", err)
 	}
@@ -223,11 +223,9 @@ func TestUpdateItemStatsNoOpWhenAllSkipped(t *testing.T) {
 	if err := initializeSchema(db); err != nil {
 		t.Fatalf("initializeSchema: %v", err)
 	}
-	// All items are in recentlyUpdated, so updateItemStats should not make any
-	// HTTP calls. We set algoliaItemURLFmt to an unreachable address; if it
-	// were called the test would stall the retry loop, not fail — so instead
-	// we assert quickly by bounding the elapsed time indirectly: no HTTP means
-	// near-instant return.
+	// All items are in recentlyUpdated, so updateItemStats must make no HTTP
+	// calls. algoliaItemURLFmt points at an unreachable address: a stray call
+	// stalls in the retry loop, so the timeout below is the assertion.
 	now := time.Now()
 	items := []Item{{ItemID: "1", UpdatedAt: now, ItemCreatedAt: now}}
 	_ = updateStoredItems(db, items)
@@ -326,7 +324,7 @@ func TestFetchItemsExcludesBelowMinPoints(t *testing.T) {
 	}
 }
 
-// Ensure the provider's ContentDB integration still works through BaseProvider.
+// FetchItems must use the ContentDB supplied via BaseProvider.
 func TestFetchItemsUsesProvidedContentDB(t *testing.T) {
 	db, err := database.NewDatabase(database.Config{Path: ":memory:"})
 	if err != nil {

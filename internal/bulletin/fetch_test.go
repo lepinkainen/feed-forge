@@ -54,8 +54,8 @@ func TestFeedFallbackText(t *testing.T) {
 }
 
 // TestFetchEndToEnd drives Fetch against a local httptest server serving one RSS
-// feed and its article page, exercising the fetch -> extract -> store path
-// without any injection seam (Fetch is fully driven by cfg.Feeds + dbPath).
+// feed and its article page, exercising the fetch -> extract -> store path.
+// Fetch needs no test seam: it is driven entirely by cfg.Feeds and dbPath.
 func TestFetchEndToEnd(t *testing.T) {
 	const rssFeed = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>Test Feed</title><link>%[1]s</link>

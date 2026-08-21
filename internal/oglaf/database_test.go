@@ -135,12 +135,11 @@ func saveProcessed(t *testing.T, db *database.Database, link string, published t
 	}
 }
 
-// TestGetProcessedComicsChronologicalOrder is the regression test for the
-// broken ORDER BY pub_date bug. Before the fix, pub_date was an RFC1123Z
-// string and lexicographic sort scrambled chronology: items starting with
-// "Wed, 05 Jul 2023" sorted above "Thu, 13 Feb 2025". This test uses dates
-// deliberately chosen so that RFC1123Z string sort would disagree with
-// chronological sort.
+// TestGetProcessedComicsChronologicalOrder guards the chronological ordering
+// of published_at. Historically the column held RFC1123Z strings, where
+// lexicographic sort scrambles chronology: items starting with
+// "Wed, 05 Jul 2023" sort above "Thu, 13 Feb 2025". The fixture dates are
+// chosen so that RFC1123Z string sort disagrees with chronological sort.
 func TestGetProcessedComicsChronologicalOrder(t *testing.T) {
 	db := newTestDB(t)
 
@@ -181,8 +180,7 @@ func TestGetProcessedComicsChronologicalOrder(t *testing.T) {
 }
 
 // TestGetUnprocessedComicsChronologicalOrder mirrors the processed-comics
-// sort test for unprocessed items, since the same sort bug existed in both
-// queries.
+// sort test: both queries must order by published_at chronologically.
 func TestGetUnprocessedComicsChronologicalOrder(t *testing.T) {
 	db := newTestDB(t)
 
@@ -314,8 +312,8 @@ func TestSaveRSSItemRejectsZeroPublishedAt(t *testing.T) {
 	}
 }
 
-// TestParsePubDateAcceptsOglafFormat exercises the format parser against the
-// exact shape Oglaf's RSS serves, which is the only input source in prod.
+// TestParsePubDateAcceptsOglafFormat exercises parsePubDate against the
+// RFC1123Z shape Oglaf's RSS serves.
 func TestParsePubDateAcceptsOglafFormat(t *testing.T) {
 	cases := []string{
 		"Sun, 12 Apr 2026 00:00:00 +0000",

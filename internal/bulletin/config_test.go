@@ -37,9 +37,8 @@ func TestWithDefaultsPreservesExplicitValues(t *testing.T) {
 	}
 }
 
-// A zero simhash-threshold is treated as "unset" and replaced by the default;
-// this documents the accepted trade-off (exact-match-only clustering is not
-// configurable) so it isn't mistaken for a bug later.
+// A zero simhash-threshold means "unset" and is replaced by the default, so
+// exact-match-only clustering (threshold 0) is deliberately not configurable.
 func TestWithDefaultsZeroThresholdBecomesDefault(t *testing.T) {
 	got := Config{SimhashThreshold: 0}.withDefaults()
 	if got.SimhashThreshold != defaultSimhashThreshold {

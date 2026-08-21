@@ -269,7 +269,7 @@ func TestConvertToFeedItemsUniqueBackingArray(t *testing.T) {
 		t.Errorf("titles not preserved: %q, %q", feedItems[0].Title(), feedItems[1].Title())
 	}
 	// Mutating the source slice must be visible via the feed items (they share
-	// backing memory). This is the same invariant the HN test checks.
+	// backing memory).
 	items[0].ItemTitle = "Mutated"
 	if feedItems[0].Title() != "Mutated" {
 		t.Errorf("feedItems[0].Title() = %q, want Mutated after source mutation", feedItems[0].Title())

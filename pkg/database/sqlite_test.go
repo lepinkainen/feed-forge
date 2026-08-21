@@ -103,7 +103,7 @@ func TestOpenSQLitePragmasApplyToEveryPooledConnection(t *testing.T) {
 	}
 }
 
-// TestOpenSQLiteContendedWriteWaits reproduces the failure seen in production:
+// TestOpenSQLiteContendedWriteWaits covers the SQLITE_BUSY failure mode:
 // two handles on one database file, one of them writing while the other holds the
 // write lock. With busy_timeout in force on every connection the second writer
 // waits; without it the write fails immediately with SQLITE_BUSY.

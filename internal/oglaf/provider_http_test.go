@@ -80,8 +80,7 @@ func TestFetchRSSFeedWithLiveSnapshotFixture(t *testing.T) {
 		t.Fatalf("first parsed item has zero PublishedAt: %#v", first)
 	}
 	// xml.Unmarshal decodes the HTML-escaped CDATA block into real markup, so
-	// the description must come back populated (the legacy regex parser used
-	// to silently drop it for the live feed shape).
+	// the description must come back populated.
 	if first.Description == "" {
 		t.Fatalf("first parsed item has empty Description: %#v", first)
 	}

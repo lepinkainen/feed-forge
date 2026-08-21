@@ -45,7 +45,8 @@ func NewRedditAPI(feedURL, proxySecret, feedID, username string) *RedditAPI {
 func (r *RedditAPI) FetchRedditHomepage() ([]RedditPost, error) {
 	var listing RedditListing
 
-	// User-Agent is already set on the client
+	// The client from NewRedditAPI carries the User-Agent, so no per-request
+	// headers are needed.
 	err := r.client.GetAndDecode(r.feedURL, &listing, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Reddit JSON feed: %w", err)

@@ -66,8 +66,8 @@ func TestFetchData_InvalidAndBlockedURLs(t *testing.T) {
 		t.Fatalf("FetchData(image) = (%#v, %v), want (nil, nil)", data, err)
 	}
 
-	// A media extension must not let an unsafe URL through as "no data": these
-	// stay errors, exactly as they were before the extension check existed.
+	// A media extension must not let an unsafe URL through as "no data": the
+	// safety check runs ahead of the extension check, so these stay errors.
 	for _, unsafe := range []string{
 		"http://127.0.0.1/x.jpg",
 		"http://localhost/x.jpg",
@@ -495,7 +495,7 @@ func TestFetchDataConditionalNotModifiedRefreshesExpiredCache(t *testing.T) {
 	}
 }
 
-// TestFetchData_ConcurrentFetchesSaveOnce proves the fix for redundant cache
+// TestFetchData_ConcurrentFetchesSaveOnce guards against redundant cache
 // writes: singleflight coalesces the HTTP fetch, so the resulting row must be
 // persisted once, not once per coalesced waiter. Every waiter re-saving the
 // shared result hammers the single SQLite write lock — the exact SQLITE_BUSY

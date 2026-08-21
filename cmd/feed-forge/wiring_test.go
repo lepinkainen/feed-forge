@@ -174,9 +174,8 @@ func TestGenerateAll_GeneratesConfiguredProviders(t *testing.T) {
 		for _, name := range []string{"alpha", "beta"} {
 			if err := r.Register(name, &providers.ProviderInfo{
 				Name: name,
-				// generateAll calls the factories concurrently (main.go:437), so this
-				// must not touch shared state. A map of created providers used to live
-				// here; nothing read it, and it caused "concurrent map writes".
+				// generateAll calls the factories concurrently, so this factory
+				// must not touch shared state.
 				Factory: func(config any) (providers.FeedProvider, error) {
 					cfg := config.(*stubConfig)
 					return &stubProvider{cfg: cfg, items: []providers.FeedItem{stubItem{title: name, createdAt: time.Now()}}}, nil

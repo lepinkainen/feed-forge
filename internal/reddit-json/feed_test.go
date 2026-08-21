@@ -47,6 +47,3 @@ func TestCleanRedditHTML(t *testing.T) {
 		})
 	}
 }
-
-// TestBuildEnhancedContentNoDoubleEscaping was removed as buildEnhancedContent
-// is no longer used after removing the enhanced generation system

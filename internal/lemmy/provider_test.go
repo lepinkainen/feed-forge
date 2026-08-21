@@ -145,8 +145,8 @@ func TestFetchItemsAgainstFixture(t *testing.T) {
 }
 
 // TestParseItemCounts covers the counts line directly, including the signed
-// score a downvoted post carries. Without the sign a "-3 points" post parsed as
-// +3 and passed a positive --min-score.
+// score a downvoted post carries. Without the sign, "-3 points" parses as +3
+// and passes a positive --min-score.
 func TestParseItemCounts(t *testing.T) {
 	const header = `submitted by <a href="https://lemmy.world/u/someone">someone</a> to <a href="https://lemmy.world/c/test">test</a><br>`
 
@@ -214,7 +214,7 @@ func TestParseItemCounts(t *testing.T) {
 
 // TestDownvotedPostIsFiltered is the behavioral consequence of parsing the
 // score as signed: a downvoted post falls below any threshold of 0 or more.
-// Before the sign was handled, "-3 points" parsed as +3 and survived both.
+// Dropping the sign would parse "-3 points" as +3 and let the post through.
 func TestDownvotedPostIsFiltered(t *testing.T) {
 	item := parseItem(rssItem{
 		Title:       "Unpopular",

@@ -151,9 +151,9 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 }
 
 // newIsolatedDatabase opens a Database on dbPath with a private, unpooled handle
-// so a test can hold two real handles on one file. It bypasses NewDatabase (which
-// shares one pooled handle per path, as two providers in the same process now do)
-// by opening the file directly with OpenSQLite and wrapping it in a standalone
+// so a test can hold two real handles on one file. It bypasses NewDatabase, which
+// shares one pooled handle per path, by opening the file directly with OpenSQLite
+// and wrapping it in a standalone
 // Handle. Two separate processes (for example bulletin-fetch and generate) still
 // open independent handles, and that cross-handle contention is what this
 // exercises.
@@ -172,7 +172,7 @@ func newIsolatedDatabase(t *testing.T, dbPath string) *Database {
 	return db
 }
 
-// TestSaveCachedDataUnderWriteContention covers the failure seen in production:
+// TestSaveCachedDataUnderWriteContention covers the SQLITE_BUSY failure mode:
 // two independent handles open one shared linkpreview.db, so a save can land
 // while another handle holds the write lock. The per-connection busy_timeout must
 // make the save wait instead of returning "database is locked (5) (SQLITE_BUSY)".

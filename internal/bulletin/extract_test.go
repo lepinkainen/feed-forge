@@ -6,8 +6,8 @@ import (
 )
 
 // sampleArticleHTML is a minimal but readability-extractable article page. Its
-// body comfortably exceeds minExtractedLen so extraction succeeds. Shared with
-// the Fetch httptest test.
+// body comfortably exceeds minExtractedLen so extraction succeeds. Shared
+// fixture for any test in this package that needs a real extractable page.
 const sampleArticleHTML = `<!DOCTYPE html>
 <html><head><title>Transit Budget Debate</title></head>
 <body>

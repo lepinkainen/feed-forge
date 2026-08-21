@@ -30,9 +30,9 @@ func TestSimHashDifferentTextIsFar(t *testing.T) {
 	}
 }
 
-// Finnish text (å/ä/ö) must survive tokenization: previously the ASCII-only
-// splitter dropped every accented word, collapsing such text to a zero (or
-// near-empty) fingerprint. It must now hash to a stable, non-zero value, and two
+// Finnish text (å/ä/ö) must survive tokenization: an ASCII-only splitter would
+// drop every accented word and collapse such text to a zero (or near-empty)
+// fingerprint. Finnish text must hash to a stable, non-zero value, and two
 // distinct Finnish stories must be far apart.
 func TestSimHashFinnishText(t *testing.T) {
 	s := "Helsingin kaupunginvaltuusto päätti korottaa joukkoliikenteen lippujen hintoja ensi vuoden alusta"

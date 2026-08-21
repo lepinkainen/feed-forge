@@ -14,8 +14,8 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 )
 
-// FeedURL and ImageBaseURL are vars (not consts) so tests can redirect them
-// at an httptest server without refactoring call sites.
+// FeedURL and ImageBaseURL are vars, not consts, so tests can point them at
+// an httptest server.
 var (
 	// FeedURL is the RSS feed endpoint for feissarimokat.com
 	FeedURL = "https://static.feissarimokat.com/dynamic/latest/posts.rss"

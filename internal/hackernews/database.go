@@ -38,8 +38,8 @@ func updateStoredItems(db *database.Database, newItems []Item) map[string]bool {
 	updatedItems := make(map[string]bool)
 
 	for _, item := range newItems {
-		// The 'item.CreatedAt' should be the original submission time of the HN post.
-		// The 'item.UpdatedAt' should be when it was last seen/modified by your scraper.
+		// ItemCreatedAt is the original HN submission time and is never
+		// overwritten on conflict; UpdatedAt is when this run last saw the item.
 		result, err := db.DB().Exec(`
 			INSERT INTO items (item_hn_id, title, link, comments_link, points, comment_count, author, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
