@@ -105,7 +105,7 @@ func (tg *TemplateGenerator) LoadTemplateWithFallback(name string) error {
 			slog.Debug("Loading override template", "name", name, "source", "override_fs")
 			return tg.loadTemplateFromContent(name, string(content))
 		}
-		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			return fmt.Errorf("failed to read override template %s: %w", filename, err)
 		}
 	}
