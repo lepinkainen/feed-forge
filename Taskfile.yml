@@ -66,7 +66,7 @@ tasks:
     deps: [test, lint]
     cmds:
       - mkdir -p build
-      - GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge-linux cmd/feed-forge/main.go
+      - GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge-linux cmd/feed-forge/main.go
 
   build-ci:
     desc: "Build for CI environment"
