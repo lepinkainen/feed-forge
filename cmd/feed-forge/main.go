@@ -458,8 +458,15 @@ func generateAll(cfg *appConfig) error {
 
 	notifyFailures(cfg, results, runStart)
 
-	if err := generateFeedIndex(cfg, results); err != nil {
-		slog.Error("Failed to generate feed index", "error", err)
+	// Rewrite the index and OPML only when a feed actually changed (or the
+	// index does not exist yet): downstream services may key on their mtime,
+	// and under the serve daemon this path runs on every tick.
+	if shouldWriteFeedIndex(cfg, results) {
+		if err := generateFeedIndex(cfg, results); err != nil {
+			slog.Error("Failed to generate feed index", "error", err)
+		}
+	} else {
+		slog.Debug("Skipping feed index generation: no feeds regenerated")
 	}
 
 	var (
@@ -582,6 +589,22 @@ func generateProvider(cfg *appConfig, name string) feedResult {
 
 	result.Status = "generated"
 	return result
+}
+
+// shouldWriteFeedIndex reports whether generateFeedIndex should run for this
+// set of results: only when at least one feed was regenerated, or when the
+// index file is missing (first run into a fresh output directory). A run where
+// every provider was skipped must leave index.html and feeds.opml untouched so
+// their mtimes keep meaning "the feed list changed".
+func shouldWriteFeedIndex(cfg *appConfig, results []feedResult) bool {
+	if cfg.OutputDir == "" {
+		return false
+	}
+	if slices.ContainsFunc(results, func(r feedResult) bool { return r.Status == "generated" }) {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(cfg.OutputDir, "index.html"))
+	return err != nil
 }
 
 func generateFeedIndex(cfg *appConfig, results []feedResult) error {

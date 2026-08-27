@@ -205,6 +205,38 @@ func TestBuildProviderConfig(t *testing.T) {
 	}
 }
 
+func TestShouldWriteFeedIndex(t *testing.T) {
+	generated := []feedResult{{Provider: "reddit", Filename: "reddit.xml", Status: "generated"}}
+	allSkipped := []feedResult{
+		{Provider: "reddit", Filename: "reddit.xml", Status: "skipped"},
+		{Provider: "broken", Filename: "broken.xml", Status: "failed"},
+	}
+
+	if shouldWriteFeedIndex(&appConfig{}, generated) {
+		t.Error("shouldWriteFeedIndex(no output-dir) = true, want false")
+	}
+
+	cfg := &appConfig{OutputDir: t.TempDir()}
+
+	// Index missing: write even when nothing was regenerated.
+	if !shouldWriteFeedIndex(cfg, allSkipped) {
+		t.Error("shouldWriteFeedIndex(all skipped, missing index) = false, want true")
+	}
+
+	if err := os.WriteFile(filepath.Join(cfg.OutputDir, "index.html"), []byte("<html/>"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	// Index present and nothing regenerated: leave the files untouched so
+	// downstream consumers can key on their mtime.
+	if shouldWriteFeedIndex(cfg, allSkipped) {
+		t.Error("shouldWriteFeedIndex(all skipped, index exists) = true, want false")
+	}
+	if !shouldWriteFeedIndex(cfg, generated) {
+		t.Error("shouldWriteFeedIndex(generated, index exists) = false, want true")
+	}
+}
+
 func TestGenerateFeedIndex_SkipsWithoutOutputDir(t *testing.T) {
 	cfg := &appConfig{}
 	if err := generateFeedIndex(cfg, []feedResult{{Provider: "reddit", Filename: "reddit.xml", Status: "generated"}}); err != nil {
