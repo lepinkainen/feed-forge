@@ -71,19 +71,15 @@ func TestFindConfigFile_FallsBackToCurrentDirectory(t *testing.T) {
 }
 
 func TestResolveOutfile(t *testing.T) {
-	old := CLI.OutputDir
-	t.Cleanup(func() { CLI.OutputDir = old })
-
-	CLI.OutputDir = "/tmp/output"
-	if got := resolveOutfile("reddit.xml"); got != filepath.Join("/tmp/output", "reddit.xml") {
+	if got := resolveOutfile("/tmp/output", "reddit.xml"); got != filepath.Join("/tmp/output", "reddit.xml") {
 		t.Fatalf("resolveOutfile(relative) = %q", got)
 	}
-	if got := resolveOutfile("/var/tmp/reddit.xml"); got != "/var/tmp/reddit.xml" {
+	if got := resolveOutfile("/tmp/output", "/var/tmp/reddit.xml"); got != "/var/tmp/reddit.xml" {
 		t.Fatalf("resolveOutfile(absolute) = %q", got)
 	}
 }
 
-func TestConfiguredProviders(t *testing.T) {
+func TestConfiguredProvidersFromBytes(t *testing.T) {
 	config := []byte(`
 reddit:
   outfile: reddit.xml
@@ -92,19 +88,14 @@ unknown:
 hackernews:
   outfile: hackernews.xml
 `)
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, config, 0o644); err != nil {
-		t.Fatalf("WriteFile() error = %v", err)
-	}
-
-	got, err := configuredProviders(path)
+	got, err := configuredProvidersFromBytes(config)
 	if err != nil {
-		t.Fatalf("configuredProviders() error = %v", err)
+		t.Fatalf("configuredProvidersFromBytes() error = %v", err)
 	}
 	sort.Strings(got)
 	want := []string{"hackernews", "reddit"}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("configuredProviders() = %v, want %v", got, want)
+		t.Fatalf("configuredProvidersFromBytes() = %v, want %v", got, want)
 	}
 }
 
@@ -215,24 +206,17 @@ func TestBuildProviderConfig(t *testing.T) {
 }
 
 func TestGenerateFeedIndex_SkipsWithoutOutputDir(t *testing.T) {
-	old := CLI.OutputDir
-	t.Cleanup(func() { CLI.OutputDir = old })
-	CLI.OutputDir = ""
-
-	if err := generateFeedIndex([]feedResult{{Provider: "reddit", Filename: "reddit.xml", Status: "generated"}}); err != nil {
+	cfg := &appConfig{}
+	if err := generateFeedIndex(cfg, []feedResult{{Provider: "reddit", Filename: "reddit.xml", Status: "generated"}}); err != nil {
 		t.Fatalf("generateFeedIndex() error = %v", err)
 	}
 }
 
 func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
-	oldOutputDir := CLI.OutputDir
-	oldFeedBaseURL := CLI.FeedBaseURL
-	t.Cleanup(func() {
-		CLI.OutputDir = oldOutputDir
-		CLI.FeedBaseURL = oldFeedBaseURL
-	})
-	CLI.OutputDir = t.TempDir()
-	CLI.FeedBaseURL = "https://endymion.xyz/rss/"
+	cfg := &appConfig{
+		OutputDir:   t.TempDir(),
+		FeedBaseURL: "https://endymion.xyz/rss/",
+	}
 
 	results := []feedResult{
 		{Provider: "reddit", FeedName: "Reddit", Filename: "reddit.xml", Status: "generated"},
@@ -241,11 +225,11 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 		{Provider: "hackernews", FeedName: "Hacker News", Filename: "hackernews.xml", Status: "generated"},
 	}
 
-	if err := generateFeedIndex(results); err != nil {
+	if err := generateFeedIndex(cfg, results); err != nil {
 		t.Fatalf("generateFeedIndex() error = %v", err)
 	}
 
-	content, err := os.ReadFile(filepath.Join(CLI.OutputDir, "index.html"))
+	content, err := os.ReadFile(filepath.Join(cfg.OutputDir, "index.html"))
 	if err != nil {
 		t.Fatalf("ReadFile(index.html) error = %v", err)
 	}
@@ -267,7 +251,7 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 		t.Fatalf("providers not sorted in index.html:\n%s", body)
 	}
 
-	opmlContent, err := os.ReadFile(filepath.Join(CLI.OutputDir, "feeds.opml"))
+	opmlContent, err := os.ReadFile(filepath.Join(cfg.OutputDir, "feeds.opml"))
 	if err != nil {
 		t.Fatalf("ReadFile(feeds.opml) error = %v", err)
 	}
@@ -288,24 +272,20 @@ func TestGenerateFeedIndex_WritesSortedNonFailedFeeds(t *testing.T) {
 }
 
 func TestGenerateFeedIndex_IncludesBulletinFeedWhenPublished(t *testing.T) {
-	oldOutputDir := CLI.OutputDir
-	oldFeedBaseURL := CLI.FeedBaseURL
-	t.Cleanup(func() {
-		CLI.OutputDir = oldOutputDir
-		CLI.FeedBaseURL = oldFeedBaseURL
-	})
-	CLI.OutputDir = t.TempDir()
-	CLI.FeedBaseURL = "https://endymion.xyz/rss/"
+	cfg := &appConfig{
+		OutputDir:   t.TempDir(),
+		FeedBaseURL: "https://endymion.xyz/rss/",
+	}
 
 	results := []feedResult{
 		{Provider: "reddit", FeedName: "Reddit", Filename: "reddit.xml", Status: "generated"},
 	}
 
 	// Without a published bulletin feed, it must not appear.
-	if err := generateFeedIndex(results); err != nil {
+	if err := generateFeedIndex(cfg, results); err != nil {
 		t.Fatalf("generateFeedIndex() error = %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(CLI.OutputDir, "index.html"))
+	body, err := os.ReadFile(filepath.Join(cfg.OutputDir, "index.html"))
 	if err != nil {
 		t.Fatalf("ReadFile(index.html) error = %v", err)
 	}
@@ -315,14 +295,14 @@ func TestGenerateFeedIndex_IncludesBulletinFeedWhenPublished(t *testing.T) {
 
 	// Publish the bulletin Atom feed into OutputDir; now it must appear in both
 	// the index and the OPML.
-	if err := os.WriteFile(filepath.Join(CLI.OutputDir, bulletinFeedName), []byte("<feed/>"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg.OutputDir, bulletinFeedName), []byte("<feed/>"), 0o600); err != nil {
 		t.Fatalf("write bulletin feed: %v", err)
 	}
-	if err := generateFeedIndex(results); err != nil {
+	if err := generateFeedIndex(cfg, results); err != nil {
 		t.Fatalf("generateFeedIndex() error = %v", err)
 	}
 
-	body, err = os.ReadFile(filepath.Join(CLI.OutputDir, "index.html"))
+	body, err = os.ReadFile(filepath.Join(cfg.OutputDir, "index.html"))
 	if err != nil {
 		t.Fatalf("ReadFile(index.html) error = %v", err)
 	}
@@ -330,7 +310,7 @@ func TestGenerateFeedIndex_IncludesBulletinFeedWhenPublished(t *testing.T) {
 		t.Fatalf("index.html missing bulletin feed %q:\n%s", bulletinFeedName, body)
 	}
 
-	opml, err := os.ReadFile(filepath.Join(CLI.OutputDir, "feeds.opml"))
+	opml, err := os.ReadFile(filepath.Join(cfg.OutputDir, "feeds.opml"))
 	if err != nil {
 		t.Fatalf("ReadFile(feeds.opml) error = %v", err)
 	}
