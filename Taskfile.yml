@@ -17,7 +17,7 @@ tasks:
     deps: [test, lint]
     cmds:
       - mkdir -p build
-      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge cmd/feed-forge/main.go
+      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge ./cmd/feed-forge
 
   test:
     desc: "Run tests"
@@ -66,13 +66,13 @@ tasks:
     deps: [test, lint]
     cmds:
       - mkdir -p build
-      - GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge-linux cmd/feed-forge/main.go
+      - GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge-linux ./cmd/feed-forge
 
   build-ci:
     desc: "Build for CI environment"
     cmds:
       - mkdir -p build
-      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge cmd/feed-forge/main.go
+      - go build -ldflags "-X github.com/lepinkainen/feed-forge/pkg/version.Version={{.VERSION}}" -o build/feed-forge ./cmd/feed-forge
 
   test-ci:
     desc: "Run tests with CI tags and coverage"
