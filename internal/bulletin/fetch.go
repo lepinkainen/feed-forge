@@ -27,20 +27,20 @@ var tagStripper = regexp.MustCompile(`<[^>]*>`)
 // Fetch polls every configured source feed, extracts full text for new entries,
 // computes their SimHash, and stores them as unpublished items. Existing items
 // (by URL) are skipped without re-fetching their article page.
-func Fetch(cfg Config, dbPath string) error {
+func Fetch(ctx context.Context, cfg Config, dbPath string) error {
 	cfg = cfg.withDefaults()
 	if len(cfg.Feeds) == 0 {
 		slog.Warn("bulletin: no source feeds configured")
 		return nil
 	}
 
-	store, err := NewStore(dbPath)
+	store, err := NewStore(dbPath) //nolint:contextcheck // connection bootstrap, not request-scoped I/O
 	if err != nil {
 		return err
 	}
 	defer func() { _ = store.Close() }()
 
-	cacheStore, err := httpcache.NewStore(httpcacheDBPath(dbPath))
+	cacheStore, err := httpcache.NewStore(httpcacheDBPath(dbPath)) //nolint:contextcheck // connection bootstrap, not request-scoped I/O
 	if err != nil {
 		return err
 	}
@@ -49,10 +49,12 @@ func Fetch(cfg Config, dbPath string) error {
 	client := api.NewGenericClient()
 	client.SetUserAgent(userAgent)
 	parser := gofeed.NewParser()
-	ctx := context.Background()
 
 	var inserted, skipped int
 	for _, src := range cfg.Feeds {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		body, _, err := httpcache.CachedGetWithStale(ctx, client, cacheStore, src.URL, nil, feedMaxStale)
 		if err != nil {
 			if errors.Is(err, httpcache.ErrNotModified) {
@@ -69,48 +71,65 @@ func Fetch(cfg Config, dbPath string) error {
 			continue
 		}
 
-		for _, entry := range feed.Items {
-			link := entry.Link
-			if link == "" {
-				continue
-			}
-			has, err := store.HasItem(ctx, link)
-			if err != nil {
-				return err
-			}
-			if has {
-				skipped++
-				continue
-			}
-
-			text := fetchArticleText(ctx, client, cacheStore, link, entry)
-			// Pace after every article fetch, including ones that yielded no
-			// usable text: the network request already hit the origin.
-			time.Sleep(politeDelay)
-			if text == "" {
-				continue
-			}
-
-			ok, err := store.InsertItem(ctx, Item{
-				FeedURL:   src.URL,
-				FeedName:  src.Name,
-				URL:       link,
-				Title:     entry.Title,
-				RawText:   text,
-				SimHash:   SimHash(entry.Title + " " + text),
-				FetchedAt: time.Now().UTC(),
-			})
-			if err != nil {
-				return err
-			}
-			if ok {
-				inserted++
-			}
+		ins, skp, err := ingestEntries(ctx, store, client, cacheStore, src, feed.Items)
+		inserted += ins
+		skipped += skp
+		if err != nil {
+			return err
 		}
 	}
 
 	slog.Info("bulletin: fetch complete", "inserted", inserted, "skipped", skipped)
 	return nil
+}
+
+// ingestEntries stores the new entries of one source feed, fetching each new
+// entry's article page and pacing between page fetches. It returns the counts
+// accumulated before any error.
+func ingestEntries(ctx context.Context, store *Store, client *api.EnhancedClient, cacheStore *httpcache.Store, src FeedSource, entries []*gofeed.Item) (inserted, skipped int, err error) {
+	for _, entry := range entries {
+		link := entry.Link
+		if link == "" {
+			continue
+		}
+		has, err := store.HasItem(ctx, link)
+		if err != nil {
+			return inserted, skipped, err
+		}
+		if has {
+			skipped++
+			continue
+		}
+
+		text := fetchArticleText(ctx, client, cacheStore, link, entry)
+		// Pace after every article fetch, including ones that yielded no
+		// usable text: the network request already hit the origin.
+		select {
+		case <-ctx.Done():
+			return inserted, skipped, ctx.Err()
+		case <-time.After(politeDelay):
+		}
+		if text == "" {
+			continue
+		}
+
+		ok, err := store.InsertItem(ctx, Item{
+			FeedURL:   src.URL,
+			FeedName:  src.Name,
+			URL:       link,
+			Title:     entry.Title,
+			RawText:   text,
+			SimHash:   SimHash(entry.Title + " " + text),
+			FetchedAt: time.Now().UTC(),
+		})
+		if err != nil {
+			return inserted, skipped, err
+		}
+		if ok {
+			inserted++
+		}
+	}
+	return inserted, skipped, nil
 }
 
 // fetchArticleText fetches and extracts the article body, falling back to the

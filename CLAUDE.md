@@ -57,15 +57,37 @@ and its registry name drift apart, `ctx.Command()` returns a string that no
 Global flags: `--config`, `--debug`, `--output-dir`, `--feed-base-url`,
 `--cache-dir`, `--discord-webhook-url`.
 
+### Daemon commands
+
+| Command | Action |
+|---|---|
+| `serve` | Run as a daemon. Schedules `generate`, `bulletin-fetch`, and the bulletin digest internally from the `serve:` config section. Replaces the cron entries. |
+| `validate-config` | Validate the configuration file and exit non-zero on any error. Same validation as `serve` startup and reload. |
+
+`serve` holds the configuration as an immutable snapshot (`appConfig` in
+`cmd/feed-forge/appconfig.go`) behind an atomic pointer. SIGHUP re-reads and
+validates the file: a valid file applies from the next scheduled run, an invalid
+file is rejected and the previous configuration stays active.
+
+CAUTION: `serve` reads its global settings (output-dir, feed-base-url, cache-dir,
+discord-webhook-url) from `config.yaml` at startup and on every reload. Global CLI
+flags do not apply to it. A changed `cache-dir` needs a restart, because
+`filesystem.SetCacheDir` is process-global.
+
+The bulletin stages share one in-process mutex in the daemon. A digest slot blocks
+on it; a fetch tick skips when it is held. Never run two `bulletin-generate`
+executions concurrently: both would summarize the same backlog and double the
+model spend.
+
 ### Bulletin commands
 
 Read the Bulletin Pipeline section before you change these.
 
 | Command | Action |
 |---|---|
-| `bulletin-fetch` | Poll source feeds, extract full text, and store new items. Cron every 30 minutes. |
-| `bulletin-generate` | Deduplicate and summarize unpublished items into one stored bulletin. Cron at fixed slots, for example `45 7,17`. |
-| `bulletin-publish -o bulletin.xml` | Render stored bulletins into HTML pages and the Atom feed. Cron immediately after generate. |
+| `bulletin-fetch` | Poll source feeds, extract full text, and store new items. Scheduled by `serve` (`bulletin-fetch-interval`), or cron every 30 minutes. |
+| `bulletin-generate` | Deduplicate and summarize unpublished items into one stored bulletin. Scheduled by `serve` (`bulletin-slots`), or cron at fixed slots, for example `45 7,17`. |
+| `bulletin-publish -o bulletin.xml` | Render stored bulletins into HTML pages and the Atom feed. `serve` runs it right after a successful generate; from cron, run it immediately after generate. |
 | `bulletin-summarize` | Print the digest for current unpublished items to stdout. Writes nothing. Use it to iterate on the prompt. |
 
 `bulletin-generate` and `bulletin-summarize` call the model. Both need

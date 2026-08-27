@@ -1,0 +1,41 @@
+# feed-forge serve daemon, as a systemd user unit.
+#
+# Install:
+#   cp configs/systemd/feed-forge.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now feed-forge
+# The user needs lingering so the unit survives logout:
+#   loginctl enable-linger <user>        (one-time, needs admin)
+#
+# Reload the configuration without a restart (validate-config gates the HUP,
+# so a broken config fails the reload and never reaches the daemon):
+#   systemctl --user reload feed-forge
+# Logs:
+#   journalctl --user -u feed-forge -f
+#
+# `task publish` installs this unit and restarts the service as part of a
+# deploy; a restart (not a reload) is what picks up a new binary.
+
+[Unit]
+Description=feed-forge RSS feed generator daemon
+# User managers have no network-online.target; the HTTP clients retry, and
+# Restart= covers a start before the network is up.
+# Optional dead-man backstop for crash-level failures (create the target unit
+# yourself); the built-in discord-webhook-url already reports per-run provider
+# failures from inside the daemon:
+#OnFailure=feed-forge-notify-failure.service
+
+[Service]
+Type=simple
+ExecStart=%h/bin/feed-forge serve
+ExecReload=%h/bin/feed-forge validate-config
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=30
+# SIGTERM lets in-flight provider runs finish, bounded by their HTTP timeouts.
+TimeoutStopSec=120
+# Secrets (ANTHROPIC_API_KEY, LEMMY_JWT). Optional file, keep it chmod 600.
+EnvironmentFile=-%h/.config/feed-forge/env
+
+[Install]
+WantedBy=default.target

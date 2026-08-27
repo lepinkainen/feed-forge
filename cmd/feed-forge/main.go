@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	xmlenc "encoding/xml"
 	"fmt"
 	"html/template"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/alecthomas/kong"
 	kongyaml "github.com/alecthomas/kong-yaml"
-	"gopkg.in/yaml.v3"
 
 	apipkg "github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/feed"
@@ -152,6 +152,10 @@ var CLI struct {
 	} `cmd:"bulletin-publish" name:"bulletin-publish" help:"Render stored bulletins into HTML pages and the Atom feed (no model)."`
 
 	BulletinSummarize struct{} `cmd:"bulletin-summarize" name:"bulletin-summarize" help:"Debug: print the digest for current unpublished items to stdout without writing or marking anything."`
+
+	ValidateConfig struct{} `cmd:"validate-config" name:"validate-config" help:"Validate the configuration file and exit; non-zero exit on any error."`
+
+	Serve struct{} `cmd:"serve" name:"serve" help:"Run as a daemon: schedule feed generation and the bulletin pipeline internally (replaces cron). SIGHUP reloads the configuration."`
 }
 
 func resolveConfigPath(args []string) string {
@@ -197,9 +201,9 @@ func findConfigFile() string {
 	return configFile
 }
 
-func resolveOutfile(outfile string) string {
-	if CLI.OutputDir != "" && !filepath.IsAbs(outfile) {
-		return filepath.Join(CLI.OutputDir, outfile)
+func resolveOutfile(outputDir, outfile string) string {
+	if outputDir != "" && !filepath.IsAbs(outfile) {
+		return filepath.Join(outputDir, outfile)
 	}
 	return outfile
 }
@@ -364,39 +368,7 @@ func loadProviderConfigFromYAML(configPath, providerName string, target any) err
 	if err != nil {
 		return err
 	}
-
-	var root map[string]yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return err
-	}
-
-	section, ok := root[providerName]
-	if !ok {
-		return nil
-	}
-
-	return section.Decode(target)
-}
-
-func configuredProviders(configPath string) ([]string, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var root map[string]any
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, err
-	}
-
-	var names []string
-	for key := range root {
-		if _, err := providers.DefaultRegistry.Get(key); err == nil {
-			names = append(names, key)
-		}
-	}
-
-	return names, nil
+	return decodeSection(data, providerName, target)
 }
 
 const defaultInterval = 15 * time.Minute
@@ -456,14 +428,14 @@ type opmlOutline struct {
 
 const opmlFilename = "feeds.opml"
 
-func generateAll(configPath string) error {
-	names, err := configuredProviders(configPath)
+func generateAll(cfg *appConfig) error {
+	names, err := configuredProvidersFromBytes(cfg.raw)
 	if err != nil {
 		return fmt.Errorf("failed to read config: %w", err)
 	}
 
 	if len(names) == 0 {
-		slog.Warn("No configured providers found in config file", "config", configPath)
+		slog.Warn("No configured providers found in config file")
 		return nil
 	}
 
@@ -478,16 +450,23 @@ func generateAll(configPath string) error {
 		wg.Add(1)
 		go func(i int, name string) {
 			defer wg.Done()
-			results[i] = generateProvider(configPath, name)
+			results[i] = generateProvider(cfg, name)
 		}(i, name)
 	}
 
 	wg.Wait()
 
-	notifyFailures(results, runStart)
+	notifyFailures(cfg, results, runStart)
 
-	if err := generateFeedIndex(results); err != nil {
-		slog.Error("Failed to generate feed index", "error", err)
+	// Rewrite the index and OPML only when a feed actually changed (or the
+	// index does not exist yet): downstream services may key on their mtime,
+	// and under the serve daemon this path runs on every tick.
+	if shouldWriteFeedIndex(cfg, results) {
+		if err := generateFeedIndex(cfg, results); err != nil {
+			slog.Error("Failed to generate feed index", "error", err)
+		}
+	} else {
+		slog.Debug("Skipping feed index generation: no feeds regenerated")
 	}
 
 	var (
@@ -506,8 +485,8 @@ func generateAll(configPath string) error {
 	}
 
 	// When the Discord webhook is enabled it already reports failures, so skip
-	// the stderr warning to avoid a duplicate notification via cron + mailrise.
-	if len(transient) > 0 && CLI.DiscordWebhookURL == "" {
+	// the stderr warning to avoid a duplicate notification.
+	if len(transient) > 0 && cfg.DiscordWebhookURL == "" {
 		slog.Warn("Transient upstream failures", "providers", strings.Join(transient, ","))
 	}
 
@@ -520,8 +499,8 @@ func generateAll(configPath string) error {
 
 // notifyFailures sends a Discord webhook summary when a webhook URL is
 // configured and at least one provider failed.
-func notifyFailures(results []feedResult, runStart time.Time) {
-	if CLI.DiscordWebhookURL == "" {
+func notifyFailures(cfg *appConfig, results []feedResult, runStart time.Time) {
+	if cfg.DiscordWebhookURL == "" {
 		return
 	}
 	if !slices.ContainsFunc(results, func(r feedResult) bool { return r.Status == "failed" }) {
@@ -538,7 +517,7 @@ func notifyFailures(results []feedResult, runStart time.Time) {
 			Duration: r.Duration,
 		}
 	}
-	if err := notifications.SendDiscordWebhook(CLI.DiscordWebhookURL, notifications.RunResult{
+	if err := notifications.SendDiscordWebhook(cfg.DiscordWebhookURL, notifications.RunResult{
 		Providers: notifyResults,
 		StartTime: runStart,
 	}); err != nil {
@@ -546,7 +525,7 @@ func notifyFailures(results []feedResult, runStart time.Time) {
 	}
 }
 
-func generateProvider(configPath, name string) feedResult {
+func generateProvider(cfg *appConfig, name string) feedResult {
 	result := feedResult{Provider: name, Status: "failed"}
 
 	info, err := providers.DefaultRegistry.Get(name)
@@ -559,7 +538,7 @@ func generateProvider(configPath, name string) feedResult {
 	var providerConfig any
 	if info.ConfigFactory != nil {
 		providerConfig = info.ConfigFactory()
-		if loadErr := loadProviderConfigFromYAML(configPath, name, providerConfig); loadErr != nil {
+		if loadErr := decodeSection(cfg.raw, name, providerConfig); loadErr != nil {
 			slog.Error("Failed to load provider config", "provider", name, "error", loadErr)
 			return result
 		}
@@ -572,7 +551,7 @@ func generateProvider(configPath, name string) feedResult {
 		outfile = name + ".xml"
 	}
 	result.Filename = outfile
-	outfile = resolveOutfile(outfile)
+	outfile = resolveOutfile(cfg.OutputDir, outfile)
 
 	interval := parseInterval(gc.Interval)
 	if skip, age := shouldSkipProvider(outfile, interval); skip {
@@ -612,8 +591,24 @@ func generateProvider(configPath, name string) feedResult {
 	return result
 }
 
-func generateFeedIndex(results []feedResult) error {
-	if CLI.OutputDir == "" {
+// shouldWriteFeedIndex reports whether generateFeedIndex should run for this
+// set of results: only when at least one feed was regenerated, or when the
+// index file is missing (first run into a fresh output directory). A run where
+// every provider was skipped must leave index.html and feeds.opml untouched so
+// their mtimes keep meaning "the feed list changed".
+func shouldWriteFeedIndex(cfg *appConfig, results []feedResult) bool {
+	if cfg.OutputDir == "" {
+		return false
+	}
+	if slices.ContainsFunc(results, func(r feedResult) bool { return r.Status == "generated" }) {
+		return true
+	}
+	_, err := os.Stat(filepath.Join(cfg.OutputDir, "index.html"))
+	return err != nil
+}
+
+func generateFeedIndex(cfg *appConfig, results []feedResult) error {
+	if cfg.OutputDir == "" {
 		slog.Info("Skipping feed index generation: output-dir not configured")
 		return nil
 	}
@@ -628,7 +623,7 @@ func generateFeedIndex(results []feedResult) error {
 	// The bulletin lives outside the provider registry, so it never appears in
 	// results. Inject it as a feed entry (for the copyable list and OPML) when
 	// its Atom feed has been published into OutputDir.
-	if entry, ok := bulletinFeedEntry(); ok {
+	if entry, ok := bulletinFeedEntry(cfg.OutputDir); ok {
 		feeds = append(feeds, entry)
 	}
 
@@ -646,7 +641,7 @@ func generateFeedIndex(results []feedResult) error {
 		return fmt.Errorf("failed to parse index template: %w", err)
 	}
 
-	indexPath := filepath.Join(CLI.OutputDir, "index.html")
+	indexPath := filepath.Join(cfg.OutputDir, "index.html")
 	file, err := os.Create(indexPath)
 	if err != nil {
 		return fmt.Errorf("failed to create index file: %w", err)
@@ -657,12 +652,12 @@ func generateFeedIndex(results []feedResult) error {
 		Feeds        []feedResult
 		OPMLFilename string
 		BulletinLink string
-	}{Feeds: feeds, OPMLFilename: opmlFilename, BulletinLink: bulletinIndexLink()}
+	}{Feeds: feeds, OPMLFilename: opmlFilename, BulletinLink: bulletinIndexLink(cfg.OutputDir)}
 	if err := htmlTmpl.Execute(file, data); err != nil {
 		return fmt.Errorf("failed to execute index template: %w", err)
 	}
 
-	if err := generateOPML(feeds); err != nil {
+	if err := generateOPML(cfg, feeds); err != nil {
 		return err
 	}
 
@@ -677,18 +672,18 @@ const bulletinHTMLSubdir = "html"
 // bulletinHTMLDir returns the directory for bulletin HTML pages
 // (<output-dir>/html), or "" when no output directory is configured (HTML
 // export disabled).
-func bulletinHTMLDir() string {
-	if CLI.OutputDir == "" {
+func bulletinHTMLDir(outputDir string) string {
+	if outputDir == "" {
 		return ""
 	}
-	return filepath.Join(CLI.OutputDir, bulletinHTMLSubdir)
+	return filepath.Join(outputDir, bulletinHTMLSubdir)
 }
 
 // bulletinIndexLink returns the relative href from the feed index (in OutputDir)
 // to the latest bulletin HTML page (in OutputDir/html), or "" when HTML export
 // is disabled or the page has not been published yet.
-func bulletinIndexLink() string {
-	dir := bulletinHTMLDir()
+func bulletinIndexLink(outputDir string) string {
+	dir := bulletinHTMLDir(outputDir)
 	if dir == "" {
 		return ""
 	}
@@ -707,11 +702,11 @@ const bulletinFeedName = "bulletin.xml"
 // been published into OutputDir, so it shows up in the copyable index list and
 // the OPML export like any registered provider. Returns ok=false when HTML/feed
 // export is disabled or the feed has not been published yet.
-func bulletinFeedEntry() (feedResult, bool) {
-	if CLI.OutputDir == "" {
+func bulletinFeedEntry(outputDir string) (feedResult, bool) {
+	if outputDir == "" {
 		return feedResult{}, false
 	}
-	if _, err := os.Stat(filepath.Join(CLI.OutputDir, bulletinFeedName)); err != nil {
+	if _, err := os.Stat(filepath.Join(outputDir, bulletinFeedName)); err != nil {
 		return feedResult{}, false
 	}
 	return feedResult{
@@ -732,10 +727,10 @@ func feedName(info *providers.ProviderInfo, fallback string) string {
 	return fallback
 }
 
-func generateOPML(feeds []feedResult) error {
-	baseURL := CLI.FeedBaseURL
+func generateOPML(cfg *appConfig, feeds []feedResult) error {
+	baseURL := cfg.FeedBaseURL
 	if baseURL == "" {
-		baseURL = "https://endymion.xyz/rss/"
+		baseURL = defaultFeedBaseURL
 	}
 
 	outlines := make([]opmlOutline, 0, len(feeds))
@@ -768,7 +763,7 @@ func generateOPML(feeds []feedResult) error {
 	payload = append([]byte(xmlenc.Header), payload...)
 	payload = append(payload, '\n')
 
-	opmlPath := filepath.Join(CLI.OutputDir, opmlFilename)
+	opmlPath := filepath.Join(cfg.OutputDir, opmlFilename)
 	if err := os.WriteFile(opmlPath, payload, 0o600); err != nil {
 		return fmt.Errorf("write OPML file: %w", err)
 	}
@@ -859,56 +854,100 @@ func dispatchCommand(command, configPath string) {
 		fmt.Println(feedURL)
 	case "generate":
 		slog.Debug("Generating feeds for all configured providers...")
-		if err := generateAll(configPath); err != nil {
+		cfg, err := snapshotForOneShot(configPath)
+		if err == nil {
+			err = generateAll(cfg)
+		}
+		if err != nil {
 			slog.Error("Failed to generate feeds", "error", err)
 			os.Exit(1)
 		}
 	default:
+		if handleServeCommand(command, configPath) {
+			return
+		}
 		panic(command)
 	}
+}
+
+// handleServeCommand dispatches the serve and validate-config subcommands.
+// Returns true when it handled the command (kept separate to keep
+// dispatchCommand's complexity low).
+func handleServeCommand(command, configPath string) bool {
+	switch command {
+	case "validate-config":
+		if err := runValidateConfig(configPath); err != nil {
+			fmt.Fprintf(os.Stderr, "configuration invalid: %v\n", err)
+			os.Exit(1)
+		}
+	case "serve":
+		// The daemon's per-run lines are the journald record; keep them
+		// visible without requiring --debug.
+		if !CLI.Debug {
+			slog.SetLogLoggerLevel(slog.LevelInfo)
+		}
+		if err := runServe(configPath); err != nil {
+			slog.Error("serve failed", "error", err)
+			os.Exit(1)
+		}
+	default:
+		return false
+	}
+	return true
+}
+
+// runValidateConfig checks the configuration file the same way serve startup
+// and the SIGHUP reload do, so `systemctl --user reload` can gate the HUP on it.
+func runValidateConfig(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	if _, err := validateConfig(data); err != nil {
+		return err
+	}
+	fmt.Printf("configuration OK: %s\n", configPath)
+	return nil
 }
 
 // handleBulletinCommand dispatches the bulletin-* subcommands. Returns true when
 // it handled the command (kept separate to keep dispatchCommand's complexity low).
 func handleBulletinCommand(command, configPath string) bool {
-	var (
-		err     error
-		handled = true
-	)
+	var runner func(context.Context, *appConfig) error
 	switch command {
 	case "bulletin-fetch":
-		err = runBulletinFetch(configPath)
+		runner = runBulletinFetch
 	case "bulletin-generate":
-		err = runBulletinGenerate(configPath)
+		runner = func(ctx context.Context, cfg *appConfig) error {
+			return runBulletinGenerate(ctx, cfg, CLI.BulletinGenerate.Slot)
+		}
 	case "bulletin-publish":
-		err = runBulletinPublish()
+		runner = func(ctx context.Context, cfg *appConfig) error {
+			return runBulletinPublish(ctx, cfg, CLI.BulletinPublish.Outfile)
+		}
 	case "bulletin-summarize":
-		err = runBulletinSummarize(configPath)
+		runner = runBulletinSummarize
 	default:
-		handled = false
+		return false
 	}
-	if handled && err != nil {
+
+	cfg, err := snapshotForOneShot(configPath)
+	if err == nil {
+		err = runner(context.Background(), cfg)
+	}
+	if err != nil {
 		slog.Error("Bulletin command failed", "command", command, "error", err)
 		os.Exit(1)
 	}
-	return handled
-}
-
-// loadBulletinConfig reads the `bulletin:` section of the config file.
-func loadBulletinConfig(configPath string) (bulletin.Config, error) {
-	var cfg bulletin.Config
-	if err := loadProviderConfigFromYAML(configPath, "bulletin", &cfg); err != nil {
-		return cfg, fmt.Errorf("load bulletin config: %w", err)
-	}
-	return cfg, nil
+	return true
 }
 
 // resolveAnthropicAPIKey reads the general `anthropic:` config section and
 // resolves the API key, falling back to the ANTHROPIC_API_KEY env var. Shared by
 // any processor that summarises via Anthropic.
-func resolveAnthropicAPIKey(configPath string) (string, error) {
+func resolveAnthropicAPIKey(data []byte) (string, error) {
 	var cfg llm.Config
-	if err := loadProviderConfigFromYAML(configPath, "anthropic", &cfg); err != nil {
+	if err := decodeSection(data, "anthropic", &cfg); err != nil {
 		return "", fmt.Errorf("load anthropic config: %w", err)
 	}
 	return cfg.ResolveAPIKey(), nil
@@ -919,74 +958,66 @@ func bulletinDBPath() (string, error) {
 	return filesystem.GetDefaultPath("bulletin.db")
 }
 
-func runBulletinFetch(configPath string) error {
-	cfg, err := loadBulletinConfig(configPath)
-	if err != nil {
-		return err
-	}
+func runBulletinFetch(ctx context.Context, cfg *appConfig) error {
 	dbPath, err := bulletinDBPath()
 	if err != nil {
 		return err
 	}
-	return bulletin.Fetch(cfg, dbPath)
+	return bulletin.Fetch(ctx, cfg.Bulletin, dbPath)
 }
 
-func runBulletinGenerate(configPath string) error {
-	cfg, err := loadBulletinConfig(configPath)
-	if err != nil {
-		return err
-	}
+// runBulletinGenerate summarises the unpublished backlog into one stored
+// bulletin. slot may be empty; the label is then derived from the time of day.
+func runBulletinGenerate(ctx context.Context, cfg *appConfig, slot string) error {
 	dbPath, err := bulletinDBPath()
 	if err != nil {
 		return err
 	}
-	apiKey, err := resolveAnthropicAPIKey(configPath)
+	apiKey, err := resolveAnthropicAPIKey(cfg.raw)
 	if err != nil {
 		return err
 	}
-	return bulletin.Generate(bulletin.GenerateOptions{
-		Config: cfg,
+	return bulletin.Generate(ctx, bulletin.GenerateOptions{
+		Config: cfg.Bulletin,
 		DBPath: dbPath,
-		Slot:   CLI.BulletinGenerate.Slot,
+		Slot:   slot,
 		APIKey: apiKey,
 	})
 }
 
-func runBulletinPublish() error {
+// runBulletinPublish renders the stored bulletins. outfileFlag is the -o value
+// (or its default), resolved against the configured output directory.
+func runBulletinPublish(ctx context.Context, cfg *appConfig, outfileFlag string) error {
 	dbPath, err := bulletinDBPath()
 	if err != nil {
 		return err
 	}
 
-	outfile := resolveOutfile(CLI.BulletinPublish.Outfile)
-	feedURL := CLI.FeedBaseURL
-	if CLI.FeedBaseURL != "" {
-		if joined, err := url.JoinPath(CLI.FeedBaseURL, filepath.Base(CLI.BulletinPublish.Outfile)); err == nil {
+	outfile := resolveOutfile(cfg.OutputDir, outfileFlag)
+	feedURL := cfg.FeedBaseURL
+	if cfg.FeedBaseURL != "" {
+		if joined, err := url.JoinPath(cfg.FeedBaseURL, filepath.Base(outfileFlag)); err == nil {
 			feedURL = joined
 		}
 	}
-	return bulletin.Publish(bulletin.PublishOptions{
+	return bulletin.Publish(ctx, bulletin.PublishOptions{
 		DBPath:      dbPath,
 		Outfile:     outfile,
-		HTMLDir:     bulletinHTMLDir(),
+		HTMLDir:     bulletinHTMLDir(cfg.OutputDir),
 		FeedBaseURL: feedURL,
 	})
 }
 
-func runBulletinSummarize(configPath string) error {
-	cfg, err := loadBulletinConfig(configPath)
-	if err != nil {
-		return err
-	}
+func runBulletinSummarize(ctx context.Context, cfg *appConfig) error {
 	dbPath, err := bulletinDBPath()
 	if err != nil {
 		return err
 	}
-	apiKey, err := resolveAnthropicAPIKey(configPath)
+	apiKey, err := resolveAnthropicAPIKey(cfg.raw)
 	if err != nil {
 		return err
 	}
-	digest, err := bulletin.SummarizeDryRun(cfg, dbPath, apiKey)
+	digest, err := bulletin.SummarizeDryRun(ctx, cfg.Bulletin, dbPath, apiKey)
 	if err != nil {
 		return err
 	}
@@ -1004,7 +1035,7 @@ func runProvider(key, displayName, outfileFlag string, extraKV ...any) {
 		os.Exit(1)
 	}
 
-	outfile := resolveOutfile(outfileFlag)
+	outfile := resolveOutfile(CLI.OutputDir, outfileFlag)
 	if err := provider.GenerateFeed(outfile); err != nil {
 		args := append([]any{"output_file", outfile}, extraKV...)
 		args = append(args, "error", err)

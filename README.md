@@ -79,6 +79,47 @@ you set. This makes the command safe to run from cron every few minutes.
 When you set `output-dir`, `generate` also writes an `index.html` page and a
 `feeds.opml` file that lists every feed.
 
+### Run as a daemon
+
+```bash
+./build/feed-forge serve
+```
+
+`serve` replaces the cron entries. It runs `generate` on a tick, `bulletin-fetch`
+on an interval, and the bulletin digest (`bulletin-generate`, then
+`bulletin-publish` on success) at fixed local times. Configure the schedules in
+the `serve:` section of `config.yaml`; the defaults match the cron setup this
+command replaces.
+
+`serve` reads its global settings (`output-dir`, `feed-base-url`, and the rest)
+from `config.yaml` at startup and on every reload. Global CLI flags do not apply
+to it.
+
+Send SIGHUP to reload the configuration: the daemon validates the file first,
+applies a valid file from the next scheduled run, and keeps the previous
+configuration when the file is invalid. A changed `cache-dir` needs a restart.
+
+`validate-config` runs the same validation and exits non-zero on any error:
+
+```bash
+./build/feed-forge validate-config
+```
+
+`configs/systemd/feed-forge.service` is a ready-made systemd user unit. Its
+`ExecReload` runs `validate-config` before sending the HUP, so
+`systemctl --user reload feed-forge` fails on a broken config without touching
+the running daemon:
+
+```bash
+cp configs/systemd/feed-forge.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now feed-forge
+journalctl --user -u feed-forge -f
+```
+
+The unit needs lingering (`loginctl enable-linger <user>`, one-time) so it
+survives logout.
+
 ### Preview items
 
 ```bash
@@ -196,7 +237,8 @@ extracts the full article text, groups near-duplicate stories with SimHash, and 
 Claude for one topic-grouped digest. The result is a single Atom entry plus an HTML
 page.
 
-The pipeline has three stages. Run them from cron in this order:
+The pipeline has three stages. The `serve` daemon schedules them from the
+`serve:` config section. To run them from cron instead, use this order:
 
 ```cron
 */30 *   * * *  feed-forge bulletin-fetch                     # collect items

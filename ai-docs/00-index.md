@@ -25,7 +25,7 @@ Audience: language models/agents only. Human readability not goal. Treat docs as
 
 - Registered providers: `reddit`, `hackernews`, `fingerpori`, `feissarimokat`, `oglaf`, `tildes`, `lobsters`, `youtube`.
 - Bulletin pipeline (`internal/bulletin/`) is a separate code path, not a `FeedProvider`. See `ai-docs/07-bulletin-pipeline.md`.
-- Main command modes: provider-specific commands, `preview <provider>`, `generate`.
+- Main command modes: provider-specific commands, `preview <provider>`, `generate`, `serve` (daemon scheduler with SIGHUP reload), `validate-config`.
 - `generate` reads configured provider sections from YAML, runs providers concurrently, skips by outfile mtime + `interval`, writes `index.html` and `feeds.opml` when `output-dir` is set.
 - `BaseProvider` always opens OpenGraph DB + HTTP validator cache. Content DB optional.
 - Provider `GenerateFeed` usually delegated via `providerfeed.BuildGenerator` and `BaseProvider.SetGenerateFeedFunc`.
