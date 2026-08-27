@@ -108,7 +108,8 @@ youtube:
 # Bulletin aggregator (separate code path, not a registry provider).
 # Polls high-frequency source feeds, extracts full text, de-duplicates
 # near-identical stories via SimHash, then publishes an LLM-summarised digest as
-# a single Atom entry. Three cron steps, in this order, plus one debug command:
+# a single Atom entry. The `serve` daemon schedules the three stages (see the
+# serve: section below). To run them from cron instead, in this order:
 #   */30 *    * * *  feed-forge bulletin-fetch                    # accumulate items all day
 #   45   7,17 * * *  feed-forge bulletin-generate                 # summarise the backlog (calls the model)
 #   50   7,17 * * *  feed-forge bulletin-publish -o bulletin.xml  # render HTML + Atom (no model, no writes)
@@ -126,3 +127,19 @@ bulletin:
       name: Ars Technica # Display name used as the source link text in the digest
     - url: https://www.theverge.com/rss/index.xml
       name: The Verge
+
+# Schedules for the `serve` daemon, which replaces the cron entries:
+#   */5  *    * * *  feed-forge generate
+#   */30 *    * * *  feed-forge bulletin-fetch
+#   45   7,17 * * *  feed-forge bulletin-generate && feed-forge bulletin-publish
+# The defaults below reproduce that cron setup; the section may be omitted
+# entirely. One-shot commands ignore this section. `serve` reads its global
+# settings (output-dir, feed-base-url, ...) from this file at startup and on
+# every SIGHUP reload; global CLI flags do not apply to it. SIGHUP re-validates
+# the file and applies it from the next scheduled run; an invalid file is
+# rejected and the previous configuration stays active. A changed cache-dir
+# needs a restart, not a reload.
+serve:
+  generate-tick: 5m # how often generate runs (per-provider `interval` still gates each feed)
+  bulletin-fetch-interval: 30m # how often bulletin-fetch runs
+  bulletin-slots: ["07:45", "17:45"] # local times to run bulletin-generate, then bulletin-publish; [] disables

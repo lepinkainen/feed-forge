@@ -63,23 +63,23 @@ Function: `previewFeed(providerName, limit, index, configPath)`
 
 ## `generate` flow
 
-Functions: `generateAll`, `configuredProviders`, `generateProvider`, `generateFeedIndex`, `generateOPML`
+Functions: `generateAll`, `configuredProvidersFromBytes`, `generateProvider`, `generateFeedIndex`, `generateOPML`. All take a `*appConfig` snapshot (`cmd/feed-forge/appconfig.go`): raw YAML bytes plus resolved globals. One-shot commands build it with `snapshotForOneShot` (globals from Kong-parsed CLI); the `serve` daemon builds it with `validateConfig` and swaps it atomically on SIGHUP.
 
-`configuredProviders(configPath)`:
+`configuredProvidersFromBytes(data)`:
 
-- reads YAML into `map[string]any`
+- parses YAML into `map[string]any`
 - keeps keys that exist in `providers.DefaultRegistry`
-- ignores unknown top-level keys like `output-dir`, `feed-base-url`, `cache-dir`
+- ignores unknown top-level keys like `output-dir`, `feed-base-url`, `cache-dir`, `serve`
 
-`generateAll(configPath)`:
+`generateAll(cfg)`:
 
 - runs each configured provider concurrently using goroutines
 - stores `feedResult{Provider, FeedName, Filename, Status}`
 - statuses: `generated`, `skipped`, `failed`
-- after all complete: `generateFeedIndex(results)`
-- returns error if any provider failed
+- after all complete: `generateFeedIndex(cfg, results)`
+- returns error if any provider failed hard (transient upstream 4xx/5xx do not count)
 
-`generateProvider(configPath, name)`:
+`generateProvider(cfg, name)`:
 
 1. registry lookup
 2. create config via `ConfigFactory`
@@ -96,7 +96,7 @@ Functions: `generateAll`, `configuredProviders`, `generateProvider`, `generateFe
 
 `generateFeedIndex`:
 
-- no-op unless `CLI.OutputDir != ""`
+- no-op unless `cfg.OutputDir != ""`
 - includes non-failed feeds with filename set
 - sorts by provider name
 - template: `feed-index.html.tmpl` via `feed.ReadTemplateContent`
@@ -111,10 +111,19 @@ Functions: `generateAll`, `configuredProviders`, `generateProvider`, `generateFe
 - `text`/`title` use provider display name (`ProviderInfo.Preview.ProviderName`) so FreshRSS feed names match processor names
 - `xmlUrl` uses `feed-base-url` joined with each feed filename
 
+## `serve` daemon (`cmd/feed-forge/serve.go`)
+
+- `serve` command: internal scheduler replacing cron. Three job loops (generate tick, bulletin-fetch interval, bulletin digest time-of-day slots) plus a SIGHUP reload loop; schedules come from the `serve:` config section (`serveConfig` in appconfig.go).
+- Config snapshot behind `atomic.Pointer[appConfig]`; each loop iteration loads it, so reloads apply from the next run. Invalid reload keeps the old snapshot and logs.
+- `validate-config` command runs the shared `validateConfig(data)`.
+- Bulletin stages serialize on `daemon.bulletinMu`: digest blocks, fetch `TryLock`s and skips.
+- SIGTERM/SIGINT via `signal.NotifyContext`; bulletin stages take ctx; provider runs are not cancellable and are waited out.
+- systemd user unit: `configs/systemd/feed-forge.service` (`ExecReload` = validate-config then `kill -HUP`).
+
 ## Config decoding
 
 - Kong YAML loads root + direct command fields for direct commands.
-- `generate` and `preview` decode provider section manually via `yaml.Node.Decode(target)`.
+- `generate` and `preview` decode provider section manually via `yaml.Node.Decode(target)` (`decodeSection` in appconfig.go).
 - Provider config structs embed `providers.GenerateConfig` with `yaml:",inline"` to receive `outfile` and `interval`.
 - Config keys use kebab-case YAML tags (`min-score`, `feed-url`, etc.).
 
