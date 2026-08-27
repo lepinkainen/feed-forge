@@ -69,11 +69,10 @@ type GenerateOptions struct {
 // It performs no rendering: bulletin-publish turns stored bulletins into HTML and
 // the Atom feed. Running Generate with no unpublished items is an idempotent
 // no-op.
-func Generate(opts GenerateOptions) error {
+func Generate(ctx context.Context, opts GenerateOptions) error {
 	cfg := opts.Config.withDefaults()
-	ctx := context.Background()
 
-	store, err := NewStore(opts.DBPath)
+	store, err := NewStore(opts.DBPath) //nolint:contextcheck // connection bootstrap, not request-scoped I/O
 	if err != nil {
 		return err
 	}
@@ -141,10 +140,8 @@ const feedEntryLimit = 20
 // It calls no model and writes nothing to the database, so it can be re-run at
 // any time to rebuild every page from existing data (e.g. after a template
 // change).
-func Publish(opts PublishOptions) error {
-	ctx := context.Background()
-
-	store, err := NewStore(opts.DBPath)
+func Publish(ctx context.Context, opts PublishOptions) error {
+	store, err := NewStore(opts.DBPath) //nolint:contextcheck // connection bootstrap, not request-scoped I/O
 	if err != nil {
 		return err
 	}
@@ -357,12 +354,10 @@ func writeLatestHTML(htmlDir string, b Row) error {
 // SummarizeDryRun clusters and summarises the current unpublished items and
 // returns the digest without writing any feed or touching the database. Backs
 // the bulletin-summarize debug command for prompt/model iteration.
-func SummarizeDryRun(cfg Config, dbPath, apiKey string) (string, error) {
+func SummarizeDryRun(ctx context.Context, cfg Config, dbPath, apiKey string) (string, error) {
 	cfg = cfg.withDefaults()
 
-	ctx := context.Background()
-
-	store, err := NewStore(dbPath)
+	store, err := NewStore(dbPath) //nolint:contextcheck // connection bootstrap, not request-scoped I/O
 	if err != nil {
 		return "", err
 	}

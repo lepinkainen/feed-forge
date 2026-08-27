@@ -78,7 +78,7 @@ func TestFetchEndToEnd(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "bulletin.db")
 	cfg := Config{Feeds: []FeedSource{{URL: srv.URL + "/feed", Name: "Example News"}}}
 
-	if err := Fetch(cfg, dbPath); err != nil {
+	if err := Fetch(context.Background(), cfg, dbPath); err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
 
@@ -111,7 +111,7 @@ func TestFetchEndToEnd(t *testing.T) {
 	}
 
 	// A second run must skip the already-seen URL rather than re-inserting.
-	if err := Fetch(cfg, dbPath); err != nil {
+	if err := Fetch(context.Background(), cfg, dbPath); err != nil {
 		t.Fatalf("second Fetch: %v", err)
 	}
 	items, err = store.UnpublishedItems(context.Background())

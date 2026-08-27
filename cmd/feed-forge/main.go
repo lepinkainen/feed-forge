@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	xmlenc "encoding/xml"
 	"fmt"
 	"html/template"
@@ -928,7 +929,7 @@ func runBulletinFetch(configPath string) error {
 	if err != nil {
 		return err
 	}
-	return bulletin.Fetch(cfg, dbPath)
+	return bulletin.Fetch(context.Background(), cfg, dbPath)
 }
 
 func runBulletinGenerate(configPath string) error {
@@ -944,7 +945,7 @@ func runBulletinGenerate(configPath string) error {
 	if err != nil {
 		return err
 	}
-	return bulletin.Generate(bulletin.GenerateOptions{
+	return bulletin.Generate(context.Background(), bulletin.GenerateOptions{
 		Config: cfg,
 		DBPath: dbPath,
 		Slot:   CLI.BulletinGenerate.Slot,
@@ -965,7 +966,7 @@ func runBulletinPublish() error {
 			feedURL = joined
 		}
 	}
-	return bulletin.Publish(bulletin.PublishOptions{
+	return bulletin.Publish(context.Background(), bulletin.PublishOptions{
 		DBPath:      dbPath,
 		Outfile:     outfile,
 		HTMLDir:     bulletinHTMLDir(),
@@ -986,7 +987,7 @@ func runBulletinSummarize(configPath string) error {
 	if err != nil {
 		return err
 	}
-	digest, err := bulletin.SummarizeDryRun(cfg, dbPath, apiKey)
+	digest, err := bulletin.SummarizeDryRun(context.Background(), cfg, dbPath, apiKey)
 	if err != nil {
 		return err
 	}
