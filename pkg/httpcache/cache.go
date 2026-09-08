@@ -65,34 +65,32 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 	}
 
 	var prev api.CacheValidators
-	if store != nil {
-		if validators, ok := store.GetContext(ctx, url); ok {
-			prev = validators
-		}
+	// Validator-only rows can predate body caching. Without a body a 304
+	// cannot satisfy this caller, so fetch unconditionally to populate it.
+	// Store accessors accept nil and return zero values for cache misses.
+	cached, hasBody := store.getResponseContext(ctx, url)
+	if hasBody {
+		prev = cached.validators
 	}
 
 	resp, getErr := client.GetConditional(ctx, url, prev, headers)
 	if getErr != nil {
-		if store != nil {
-			if cached, fetchedAt, ok := store.GetBodyContext(ctx, url); ok {
-				age := time.Since(fetchedAt)
-				if maxStale > 0 && age > maxStale {
-					return nil, false, fmt.Errorf("upstream failing and cached copy is %s old (max %s): %w", age.Round(time.Minute), maxStale, getErr)
-				}
-				return cached, true, getErr
+		if hasBody {
+			age := time.Since(cached.fetchedAt)
+			if maxStale > 0 && age > maxStale {
+				return nil, false, fmt.Errorf("upstream failing and cached copy is %s old (max %s): %w", age.Round(time.Minute), maxStale, getErr)
 			}
+			return cached.body, true, getErr
 		}
 		return nil, false, getErr
 	}
 
 	if resp.NotModified {
-		if store != nil {
-			if cached, _, ok := store.GetBodyContext(ctx, url); ok {
-				if touchErr := store.TouchContext(ctx, url); touchErr != nil {
-					slog.Warn("Failed to refresh cached HTTP body timestamp", "url", url, "error", touchErr)
-				}
-				return cached, false, nil
+		if hasBody {
+			if touchErr := store.TouchContext(ctx, url); touchErr != nil {
+				slog.Warn("Failed to refresh cached HTTP body timestamp", "url", url, "error", touchErr)
 			}
+			return cached.body, false, nil
 		}
 		return nil, false, ErrNotModified
 	}
@@ -249,27 +247,42 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 // GetBodyContext returns the cached response body for URL and the time it was
 // last fetched or verified via 304, if one was stored.
 func (s *Store) GetBodyContext(ctx context.Context, url string) ([]byte, time.Time, bool) {
+	cached, ok := s.getResponseContext(ctx, url)
+	return cached.body, cached.fetchedAt, ok
+}
+
+type cachedResponse struct {
+	validators api.CacheValidators
+	body       []byte
+	fetchedAt  time.Time
+}
+
+// Read the body and its validators together so a conditional request always
+// validates the same response that the caller retains for a 304 or error.
+func (s *Store) getResponseContext(ctx context.Context, url string) (cachedResponse, bool) {
 	if s == nil || s.handle == nil || url == "" {
-		return nil, time.Time{}, false
+		return cachedResponse{}, false
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var body []byte
+	var cached cachedResponse
 	var fetchedAt sql.NullTime
-	err := s.handle.QueryRowContext(ctx, `SELECT body, updated_at FROM http_validators WHERE url = ?`, url).Scan(&body, &fetchedAt)
+	err := s.handle.QueryRowContext(ctx, `SELECT etag, last_modified, body, updated_at FROM http_validators WHERE url = ?`, url).
+		Scan(&cached.validators.ETag, &cached.validators.LastModified, &cached.body, &fetchedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, time.Time{}, false
+		return cachedResponse{}, false
 	}
 	if err != nil {
 		slog.Warn("Failed to read cached HTTP body", "url", url, "error", err)
-		return nil, time.Time{}, false
+		return cachedResponse{}, false
 	}
-	if len(body) == 0 {
-		return nil, time.Time{}, false
+	if len(cached.body) == 0 {
+		return cachedResponse{}, false
 	}
-	return body, fetchedAt.Time, true
+	cached.fetchedAt = fetchedAt.Time
+	return cached, true
 }
 
 // TouchContext refreshes the updated_at timestamp for URL, marking the cached
@@ -318,7 +331,8 @@ func (s *Store) Save(url string, v api.CacheValidators) error {
 	return s.SaveContext(context.Background(), url, v)
 }
 
-// SaveContext stores validators for URL.
+// SaveContext stores validators for URL and invalidates any previously cached
+// body, because the new response body was not supplied with these validators.
 func (s *Store) SaveContext(ctx context.Context, url string, v api.CacheValidators) error {
 	if s == nil || s.handle == nil || url == "" {
 		return nil
@@ -329,12 +343,13 @@ func (s *Store) SaveContext(ctx context.Context, url string, v api.CacheValidato
 
 	_, err := s.handle.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, updated_at)
-	VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+	VALUES (?, ?, ?, ?)
 	ON CONFLICT(url) DO UPDATE SET
 		etag = excluded.etag,
 		last_modified = excluded.last_modified,
-		updated_at = CURRENT_TIMESTAMP
-	`, url, v.ETag, v.LastModified)
+		body = NULL,
+		updated_at = excluded.updated_at
+	`, url, v.ETag, v.LastModified, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("save HTTP validators: %w", err)
 	}

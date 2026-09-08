@@ -59,6 +59,76 @@ func TestStoreEmptyValidatorsDisableGet(t *testing.T) {
 	}
 }
 
+func TestCachedGetInvalidatesPreviouslyCachedBody(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	var hits int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits == 1 {
+			w.Header().Set("ETag", `"v1"`)
+			_, _ = w.Write([]byte("old body"))
+			return
+		}
+		if r.Header.Get("If-None-Match") == `"v2"` {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"v2"`)
+		_, _ = w.Write([]byte("new body"))
+	}))
+	defer server.Close()
+	client := api.NewGenericClient()
+
+	if body, _, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0); err != nil || string(body) != "old body" {
+		t.Fatalf("initial fetch = (%q, %v)", body, err)
+	}
+	if body, err := CachedGet(t.Context(), client, store, server.URL, nil); err != nil || string(body) != "new body" {
+		t.Fatalf("validator-only fetch = (%q, %v)", body, err)
+	}
+	if body, _, ok := store.GetBodyContext(t.Context(), server.URL); ok {
+		t.Fatalf("validator-only save retained body %q", body)
+	}
+	// The body-aware call must fetch v2 unconditionally, then reuse it on 304.
+	for range 2 {
+		body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0)
+		if err != nil || stale || string(body) != "new body" {
+			t.Fatalf("body-aware fetch = (%q, stale=%v, err=%v)", body, stale, err)
+		}
+	}
+}
+
+func TestCachedGetWithStaleRetainsValidatedResponse(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("If-None-Match"); got != `"v1"` {
+			t.Errorf("If-None-Match = %q, want v1", got)
+		}
+		// Another fetch replaces the row while this request validates v1.
+		if err := store.SaveBodyContext(r.Context(), "http://"+r.Host, api.CacheValidators{ETag: `"v2"`}, []byte("other response")); err != nil {
+			t.Errorf("replace cached response: %v", err)
+		}
+		w.WriteHeader(http.StatusNotModified)
+	}))
+	defer server.Close()
+	if err := store.SaveBodyContext(t.Context(), server.URL, api.CacheValidators{ETag: `"v1"`}, []byte("validated response")); err != nil {
+		t.Fatal(err)
+	}
+	body, stale, err := CachedGetWithStale(t.Context(), api.NewGenericClient(), store, server.URL, nil, 0)
+	if err != nil || stale || string(body) != "validated response" {
+		t.Fatalf("304 = (%q, stale=%v, err=%v), want validated response", body, stale, err)
+	}
+}
+
 func TestCachedGetSavesValidatorsAndReturnsNotModified(t *testing.T) {
 	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
 	if err != nil {
@@ -313,6 +383,44 @@ func TestCachedGetWithStaleNotModifiedRefreshesTimestamp(t *testing.T) {
 	body, stale, err = CachedGetWithStale(t.Context(), client, store, server.URL, nil, 48*time.Hour)
 	if err == nil || !stale || string(body) != "fresh feed" {
 		t.Fatalf("after 304 = (%q, stale=%v, err=%v), want cached body, stale=true, underlying error", body, stale, err)
+	}
+}
+
+func TestCachedGetWithStaleUpgradesValidatorOnlyCache(t *testing.T) {
+	store, err := NewStore(filepath.Join(t.TempDir(), "http_cache.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	var conditional bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conditional = r.Header.Get("If-None-Match") != "" || r.Header.Get("If-Modified-Since") != ""
+		if conditional {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		w.Header().Set("ETag", `"v2"`)
+		_, _ = w.Write([]byte("recovered body"))
+	}))
+	defer server.Close()
+	if err := store.Save(server.URL, api.CacheValidators{ETag: `"v1"`, LastModified: "Mon, 07 Sep 2026 12:00:00 GMT"}); err != nil {
+		t.Fatal(err)
+	}
+	client := api.NewGenericClient()
+	body, stale, err := CachedGetWithStale(t.Context(), client, store, server.URL, nil, 0)
+	if err != nil || stale || string(body) != "recovered body" {
+		t.Fatalf("recovery = (%q, %v, %v)", body, stale, err)
+	}
+	if conditional {
+		t.Error("sent validators without a cached body")
+	}
+	cached, _, ok := store.GetBodyContext(t.Context(), server.URL)
+	if !ok || string(cached) != "recovered body" {
+		t.Fatalf("cached body = %q, found=%v", cached, ok)
+	}
+	validators, ok := store.Get(server.URL)
+	if !ok || validators.ETag != `"v2"` {
+		t.Fatalf("validators = %+v, found=%v", validators, ok)
 	}
 }
 
