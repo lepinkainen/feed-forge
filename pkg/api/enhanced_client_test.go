@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,7 +22,7 @@ func TestNewEnhancedClient(t *testing.T) {
 			config: &EnhancedClientConfig{},
 			want: func(ec *EnhancedClient) bool {
 				return ec.client.Timeout == 30*time.Second &&
-					ec.userAgent == "FeedForge/"+version.Version &&
+					ec.userAgent == "feed-forge/"+version.Version &&
 					ec.rateLimiter != nil &&
 					ec.retryPolicy != nil &&
 					ec.defaultHeaders != nil
@@ -163,7 +162,7 @@ func TestEnhancedClient_Get(t *testing.T) {
 		{
 			name: "user agent is set correctly",
 			serverResponse: func(w http.ResponseWriter, r *http.Request) {
-				if !strings.Contains(r.Header.Get("User-Agent"), "FeedForge") {
+				if r.UserAgent() != "feed-forge/"+version.Version {
 					w.WriteHeader(http.StatusBadRequest)
 					return
 				}
@@ -262,7 +261,7 @@ func TestNewRedditClient(t *testing.T) {
 		t.Errorf("NewRedditClient() didn't use provided base client")
 	}
 
-	if !strings.Contains(client.userAgent, "theshrike79") {
+	if client.userAgent != "feed-forge/"+version.Version {
 		t.Errorf("NewRedditClient() user agent incorrect: %s", client.userAgent)
 	}
 
@@ -278,7 +277,7 @@ func TestNewHackerNewsClient(t *testing.T) {
 		t.Errorf("NewHackerNewsClient() timeout incorrect")
 	}
 
-	if client.userAgent != "FeedForge/"+version.Version {
+	if client.userAgent != "feed-forge/"+version.Version {
 		t.Errorf("NewHackerNewsClient() user agent incorrect: %s", client.userAgent)
 	}
 
@@ -294,7 +293,7 @@ func TestNewGenericClient(t *testing.T) {
 		t.Errorf("NewGenericClient() timeout incorrect")
 	}
 
-	if client.userAgent != "FeedForge/"+version.Version {
+	if client.userAgent != "feed-forge/"+version.Version {
 		t.Errorf("NewGenericClient() user agent incorrect: %s", client.userAgent)
 	}
 
@@ -351,5 +350,32 @@ func TestEnhancedClient_GetConditional(t *testing.T) {
 	}
 	if got := hits.Load() - beforeFail; got != 2 {
 		t.Fatalf("retry hits = %d, want 2", got)
+	}
+}
+
+func TestClientFactoriesSendCanonicalUserAgent(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		newClient func() *EnhancedClient
+	}{
+		{"default", func() *EnhancedClient { return NewEnhancedClient(&EnhancedClientConfig{}) }},
+		{"generic", NewGenericClient},
+		{"hackernews", NewHackerNewsClient},
+		{"reddit", func() *EnhancedClient { return NewRedditClient(nil) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if got := r.UserAgent(); got != "feed-forge/"+version.Version {
+					t.Errorf("User-Agent = %q", got)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer server.Close()
+			resp, err := tc.newClient().Get(server.URL, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+		})
 	}
 }

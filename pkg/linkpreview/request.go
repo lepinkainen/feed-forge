@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lepinkainen/feed-forge/pkg/version"
 	trafilatura "github.com/markusmobius/go-trafilatura"
 	"golang.org/x/net/html"
 )
@@ -114,7 +115,7 @@ func (f *Fetcher) buildFetchRequest(ctx context.Context, targetURL, etag, lastMo
 	if err != nil {
 		return nil, useProxy, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; FeedForge/1.0; OpenGraph fetcher)")
+	req.Header.Set("User-Agent", version.UserAgent())
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("Accept-Encoding", "gzip")

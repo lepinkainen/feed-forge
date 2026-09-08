@@ -23,11 +23,9 @@ func NewRedditAPI(feedURL, proxySecret, feedID, username string) *RedditAPI {
 	// Reddit bans generic/fake-account User-Agents. Identify with the real
 	// account (Reddit's rule: unique, descriptive, with your username as
 	// contact). Fall back to a bare product UA only when username is unset.
-	ua := "feed-forge/" + version.Version
 	if username != "" {
-		ua = fmt.Sprintf("feed-forge/%s (by /u/%s)", version.Version, username)
+		enhancedClient.SetUserAgent(fmt.Sprintf("%s (by /u/%s)", version.UserAgent(), username))
 	}
-	enhancedClient.SetUserAgent(ua)
 
 	if proxySecret != "" {
 		enhancedClient.SetDefaultHeader("X-Proxy-Secret", proxySecret)

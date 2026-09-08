@@ -36,7 +36,7 @@ $url = 'https://www.reddit.com/.json?' . http_build_query([
 // account as contact; fall back to a bare product UA if none was sent.
 $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 if ($ua === '') {
-    $ua = 'feed-forge/1.0';
+    $ua = 'feed-forge/unknown';
 }
 
 $ch = curl_init($url);

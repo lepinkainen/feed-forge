@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/testutil"
+	"github.com/lepinkainen/feed-forge/pkg/version"
 	"golang.org/x/net/html"
 )
 
@@ -202,6 +203,9 @@ func TestFetchFreshDataAndFetchDataSuccess(t *testing.T) {
 	var hits atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
+		if got, want := r.UserAgent(), "feed-forge/"+version.Version; got != want {
+			t.Errorf("User-Agent = %q, want %q", got, want)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write([]byte(`<!doctype html><html><head>
 			<title>Fallback title</title>
@@ -264,6 +268,9 @@ func TestFetchFreshData_GzipAndProxy(t *testing.T) {
 	var sawTarget atomic.Bool
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		proxyHits.Add(1)
+		if got, want := r.UserAgent(), "feed-forge/"+version.Version; got != want {
+			t.Errorf("proxy User-Agent = %q, want %q", got, want)
+		}
 		if r.Header.Get("X-Proxy-Secret") == "secret" {
 			sawSecret.Store(true)
 		}
