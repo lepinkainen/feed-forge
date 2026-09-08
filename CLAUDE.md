@@ -106,8 +106,9 @@ embeds it. Most providers build `GenerateFeed` with `providerfeed.BuildGenerator
 install it with `BaseProvider.SetGenerateFeedFunc`. Each provider self-registers in an
 `init()` function with `providers.MustRegister`. The registry is the source of truth
 for which providers exist; at present the set is `reddit`, `hackernews`, `fingerpori`,
-`feissarimokat`, `oglaf`, `tildes`, `lobsters`, `lemmy`, and `youtube`, but check the
-`MustRegister` calls rather than trusting this list. The code is in `internal/<name>/`.
+`feissarimokat`, `oglaf`, `xkcd`, `tildes`, `lobsters`, `lemmy`, `youtube`, and
+`slashdot`, but check the `MustRegister` calls rather than trusting this list. The
+code is in `internal/<name>/`.
 The Reddit package directory is `internal/reddit-json/`.
 
 For the full architecture — provider contract, registry, package roles, feed

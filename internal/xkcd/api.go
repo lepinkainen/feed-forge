@@ -2,7 +2,6 @@ package xkcd
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"html"
 	"log/slog"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
+	"github.com/lepinkainen/feed-forge/pkg/xmlutil"
 )
 
 // FeedURL is the xkcd RSS endpoint. It is a var so tests can point it at an
@@ -36,8 +36,8 @@ func fetchItems(store *httpcache.Store) ([]Item, error) {
 		return nil, fmt.Errorf("fetch xkcd feed: %w", err)
 	}
 
-	var rss RSS
-	if err := xml.Unmarshal(body, &rss); err != nil {
+	rss, err := xmlutil.Decode[RSS](body)
+	if err != nil {
 		return nil, fmt.Errorf("parse xkcd rss: %w", err)
 	}
 

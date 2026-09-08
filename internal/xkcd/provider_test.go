@@ -84,3 +84,26 @@ func TestParsePubDate(t *testing.T) {
 		t.Error("parsePubDate(\"\") error = nil, want error")
 	}
 }
+
+// TestFetchItemsHonoursDeclaredCharset guards the RSS path against a feed
+// that declares a non-UTF-8 encoding. A bare xml.Unmarshal has no
+// CharsetReader and would reject the whole document.
+func TestFetchItemsHonoursDeclaredCharset(t *testing.T) {
+	body := "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><rss version=\"2.0\"><channel><title>xkcd</title>" +
+		"<item><title>Caf\xe9</title><link>https://xkcd.com/1/</link><description>&lt;img src=\"https://imgs.xkcd.com/comics/a.png\" title=\"t\" alt=\"t\" /&gt;</description><pubDate>Mon, 08 Sep 2026 04:00:00 -0000</pubDate><guid>https://xkcd.com/1/</guid></item>" +
+		"</channel></rss>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	defer srv.Close()
+
+	orig := FeedURL
+	FeedURL = srv.URL
+	t.Cleanup(func() { FeedURL = orig })
+
+	items, err := fetchItems(nil)
+	if err != nil {
+		t.Fatalf("fetchItems() error = %v", err)
+	}
+	if len(items) != 1 || items[0].Title() != "Café" {
+		t.Fatalf("items = %+v", items)
+	}
+}

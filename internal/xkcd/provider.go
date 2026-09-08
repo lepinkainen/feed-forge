@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
-	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -70,16 +69,9 @@ func NewProvider() (providers.FeedProvider, error) {
 	return p, nil
 }
 
-func (p *Provider) httpCacheStore() *httpcache.Store {
-	if p == nil || p.BaseProvider == nil {
-		return nil
-	}
-	return p.HTTPCache
-}
-
 // FetchItems fetches the xkcd RSS feed, newest first, honoring limit (0 = all).
 func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
-	items, err := fetchItems(p.httpCacheStore())
+	items, err := fetchItems(p.HTTPCacheStore())
 	if err != nil {
 		return nil, err
 	}

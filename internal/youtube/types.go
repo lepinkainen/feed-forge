@@ -4,15 +4,19 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/atom"
 )
 
 // atomFeed mirrors the subset of YouTube's channel Atom feed used by Feed Forge.
+// Embedding atom.Feed requires the root <feed> to be in the Atom namespace,
+// which YouTube's feed declares.
 type atomFeed struct {
-	Title     string      `xml:"title"`
-	ChannelID string      `xml:"channelId"`
-	Author    atomAuthor  `xml:"author"`
-	Links     []atomLink  `xml:"link"`
-	Entries   []atomEntry `xml:"entry"`
+	Title     string     `xml:"title"`
+	ChannelID string     `xml:"channelId"`
+	Author    atomAuthor `xml:"author"`
+	Links     []atomLink `xml:"link"`
+	atom.Feed[atomEntry]
 }
 
 type atomEntry struct {
@@ -22,20 +26,14 @@ type atomEntry struct {
 	Title     string     `xml:"title"`
 	Links     []atomLink `xml:"link"`
 	Author    atomAuthor `xml:"author"`
-	Published time.Time  `xml:"published"`
-	Updated   time.Time  `xml:"updated"`
+	Published atom.Time  `xml:"published"`
+	Updated   atom.Time  `xml:"updated"`
 	Media     mediaGroup `xml:"group"`
 }
 
-type atomLink struct {
-	Rel  string `xml:"rel,attr"`
-	Href string `xml:"href,attr"`
-}
+type atomLink = atom.Link
 
-type atomAuthor struct {
-	Name string `xml:"name"`
-	URI  string `xml:"uri"`
-}
+type atomAuthor = atom.Person
 
 type mediaGroup struct {
 	Title       string         `xml:"title"`
@@ -67,10 +65,8 @@ type mediaStatistics struct {
 }
 
 func (e *atomEntry) alternateHref() string {
-	for _, l := range e.Links {
-		if l.Rel == "alternate" || l.Rel == "" {
-			return l.Href
-		}
+	if href := atom.AlternateHref(e.Links); href != "" {
+		return href
 	}
 	if e.VideoID == "" {
 		return ""
@@ -137,9 +133,9 @@ func (i *Item) CommentCount() int {
 // CreatedAt returns the video's published time, falling back to updated time.
 func (i *Item) CreatedAt() time.Time {
 	if !i.entry.Published.IsZero() {
-		return i.entry.Published
+		return i.entry.Published.Time
 	}
-	return i.entry.Updated
+	return i.entry.Updated.Time
 }
 
 // Categories returns YouTube plus channel title categories.

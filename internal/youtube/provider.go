@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/lepinkainen/feed-forge/pkg/feedmeta"
-	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -88,13 +87,6 @@ func NewYouTubeProvider(feedURLs []string, limit int, includeShorts bool) (provi
 	return p, nil
 }
 
-func (p *Provider) httpCacheStore() *httpcache.Store {
-	if p == nil || p.BaseProvider == nil {
-		return nil
-	}
-	return p.HTTPCache
-}
-
 func (p *Provider) feedConfig() feedmeta.Config {
 	cfg := previewInfo.Config
 	if len(p.FeedURLs) == 1 && isYouTubeFeedURL(p.FeedURLs[0]) {
@@ -112,7 +104,7 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 	var lastErr error
 	failed := 0
 	for _, feedURL := range p.FeedURLs {
-		feed, err := fetchAtomFeed(p.httpCacheStore(), feedURL)
+		feed, err := fetchAtomFeed(p.HTTPCacheStore(), feedURL)
 		if err != nil {
 			// Only reached when there is no cached copy or it exceeded
 			// maxStaleAge — a real outage worth surfacing, not a transient blip.

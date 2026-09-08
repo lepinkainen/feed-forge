@@ -38,6 +38,7 @@ import (
 	"github.com/lepinkainen/feed-forge/internal/lobsters"
 	"github.com/lepinkainen/feed-forge/internal/oglaf"
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
+	"github.com/lepinkainen/feed-forge/internal/slashdot"
 	"github.com/lepinkainen/feed-forge/internal/tildes"
 	"github.com/lepinkainen/feed-forge/internal/xkcd"
 	"github.com/lepinkainen/feed-forge/internal/youtube"
@@ -89,7 +90,7 @@ var CLI struct {
 	} `cmd:"xkcd" name:"xkcd" help:"Generate RSS feed from xkcd comics."`
 
 	Preview struct {
-		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, tildes, lobsters, lemmy, youtube)."`
+		Provider string `arg:"" name:"provider" help:"Provider name (reddit, hackernews, fingerpori, feissarimokat, oglaf, xkcd, tildes, lobsters, lemmy, youtube, slashdot)."`
 		Limit    int    `help:"Maximum number of items to fetch (0 = provider default)." default:"0"`
 		Index    int    `help:"Output XML for specific item index (0-based) to stdout" default:"-1"`
 	} `cmd:"preview" help:"Preview feed items interactively for any registered provider."`
@@ -98,6 +99,11 @@ var CLI struct {
 		FeedURL  string `help:"Oglaf RSS feed URL" default:"https://www.oglaf.com/feeds/rss/"`
 		Interval string `help:"Minimum time between regenerations" yaml:"interval"`
 	} `cmd:"oglaf" help:"Generate RSS feed from Oglaf comics."`
+
+	Slashdot struct {
+		Outfile  string `help:"Output file path" short:"o" default:"slashdot.xml" yaml:"outfile"`
+		Interval string `help:"Minimum time between regenerations" default:"30m" yaml:"interval"`
+	} `cmd:"slashdot" help:"Generate Atom feed from Slashdot."`
 
 	Tildes struct {
 		Outfile  string   `help:"Output file path" short:"o" default:"tildes.xml"`
@@ -273,6 +279,13 @@ func buildProviderConfig(name string) any {
 			},
 			Topic:  CLI.Tildes.Topic,
 			Topics: CLI.Tildes.Topics,
+		}
+	case "slashdot":
+		return &slashdot.Config{
+			GenerateConfig: providers.GenerateConfig{
+				Outfile:  CLI.Slashdot.Outfile,
+				Interval: CLI.Slashdot.Interval,
+			},
 		}
 	case "lobsters":
 		return &lobsters.Config{
@@ -816,6 +829,7 @@ func providerCmds() map[string]providerSpec {
 		"xkcd":          {"xkcd", "xkcd", CLI.XKCD.Outfile, nil},
 		"oglaf":         {"oglaf", "Oglaf", CLI.Oglaf.Outfile, nil},
 		"tildes":        {"tildes", "Tildes", CLI.Tildes.Outfile, nil},
+		"slashdot":      {"slashdot", "Slashdot", CLI.Slashdot.Outfile, nil},
 		"lobsters":      {"lobsters", "Lobsters", CLI.Lobsters.Outfile, nil},
 		"lemmy":         {"lemmy", "Lemmy", CLI.Lemmy.Outfile, nil},
 		"youtube":       {"youtube", "YouTube", CLI.YouTube.Outfile, nil},

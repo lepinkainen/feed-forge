@@ -70,6 +70,12 @@ tildes:
   outfile: tildes.xml
   interval: 30m
 
+# Slashdot front-page provider configuration (canonical Atom feed)
+# Slashdot requests at least 30 minutes between feed requests.
+slashdot:
+  outfile: slashdot.xml
+  interval: 30m
+
 # Lobsters provider configuration
 lobsters:
   outfile: lobsters.xml

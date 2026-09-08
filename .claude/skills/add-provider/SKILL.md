@@ -1,254 +1,113 @@
 ---
 name: add-provider
-description: Add a new feed provider to feed-forge. Use when the user asks to "add a provider", "support a new feed source", "wire up <site> feed", "create a new feed source", or anything else that means a new entry in internal/<name>/ that implements providers.FeedProvider and self-registers with the global registry.
+description: Add a new feed source to feed-forge, including its provider package, registry entry, CLI and YAML configuration, Atom output, and tests.
 ---
 
-# Add a new feed-forge provider
+# Add a feed-forge provider
 
-This project is a unified RSS/Atom feed generator with a provider registry. Every source (Hacker News, Tildes, YouTube, Oglaf, Feissarimokat, Fingerpori, …) is a self-contained package in `internal/<name>/` that:
+Use the [provider guide](../../../docs/adding-a-provider.md) for current code examples
+and the detailed contracts. Read its relevant sections before implementation;
+make sure API names and behavior match the repository source. This skill is the
+integration checklist, not a second copy of the guide's implementation examples.
 
-1. Implements `providers.FeedProvider`.
-2. Self-registers in an `init()` via `providers.MustRegister`.
-3. Reuses the shared feed generator in `pkg/providerfeed` instead of writing its own Atom serialization.
+## Choose the Source
 
-Follow the steps below in order. Pick the closest existing provider to copy:
+Inspect an upstream response and its polling policy. Decide the format, whether a
+content database is needed, whether there are multiple feeds, and whether article
+and discussion URLs differ. Keep a canonical URL in code unless source selection
+is part of the requested feature.
 
-- **RSS comic / simple RSS** (single feed, no score or comments, image in the item) — `internal/feissarimokat/` is the closest match. Start here for anything shaped like an RSS comic.
-- **Read-only Atom passthrough** — `internal/tildes/` is the cleanest example.
-- **Multi-feed fan-out** — `internal/youtube/` (`feed-urls`/`channel-ids`).
-- **Stateful with a content DB** — `internal/oglaf/` (incremental fetch, image backfill).
+For RSS/Atom, consider the existing `gofeed` dependency before adding XML mappings.
+Fetch through `pkg/api` and parse the body; do not use a parser's independent URL
+fetcher. For source-specific Atom mappings, reuse `pkg/atom.Decode`, `Feed[E]`,
+`atom.Time`, `atom.AlternateHref`, and its common XML types. This preserves
+text/HTML types that `gofeed` discards and handles declared charsets. For RSS
+mappings, use `pkg/xmlutil.Decode`, never a bare `xml.Unmarshal`. Keep provider-specific normalization covered by fixtures.
 
-**Ignore `internal/reddit-json/` — it carries Reddit-specific auth/proxy/OG machinery that does not generalize.**
+Select examples by behavior, not as universal recipes:
 
-## 1. Decide the provider's shape upfront
+- `internal/slashdot/`: canonical Atom source, cached bodies, per-item normalization.
+- `internal/youtube/`: multiple feeds and bounded stale-body fallback.
+- `internal/feissarimokat/`: RSS comic content.
+- `internal/oglaf/`: persistent source items and incremental fetching.
+- `internal/tildes/`: distinct article/discussion links and source-specific text.
 
-Answer these before writing code — they drive the rest of the file layout:
+Reddit's authentication and proxy machinery do not generalize to ordinary sources.
 
-- **Source format.** Atom (XML), RSS (XML), JSON, or HTML scrape? Atom/RSS providers reuse `encoding/xml` directly (see `internal/tildes/api.go`, `internal/youtube/api.go`). HTML providers regex-extract (see `internal/oglaf/provider.go` for `stripImgRegex`).
-- **Stateful or stateless.** Stateless = re-fetch every run, no DB (Tildes, YouTube, Feissarimokat). Stateful = needs a content DB for incremental fetch / image backfill / dedup (Oglaf has `oglaf.db`). Drives `DatabaseConfig.UseContentDB`.
-- **Single feed or many.** A provider can fan out across multiple feed URLs (YouTube `feed-urls`/`channel-ids`, Tildes `topics`). If yes, plan a normalize helper and a per-feed-config branch in `feedConfig()`.
-- **Comments link distinct from article link.** If yes (Tildes, Reddit), `Item.Link()` returns the external article and `Item.CommentsLink()` returns the discussion page. If no, both return the same URL.
-- **Score / comment counts available.** If not, the `Item.Score()` / `Item.CommentCount()` methods return 0 — that is fine, the template handles zero gracefully.
+## Implement the Provider
 
-## 2. Files to create
+- Embed `providers.BaseProvider`. A stateless provider has no content database, but
+  the base still opens link-preview and HTTP cache databases.
+- Embed `providers.GenerateConfig` with `yaml:",inline"` in `Config`. Give every
+  additional field a kebab-case YAML tag. Keep configuration defaults consistent
+  between `ConfigFactory` and CLI flags.
+- Return `(providers.FeedProvider, error)` from construction; wrap errors with `%w`.
+  Register with `providers.MustRegister`, including `Factory`, `ConfigFactory`, and
+  `Preview` metadata.
+- Install `providerfeed.BuildGenerator` through `SetGenerateFeedFunc`. The current
+  interface is `GenerateFeed(outfile string) error`. Pass nil for link-preview
+  storage when the template does not use external previews.
+- Normalize and filter items, sort newest first, then apply a positive fetch limit.
+  `CreatedAt()` returns `time.Time`; normalize dates at the source boundary.
 
-Create `internal/<name>/` containing:
+Read [Fetch and Normalize Items](../../../docs/adding-a-provider.md#fetch-and-normalize-items)
+for these source-boundary requirements:
 
-| File | Purpose |
-|------|---------|
-| `provider.go` | `Provider` struct, `Config`, `factory`, `init()` registration, `previewInfo`, `NewXProvider`, `FetchItems`, `feedConfig` (only if config varies from `previewInfo.Config`). |
-| `types.go` | XML/JSON structs for the upstream format + `Item` struct implementing `providers.FeedItem`. Small providers can keep types in `provider.go` (see Oglaf) but a separate `types.go` is the norm. |
-| `api.go` | HTTP fetch + parse + any normalization helpers (`normalizeTopics`, `buildFeedURL`, `cleanContent`). |
-| `provider_test.go` | At minimum a fixture-driven `TestFetchItemsAgainstFixture` that spins up `httptest.NewServer` from `testdata/`. Pattern: see `internal/tildes/provider_test.go`. |
-| `testdata/<source>.xml` (or `.json`) | Recorded upstream response used by the fixture test. |
+- Malformed per-item scalar metadata must not discard valid siblings. Decode
+  fallible fields separately, skip unusable required timestamps with a log message,
+  and define fallbacks for optional counts.
+- Trim titles. Do not unconditionally HTML-unescape XML-decoded text. Any extra
+  decoding needs source evidence and a fixture; preserve literal entity notation.
+- Preview needs items even on 304. Use body caching for a shared preview/generation
+  cache, with recovery for missing output files and validator-only cache rows.
+  Serving stale bodies on upstream failure is a separate, explicit policy.
+- Reuse the enhanced client's central `feed-forge/<version>` default. Override
+  only for source-specific identity requirements and cover actual request headers.
+- Use the inherited `p.HTTPCacheStore()` accessor, which handles a nil embedded
+  base or cache. Supply a temporary store for conditional-request tests.
 
-Then touch these shared files:
+## Render and Integrate
 
-- `cmd/feed-forge/main.go` — add the import (triggers `init()`), the CLI sub-struct, a `buildProviderConfig` case, and an entry in the `providerCmds()` map (see step 7 — most providers do NOT add a `switch ctx.Command()` case).
-- `cmd/feed-forge/main_test.go` — add a YAML block for the new provider to the `writeTestConfig` fixture. `TestAllRegisteredProviders_HaveYAMLTags` iterates **every** registered provider against that fixture and fails `task build` if yours is missing its `outfile`/`interval`. Easy to miss because nothing else points at it.
-- `templates/<name>-atom.tmpl` — Atom template. For an RSS comic copy `templates/feissarimokat-atom.tmpl`; otherwise copy `templates/tildes-atom.tmpl` and trim.
-- `config_example.yaml` — example YAML block.
+Read [Render Atom Safely](../../../docs/adding-a-provider.md#render-atom-safely).
+Use `xmlEscape` for XML text and attributes. Ready-to-render HTML can be serialized
+as `<content type="html">{{.Content | xmlEscape}}</content>`. Plain text needs HTML
+escaping before it becomes an HTML body. Inside CDATA, use `{{.Content | cdata}}`
+and `{{$og.Excerpt | cdata}}` to protect `]]>` and invalid XML characters. The
+shared helper returns a fragment; the template supplies the outer CDATA wrapper.
 
-## 3. Implement `Provider`, `Config`, and registration (provider.go)
+Add `templates/<name>-atom.tmpl`; the embed pattern includes it automatically.
+Make sure referenced fields exist in `TemplateItem` and the renderer populates them.
+The link-preview map is `LinkPreviews`, keyed by `.Link`. `AuthorURI()` is recognized;
+arbitrary provider methods are not automatically available to templates.
 
-Template (replace `xname` / `XName`):
+Make all five integration additions:
 
-```go
-package xname
+1. Import the package in `cmd/feed-forge/main.go` to trigger registration.
+2. Add the CLI command with matching flags and an explicit `name` when Go field
+   name derivation differs from the registry name. `cmd:"name"` alone does not
+   override Kong's derived name.
+3. Add its configuration mapping to `buildProviderConfig`.
+4. Add its entry to `providerCmds()`. Ordinary providers do not need a custom
+   dispatch branch. Keep preview help current if it enumerates provider names.
+5. Add matching YAML blocks to `config_example.yaml` and `writeTestConfig` in
+   `cmd/feed-forge/main_test.go`, including `outfile` and `interval`.
 
-import (
-    "fmt"
-    "log/slog"
-    "sort"
+`generate` and `preview` load provider YAML separately from the active Kong command.
+Missing YAML tags can therefore break those commands while direct invocation works.
+Use the same name in the CLI, registry, YAML, and preview argument.
 
-    "github.com/lepinkainen/feed-forge/pkg/feedmeta"
-    "github.com/lepinkainen/feed-forge/pkg/providerfeed"
-    "github.com/lepinkainen/feed-forge/pkg/providers"
-)
+## Demonstrate the Behavior
 
-var previewInfo = &providers.PreviewInfo{
-    Config: feedmeta.Config{
-        Title:       "XName",
-        Link:        "https://example.com/",
-        Description: "XName feed generated by Feed Forge",
-        Author:      "Feed Forge",
-        ID:          "https://example.com/feed",
-    },
-    ProviderName: "XName",   // shown in preview UI + OPML
-    TemplateName: "xname-atom", // must match templates/xname-atom.tmpl
-}
+Read [Test and Build](../../../docs/adding-a-provider.md#test-and-build). Use local
+HTTP fixtures and temporary cache/output paths. Include source mapping and output
+round trips, and regression cases for relevant encoding and malformed-entry behavior.
+For conditional feeds, cover preview/generation in both orders, missing output, and
+legacy validator-only rows. Run failing regression tests before implementation when
+fixing a bug; do not assert `ErrNotModified` as successful item-fetch behavior for
+preview.
 
-type Provider struct {
-    *providers.BaseProvider
-    // ...per-provider fields (FeedURL, Limit, etc.)
-}
-
-type Config struct {
-    providers.GenerateConfig `yaml:",inline"` // gives Outfile + Interval
-    // ...yaml-tagged fields matching the CLI sub-struct
-}
-
-func factory(config any) (providers.FeedProvider, error) {
-    cfg, ok := config.(*Config)
-    if !ok {
-        return nil, fmt.Errorf("invalid config type for xname provider: expected *xname.Config")
-    }
-    return NewXNameProvider(/* fields from cfg */)
-}
-
-func init() {
-    providers.MustRegister("xname", &providers.ProviderInfo{
-        Name:        "xname",
-        Description: "Generate RSS feeds from XName",
-        Version:     "1.0.0",
-        Factory:     factory,
-        ConfigFactory: func() any { return &Config{/* defaults */} },
-        Preview:     previewInfo,
-    })
-}
-
-func NewXNameProvider(/* args */) (providers.FeedProvider, error) {
-    base, err := providers.NewBaseProvider(providers.DatabaseConfig{
-        UseContentDB:  false, // true + ContentDBName for stateful providers
-        // ContentDBName: "xname.db",
-    })
-    if err != nil {
-        slog.Error("Failed to create base provider for XName", "error", err)
-        return nil, fmt.Errorf("initialize xname base provider: %w", err)
-    }
-
-    p := &Provider{BaseProvider: base /* , ... */}
-    p.SetGenerateFeedFunc(providerfeed.BuildGenerator(
-        p.FetchItems,
-        previewInfo,
-        nil,        // or p.feedConfig if config varies per-instance
-        p.OgDB,     // pass nil if the template does not consume OpenGraph data
-    ))
-    return p, nil
-}
-
-func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
-    // 1. Fetch upstream (use pkg/api client — never net/http directly).
-    // 2. Parse into your Item structs.
-    // 3. Sort newest-first if upstream order is not reliable.
-    // 4. Honor `limit` (0 = no cap) AFTER sorting.
-    // 5. Return []providers.FeedItem (slice of *Item).
-}
-```
-
-Key contracts:
-
-- `MustRegister` panics on duplicate name — pick a unique kebab-case name.
-- `ConfigFactory` returns `*Config` with field defaults pre-filled. YAML decoding writes on top of those defaults via `loadProviderConfigFromYAML` in `cmd/feed-forge/main.go`.
-- `Config` MUST embed `providers.GenerateConfig` with `yaml:",inline"`. That is the only thing the `generate` command sees for outfile + interval.
-- `providerfeed.BuildGenerator` handles `httpcache.ErrNotModified` (touches mtime, returns nil), directory creation, template rendering, OpenGraph fetching, and logging. Don't reimplement any of that.
-
-## 4. Implement `Item` (types.go)
-
-`Item` must satisfy `providers.FeedItem`:
-
-```go
-type FeedItem interface {
-    Title() string
-    Link() string         // external article URL (also used as OpenGraph fetch key)
-    CommentsLink() string // discussion URL; equal to Link() if no separate discussion
-    Author() string
-    Score() int
-    CommentCount() int
-    CreatedAt() time.Time
-    Categories() []string
-    ImageURL() string
-    Content() string      // HTML body for the entry
-}
-```
-
-Optional duck-typed extras the template renderer detects:
-
-- `AuthorURI() string` — populates Atom `<author><uri>` (see Tildes).
-- `VideoID()`, channel helpers — anything your template references.
-
-Conventions:
-
-- HTML-unescape titles at the boundary: upstream Atom CDATA often hides `&#34;` etc. See `internal/tildes/types.go:62`.
-- `CreatedAt()` MUST return `time.Time`, never a string. Sort uses `.After`. This matches the `time.Time`/`TIMESTAMP` rule in CLAUDE.md.
-- `ImageURL()` is consumed by templates for `<media:thumbnail>`. Return `""` if none.
-- `Content()` is wrapped in `<![CDATA[…]]>` by the template — return ready-to-render HTML, not plain text.
-
-## 5. Implement fetch (api.go)
-
-**Always use `pkg/api`. Never `net/http.Get` directly.** Picks:
-
-- `api.NewGenericClient()` — almost everything (Tildes, YouTube, Oglaf, Feissarimokat).
-- `api.NewHackerNewsClient()` / `api.NewRedditClient()` — only for those specific APIs.
-
-For conditional GET / 304 handling on RSS-style sources, wrap with `httpcache.CachedGet(ctx, client, store, url, headers)` (see `internal/oglaf/provider.go:329`). The store comes from `p.HTTPCache`; a `store` of `nil` just skips caching, which is what unit tests pass. Give the `Provider` a small nil-guard accessor so tests and a nil `BaseProvider` do not panic (copy `httpCacheStore()` from `internal/feissarimokat/provider.go`):
-
-```go
-func (p *Provider) httpCacheStore() *httpcache.Store {
-    if p == nil || p.BaseProvider == nil {
-        return nil
-    }
-    return p.HTTPCache
-}
-```
-
-Return `httpcache.ErrNotModified` from `FetchItems` to let `providerfeed.BuildGenerator` bump the output mtime and skip rewrite.
-
-Atom/RSS parse pattern (Tildes-style):
-
-```go
-client := api.NewGenericClient()
-resp, err := client.Get(feedURL, nil)
-if err != nil { return nil, fmt.Errorf("fetch xname feed: %w", err) }
-defer func() { _ = resp.Body.Close() }()
-
-body, err := io.ReadAll(resp.Body)
-if err != nil { return nil, fmt.Errorf("read xname response: %w", err) }
-
-var feed atomFeed
-if err := xml.Unmarshal(body, &feed); err != nil {
-    return nil, fmt.Errorf("parse xname atom: %w", err)
-}
-```
-
-## 6. Add the Atom template (templates/<name>-atom.tmpl)
-
-Start by copying the closest existing template and trimming — `templates/feissarimokat-atom.tmpl` for an RSS comic, `templates/tildes-atom.tmpl` otherwise. The `templates/embedded.go` `//go:embed *.tmpl` line picks up new files automatically — no edit needed there. Template data shape lives in `pkg/feed/template.go` (`TemplateData` and `TemplateItem`):
-
-- Feed-level: `FeedTitle`, `FeedLink`, `FeedDescription`, `FeedAuthor`, `FeedID`, `Updated`, `Generator`.
-- Item-level: `Title`, `Link`, `CommentsLink`, `ID`, `Updated`, `Published`, `Author`, `AuthorURI`, `Categories`, `Score`, `Comments`, `Content`, `Summary`, `ImageURL` + provider-specific `Subreddit`, `Domain`.
-- `OpenGraphData` map keyed by `.Link` is populated for you when you pass `p.OgDB` to `BuildGenerator`.
-
-Always pipe interpolated strings through `xmlEscape` (already registered in the template funcs).
-
-## 7. Wire into the CLI
-
-Four edits in `cmd/feed-forge/main.go` plus one in `cmd/feed-forge/main_test.go`:
-
-1. **Import** the new package in the import block (the comment there says "Import providers to trigger init() self-registration" — that is the whole reason the import exists).
-2. **CLI sub-struct** under `var CLI struct { … }`. Mirror `Config` field-for-field. Each field needs `help:"…"`, `default:"…"` where useful, and a `yaml:"…"` tag matching the Config tag. Add `interval` and `outfile` fields. `cmd:"<name>"` registers the subcommand, but Kong derives the command NAME from the Go field name (e.g. `HackerNews` → `hacker-news`), so also add an explicit `name:"<name>"` tag whenever the field name is not already the exact registry name — otherwise `TestProviderCommandNamesMatchRegistry` fails.
-3. **`buildProviderConfig`** — add a `case "<name>":` that maps CLI fields into your `*Config`. **CRITICAL** (from CLAUDE.md): Kong only fills the active subcommand's CLI sub-struct, so `generate` does NOT use `buildProviderConfig`; it goes through `loadProviderConfigFromYAML` which is why every Config field needs a `yaml` tag.
-4. **`providerCmds()` map** (NOT a `switch ctx.Command()` case — the skill used to say "switch", that is wrong). Add one entry: `"<name>": {"<name>", "Display Name", CLI.<Field>.Outfile, nil}`. `dispatchCommand` looks the command up in this map and calls `runProvider`; the `switch` below it has a `default: panic()`, so a provider missing from the map panics at runtime. `TestProviderCommandsDispatch` guards this. Only providers that need extra pre-flight logic (like `reddit`, which validates feed-id/username) get a hand-written `switch` case instead.
-5. **`writeTestConfig` in `cmd/feed-forge/main_test.go`** — add a YAML block for the new provider with at least `outfile` and `interval`. `TestAllRegisteredProviders_HaveYAMLTags` runs the whole registry through this one shared fixture; a new provider missing from it fails `task build`. Nothing in the provider code references this fixture, so it is easy to forget.
-
-## 8. Add an example to config_example.yaml
-
-Add a block matching your YAML tags. Include `interval: 30m` (or whatever is sane for the source's update cadence — comics are usually `24h`).
-
-## 9. Test
-
-- Fixture test: copy `internal/tildes/provider_test.go` and adapt. Drop a recorded response into `testdata/`. Verify counts/title/link mapping. Avoid spinning up `NewBaseProvider` in unit tests — it opens real SQLite files. Instead construct `Item` directly from parsed entries, as Tildes' test does.
-- `task build` runs vet + tests + lint. Use it instead of `go build`. Run `goimports -w .` after Go edits.
-- For preview during development: `./build/feed-forge preview <name>` opens the TUI. `./build/feed-forge preview <name> --index 0` prints one item's rendered XML to stdout — handy for template iteration.
-- Golden files: if you add golden-style tests, run `task update-golden` once results stabilize and review the diff before committing.
-
-## Pitfalls
-
-- **Forgetting the import in main.go.** Without it, `init()` never runs and `MustRegister` is silently absent — `generate` will not find the provider.
-- **Missing `yaml` tags on Config fields.** The `generate` command path bypasses Kong; only YAML tags are read. Fields without them stay zero-valued in `generate` runs but work fine for the single-provider subcommand. Always add both.
-- **Returning strings instead of `time.Time` for timestamps.** Breaks chronological sort and stateful DB ordering (CLAUDE.md "Database Timestamps").
-- **Direct `net/http` calls.** Bypasses rate limiting + retries — use `pkg/api` clients.
-- **Writing your own Atom serializer.** Use `providerfeed.BuildGenerator` + a template. The shared generator handles OpenGraph fetching, escaping, time formatting, and `ErrNotModified` skips for you.
-- **Forgetting the `writeTestConfig` block in main_test.go.** `TestAllRegisteredProviders_HaveYAMLTags` runs every registered provider through that one fixture; a missing block fails `task build` with an empty-`Outfile`/`Interval` error that does not obviously point back at the fixture.
-- **Adding a `switch ctx.Command()` case instead of a `providerCmds()` map entry.** Simple providers belong in the map; the `switch` is only for commands with extra pre-flight logic. A provider that is in neither hits the `default: panic()`.
-- **Reading reddit-json for inspiration.** It has proxy/auth code that no other provider needs and will lead you down dead ends. Read Feissarimokat / Tildes / YouTube / Oglaf instead.
+Run `goimports -w .` after Go edits and `task build` before completion. Tests and lint
+must pass. Run `task update-golden` only for intentional output changes and make sure
+the diff matches them; `task test-update` downloads fixtures and runs no tests.
+For web/template behavior, demonstrate functionality with Playwright. Respect source
+polling limits during manual trials; use local fixtures for repeated requests.

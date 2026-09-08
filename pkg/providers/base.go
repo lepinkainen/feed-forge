@@ -21,6 +21,14 @@ type BaseProvider struct {
 	generateFeed func(outfile string) error
 }
 
+// HTTPCacheStore returns the shared HTTP cache, or nil for an uninitialized base.
+func (b *BaseProvider) HTTPCacheStore() *httpcache.Store {
+	if b == nil {
+		return nil
+	}
+	return b.HTTPCache
+}
+
 // DatabaseConfig holds database configuration for providers
 type DatabaseConfig struct {
 	ContentDBName string // e.g., "hackernews.db", "reddit.db"

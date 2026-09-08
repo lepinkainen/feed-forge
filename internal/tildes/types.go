@@ -1,17 +1,15 @@
 package tildes
 
 import (
-	"encoding/xml"
 	"fmt"
 	"html"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/atom"
 )
 
 // atomFeed mirrors the top-level <feed> element of a Tildes group Atom feed.
-type atomFeed struct {
-	XMLName xml.Name    `xml:"feed"`
-	Entries []atomEntry `xml:"entry"`
-}
+type atomFeed = atom.Feed[atomEntry]
 
 // atomEntry captures the subset of <entry> we parse. In a Tildes feed the
 // <id> is always the topic page, while <link rel="alternate"> points to the
@@ -21,28 +19,21 @@ type atomEntry struct {
 	Title   string     `xml:"title"`
 	ID      string     `xml:"id"`
 	Links   []atomLink `xml:"link"`
-	Content string     `xml:"content"`
+	Content atom.Text  `xml:"content"`
 	Author  atomAuthor `xml:"author"`
-	Updated time.Time  `xml:"updated"`
+	Updated atom.Time  `xml:"updated"`
 }
 
-type atomLink struct {
-	Rel  string `xml:"rel,attr"`
-	Href string `xml:"href,attr"`
-}
+type atomLink = atom.Link
 
-type atomAuthor struct {
-	Name string `xml:"name"`
-}
+type atomAuthor = atom.Person
 
 // alternateHref returns the href of the first link with rel="alternate" (or
 // the empty rel, which Atom treats as alternate). Falls back to the entry ID
 // when no alternate link is present.
 func (e *atomEntry) alternateHref() string {
-	for _, l := range e.Links {
-		if l.Rel == "alternate" || l.Rel == "" {
-			return l.Href
-		}
+	if href := atom.AlternateHref(e.Links); href != "" {
+		return href
 	}
 	return e.ID
 }
@@ -104,9 +95,10 @@ func (i *Item) CommentCount() int {
 	return i.commentCount
 }
 
-// CreatedAt returns the entry's <updated> timestamp.
+// CreatedAt returns the entry's <updated> timestamp. It is zero when the
+// feed carried a malformed value.
 func (i *Item) CreatedAt() time.Time {
-	return i.entry.Updated
+	return i.entry.Updated.Time
 }
 
 // Categories returns the group name (e.g. "~tech") as a single-element slice.

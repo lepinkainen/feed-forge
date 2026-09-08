@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/alecthomas/kong"
@@ -64,6 +65,10 @@ tildes:
   topic: "tech"
   topics: ["science", "games"]
   outfile: tildes.xml
+  interval: 30m
+
+slashdot:
+  outfile: slashdot.xml
   interval: 30m
 
 lobsters:
@@ -352,6 +357,30 @@ func TestProviderCommandsDispatch(t *testing.T) {
 		}
 		if _, ok := providerCmds()[name]; !ok {
 			t.Errorf("provider %q is not in the dispatchCommand provider map, so running it panics", name)
+		}
+	}
+}
+
+// TestPreviewHelpListsEveryProvider asserts that the preview command's help
+// text names every registered provider, so the list cannot drift when a
+// provider is added.
+func TestPreviewHelpListsEveryProvider(t *testing.T) {
+	parser, err := kong.New(&CLI)
+	if err != nil {
+		t.Fatalf("build Kong parser: %v", err)
+	}
+	var help string
+	for _, node := range parser.Model.Children {
+		if node.Type == kong.CommandNode && node.Name == "preview" && len(node.Positional) > 0 {
+			help = node.Positional[0].Help
+		}
+	}
+	if help == "" {
+		t.Fatal("preview command has no positional provider argument")
+	}
+	for _, name := range providers.DefaultRegistry.List() {
+		if !strings.Contains(help, name) {
+			t.Errorf("preview help %q does not list registered provider %q", help, name)
 		}
 	}
 }

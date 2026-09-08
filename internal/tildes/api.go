@@ -1,13 +1,14 @@
 package tildes
 
 import (
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/lepinkainen/feed-forge/pkg/atom"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 )
@@ -37,8 +38,8 @@ func fetchAtomFeed(feedURL string) ([]atomEntry, error) {
 		return nil, fmt.Errorf("read tildes response: %w", err)
 	}
 
-	var feed atomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	feed, err := atom.Decode[atomFeed](body)
+	if err != nil {
 		return nil, fmt.Errorf("parse tildes atom: %w", err)
 	}
 

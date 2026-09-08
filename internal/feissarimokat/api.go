@@ -2,7 +2,6 @@ package feissarimokat
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"html"
 	"io"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
+	"github.com/lepinkainen/feed-forge/pkg/xmlutil"
 )
 
 // FeedURL and ImageBaseURL are vars, not consts, so tests can point them at
@@ -44,8 +44,8 @@ func fetchRSSFeedWithCache(store *httpcache.Store) ([]RSSItem, error) {
 		return nil, fmt.Errorf("error fetching RSS feed: %w", err)
 	}
 
-	var rss RSS
-	if err := xml.Unmarshal(body, &rss); err != nil {
+	rss, err := xmlutil.Decode[RSS](body)
+	if err != nil {
 		return nil, fmt.Errorf("error parsing RSS XML: %w", err)
 	}
 

@@ -2,12 +2,13 @@ package youtube
 
 import (
 	"context"
-	"encoding/xml"
 	"fmt"
 	"log/slog"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/lepinkainen/feed-forge/pkg/atom"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
@@ -40,13 +41,13 @@ func fetchAtomFeed(store *httpcache.Store, feedURL string) (*atomFeed, error) {
 		slog.Info("YouTube feed fetch failed; serving cached copy", "url", feedURL, "error", err)
 	}
 
-	var feed atomFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	feed, err := atom.Decode[atomFeed](body)
+	if err != nil {
 		return nil, fmt.Errorf("parse youtube atom: %w", err)
 	}
 
 	slog.Debug("Parsed YouTube Atom feed", "url", feedURL, "entries", len(feed.Entries), "stale", stale)
-	return &feed, nil
+	return feed, nil
 }
 
 func channelFeedURL(channelID string) string {

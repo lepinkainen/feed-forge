@@ -123,11 +123,11 @@ func (p *Provider) FetchItems(limit int) ([]providers.FeedItem, error) {
 
 		group := "~" + topic
 		for _, e := range entries {
-			votes, comments := parseVotesAndComments(e.Content)
+			votes, comments := parseVotesAndComments(e.Content.HTML())
 			items = append(items, &Item{
 				entry:        e,
 				group:        group,
-				cleanContent: cleanContent(e.Content),
+				cleanContent: cleanContent(e.Content.HTML()),
 				votes:        votes,
 				commentCount: comments,
 			})

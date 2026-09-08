@@ -5,8 +5,8 @@ traffic to read one item at a time.
 
 ## What it does
 
-- **Nine sources.** Reddit, Hacker News, lobste.rs, Tildes, Lemmy, YouTube channels, and
-  the Fingerpori, Feissarimokat, and Oglaf comics.
+- **Many sources.** Reddit, Hacker News, lobste.rs, Tildes, Lemmy, Slashdot, xkcd,
+  YouTube channels, and the Fingerpori, Feissarimokat, and Oglaf comics.
 - **One CLI.** Every source is a subcommand. `generate` builds all configured feeds in
   one run.
 - **Filters.** Set a minimum score, a minimum comment count, or an item limit per

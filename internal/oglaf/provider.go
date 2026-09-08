@@ -18,6 +18,7 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 	"github.com/lepinkainen/feed-forge/pkg/providerfeed"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
+	"github.com/lepinkainen/feed-forge/pkg/xmlutil"
 	_ "modernc.org/sqlite" // Pure Go SQLite driver
 )
 
@@ -321,23 +322,16 @@ func (p *Provider) processComicsIncremental(contentDB *database.Database) ([]pro
 	return transformedItems, backfilled, nil
 }
 
-func (p *Provider) httpCacheStore() *httpcache.Store {
-	if p == nil || p.BaseProvider == nil {
-		return nil
-	}
-	return p.HTTPCache
-}
-
 // fetchRSSFeed fetches and parses the Oglaf RSS feed.
 func (p *Provider) fetchRSSFeed() ([]*RSSItem, error) {
 	client := api.NewGenericClient()
-	body, err := httpcache.CachedGet(context.Background(), client, p.httpCacheStore(), p.FeedURL, nil)
+	body, err := httpcache.CachedGet(context.Background(), client, p.HTTPCacheStore(), p.FeedURL, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var feed rssFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	feed, err := xmlutil.Decode[rssFeed](body)
+	if err != nil {
 		return nil, fmt.Errorf("parse oglaf rss: %w", err)
 	}
 

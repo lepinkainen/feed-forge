@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lepinkainen/feed-forge/pkg/httpcache"
 )
 
 func TestDatabaseConfig(t *testing.T) {
@@ -201,4 +203,35 @@ func TestBaseProvider_InterfaceCompliance(t *testing.T) {
 
 	// Test that provider implements FeedProvider interface
 	var _ FeedProvider = provider
+}
+
+func TestBaseProviderHTTPCacheStore(t *testing.T) {
+	store := &httpcache.Store{}
+	for _, tc := range []struct {
+		name string
+		base *BaseProvider
+		want *httpcache.Store
+	}{
+		{"nil base", nil, nil},
+		{"empty base", &BaseProvider{}, nil},
+		{"populated base", &BaseProvider{HTTPCache: store}, store},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			accessor, ok := any(tc.base).(interface{ HTTPCacheStore() *httpcache.Store })
+			if !ok {
+				t.Fatal("BaseProvider lacks shared cache accessor")
+			}
+			if got := accessor.HTTPCacheStore(); got != tc.want {
+				t.Fatalf("store = %p, want %p", got, tc.want)
+			}
+		})
+	}
+	provider := &testProvider{}
+	accessor, ok := any(provider).(interface{ HTTPCacheStore() *httpcache.Store })
+	if !ok {
+		t.Fatal("accessor not available through embedding")
+	}
+	if accessor.HTTPCacheStore() != nil {
+		t.Fatal("nil embedded base should return nil store")
+	}
 }

@@ -3,7 +3,9 @@ package youtube
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 const sampleFeed = `<?xml version="1.0" encoding="UTF-8"?>
@@ -193,5 +195,41 @@ func TestFactoryRejectsMissingFeeds(t *testing.T) {
 	}
 	if _, err := factory("bad config"); err == nil {
 		t.Fatal("factory should reject wrong config type")
+	}
+}
+
+func TestAtomCharsetAndExtensionsPreserved(t *testing.T) {
+	body := strings.ReplaceAll(sampleFeed, "UTF-8", "ISO-8859-1")
+	body = strings.ReplaceAll(body, "Full episode", "Caf\xe9 episode")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	defer srv.Close()
+	provider := &Provider{FeedURLs: []string{srv.URL}}
+	items, err := provider.FetchItems(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Title() != "Café episode" || items[0].Score() != 2000 || items[0].ImageURL() == "" {
+		t.Fatalf("unexpected items: %+v", items)
+	}
+}
+
+// TestMalformedTimestampDoesNotDiscardFeed guards against one bad
+// <published>/<updated> aborting the whole channel feed.
+func TestMalformedTimestampDoesNotDiscardFeed(t *testing.T) {
+	body := strings.Replace(sampleFeed, "<published>2026-05-17T18:00:33+00:00</published>", "<published>yesterday</published>", 1)
+	body = strings.Replace(body, "<updated>2026-05-17T18:00:34+00:00</updated>", "<updated>2026-05-17T18:00+00:00</updated>", 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	defer srv.Close()
+	provider := &Provider{FeedURLs: []string{srv.URL}}
+	items, err := provider.FetchItems(0)
+	if err != nil {
+		t.Fatalf("one malformed timestamp discarded the feed: %v", err)
+	}
+	if len(items) != 1 || items[0].Title() != "Full episode" {
+		t.Fatalf("unexpected items: %+v", items)
+	}
+	// Published is malformed, so CreatedAt falls back to the minute-precision updated time.
+	if got := items[0].CreatedAt(); !got.Equal(time.Date(2026, 5, 17, 18, 0, 0, 0, time.UTC)) {
+		t.Errorf("CreatedAt = %s", got)
 	}
 }

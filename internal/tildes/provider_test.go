@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
@@ -39,11 +40,11 @@ func TestFetchItemsAgainstFixture(t *testing.T) {
 
 	var linkItem, textItem *Item
 	for i := range entries {
-		votes, comments := parseVotesAndComments(entries[i].Content)
+		votes, comments := parseVotesAndComments(entries[i].Content.HTML())
 		item := &Item{
 			entry:        entries[i],
 			group:        group,
-			cleanContent: cleanContent(entries[i].Content),
+			cleanContent: cleanContent(entries[i].Content.HTML()),
 			votes:        votes,
 			commentCount: comments,
 		}
@@ -95,5 +96,48 @@ func TestRegistryRegistration(t *testing.T) {
 
 	if _, err := factory("not a config"); err == nil {
 		t.Error("factory should reject wrong config type")
+	}
+}
+
+func TestAtomCharsetAndTextPreserved(t *testing.T) {
+	body := "<?xml version=\"1.0\" encoding=\"ISO-8859-1\"?><feed xmlns=\"http://www.w3.org/2005/Atom\"><entry><title>Caf\xe9</title><id>https://tildes.net/topic</id><updated>2026-09-08T00:00:00Z</updated><content type=\"html\">&lt;p&gt;Text &amp;amp; entities&lt;/p&gt;</content></entry></feed>"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	defer srv.Close()
+	entries, err := fetchAtomFeed(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Title != "Café" || entries[0].Content.HTML() != "<p>Text &amp; entities</p>" {
+		t.Fatalf("entries = %+v", entries)
+	}
+}
+
+// TestMalformedTimestampDoesNotDiscardFeed guards against one bad <updated>
+// aborting the whole feed: the entry decodes with a zero time and every
+// sibling survives.
+func TestMalformedTimestampDoesNotDiscardFeed(t *testing.T) {
+	body := `<feed xmlns="http://www.w3.org/2005/Atom">
+<entry><title>Minute precision</title><id>https://tildes.net/a</id><updated>2026-09-08T02:30+00:00</updated><content type="html">a</content></entry>
+<entry><title>Garbage</title><id>https://tildes.net/b</id><updated>yesterday</updated><content type="html">b</content></entry>
+<entry><title>Empty</title><id>https://tildes.net/c</id><updated></updated><content type="html">c</content></entry>
+<entry><title>Valid</title><id>https://tildes.net/d</id><updated>2026-09-08T01:00:00Z</updated><content type="html">d</content></entry>
+</feed>`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(body)) }))
+	defer srv.Close()
+	entries, err := fetchAtomFeed(srv.URL)
+	if err != nil {
+		t.Fatalf("one malformed timestamp discarded the feed: %v", err)
+	}
+	if len(entries) != 4 {
+		t.Fatalf("entries = %d, want 4", len(entries))
+	}
+	if got := entries[0].Updated.Time; !got.Equal(time.Date(2026, 9, 8, 2, 30, 0, 0, time.UTC)) {
+		t.Errorf("minute precision parsed as %s", got)
+	}
+	if !entries[1].Updated.IsZero() || !entries[2].Updated.IsZero() {
+		t.Errorf("malformed timestamps should be zero: %s, %s", entries[1].Updated, entries[2].Updated)
+	}
+	if entries[3].Updated.IsZero() {
+		t.Error("valid sibling lost its timestamp")
 	}
 }

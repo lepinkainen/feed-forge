@@ -1,7 +1,6 @@
 package lemmy
 
 import (
-	"encoding/xml"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
+	"github.com/lepinkainen/feed-forge/pkg/xmlutil"
 )
 
 var (
@@ -86,8 +86,8 @@ func fetchFeed(feedURL, instance, sort string) ([]rssItem, error) {
 		return nil, fmt.Errorf("read lemmy response: %w", err)
 	}
 
-	var feed rssFeed
-	if err := xml.Unmarshal(body, &feed); err != nil {
+	feed, err := xmlutil.Decode[rssFeed](body)
+	if err != nil {
 		return nil, fmt.Errorf("parse lemmy rss: %w", err)
 	}
 

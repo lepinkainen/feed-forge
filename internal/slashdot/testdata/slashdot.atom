@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<feed
+ xmlns="http://www.w3.org/2005/Atom"
+ xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+ xmlns:content="http://purl.org/rss/1.0/modules/content/"
+ xmlns:syn="http://purl.org/rss/1.0/modules/syndication/"
+ xml:lang="en-us"
+>
+
+<title>Slashdot</title>
+<id>https://slashdot.org/</id>
+<link href="https://slashdot.org/"/>
+<link rel="self" href="http://rss.slashdot.org/Slashdot/slashdotatom"/>
+<link rel="hub" href="http://pubsubhubbub.appspot.com/"/>
+<subtitle>News for nerds, stuff that matters</subtitle>
+<rights>Copyright Slashdot Media. All Rights Reserved.</rights>
+<updated>2026-09-08T07:00:20+00:00</updated>
+<author>
+ <name>Slashdot Media</name>
+ <email>feedback@slashdot.org</email>
+</author>
+<category term="Technology"/>
+<syn:updatePeriod>hourly</syn:updatePeriod>
+<syn:updateFrequency>1</syn:updateFrequency>
+<syn:updateBase>1970-01-01T00:00+00:00</syn:updateBase>
+<logo>https://a.fsdn.com/sd/topics/topicslashdot.gif</logo>
+
+<entry>
+<id>https://yro.slashdot.org/story/26/09/07/0128205/switzerlands-federal-government-tests-open-source-alternatives-to-microsoft-on-3000-computers?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed</id>
+<title>Switzerland's Federal Government Tests Open-Source Alternatives to Microsoft on 3,000 Computers</title>
+<link href="https://yro.slashdot.org/story/26/09/07/0128205/switzerlands-federal-government-tests-open-source-alternatives-to-microsoft-on-3000-computers?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed"/>
+<summary type="html">Switzerland has a population of 9,154,242. And its federal government just launched a pilot program to test open source alternatives to Microsoft 365 on 3,000 workstations, reports the blog It's FOSS. "That's about 7% of the federal workforce."
+
+ The target is to complete the migration by end of 2027... On September 3, 2026, the Federal Council published results of "PoC BOSS", a feasibility proof-of-concept involving 172 federal employees who tested the openDesk suite, a German open-source collaboration platform. During the proof-of-concept phase, core office tasks like document processing and email received positive assessments, while large-scale video conferencing still showed technical limitations. Based on the 'success' of the PoC phase with 172 employees, the pilot is now launched for 3,000 employees... 
+
+
+According to Matthias St&amp;uuml;rmer, professor at the Bern University of Applied Sciences, Microsoft's supremacy in public institutions poses three problems that are driving this migration. First is the risk of foreign access. US cloud legislation could expose Swiss government data to foreign authorities. Second is the risk to service continuity, as dependency on a single foreign vendor creates operational risk. The third risk is the escalating costs as proprietary licensing fees are rising with no Swiss leverage. 
+Switzerland's military cybersecurity unit, Cyber Command, is not waiting for the civilian pilot. It is already poised to replace Microsoft 365 entirely with openDesk by October 2026. It is pretty much the same reason. Military doesn't want foreign governments accessing sensitive Swiss data. 
+The article notes that during the pilot phase, the new system runs in parallel with Microsoft 365 rather than replacing it. But the article's author speculates that "If the pilot is successful, we might expect the migration to continue on all the 54,000 workstations owned by the federal administrations."&lt;p&gt;&lt;div class="share_submission" style="position:relative;"&gt;
+&lt;a class="slashpop" href="http://twitter.com/home?status=Switzerland's+Federal+Government+Tests+Open-Source+Alternatives+to+Microsoft+on+3%2C000+Computers%3A+https%3A%2F%2Fyro.slashdot.org%2Fstory%2F26%2F09%2F07%2F0128205%2F%3Futm_source%3Dtwitter%26utm_medium%3Dtwitter"&gt;&lt;img src="https://a.fsdn.com/sd/twitter_icon_large.png"&gt;&lt;/a&gt;
+&lt;a class="slashpop" href="http://www.facebook.com/sharer.php?u=https%3A%2F%2Fyro.slashdot.org%2Fstory%2F26%2F09%2F07%2F0128205%2Fswitzerlands-federal-government-tests-open-source-alternatives-to-microsoft-on-3000-computers%3Futm_source%3Dslashdot%26utm_medium%3Dfacebook"&gt;&lt;img src="https://a.fsdn.com/sd/facebook_icon_large.png"&gt;&lt;/a&gt;
+
+
+
+&lt;/div&gt;&lt;/p&gt;&lt;p&gt;&lt;a href="https://yro.slashdot.org/story/26/09/07/0128205/switzerlands-federal-government-tests-open-source-alternatives-to-microsoft-on-3000-computers?utm_source=atom1.0moreanon&amp;amp;utm_medium=feed"&gt;Read more of this story&lt;/a&gt; at Slashdot.&lt;/p&gt;</summary>
+<updated>2026-09-07T23:34:00+00:00</updated>
+<author>
+ <name>EditorDavid</name>
+</author>
+<category term="eu"/>
+<slash:department>join-us-now-and-share-the-software</slash:department>
+<slash:section>yro</slash:section>
+<slash:comments>33</slash:comments>
+<slash:hit_parade>33,32,28,24,6,0,0</slash:hit_parade>
+</entry>
+<entry>
+<id>https://news.slashdot.org/story/26/09/07/0155210/does-brave-browser-load-faster-than-chrome-firefox-and-microsoft-edge?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed</id>
+<title>Does Brave Browser Load Faster Than Chrome, Firefox, and Microsoft Edge?</title>
+<link href="https://news.slashdot.org/story/26/09/07/0155210/does-brave-browser-load-faster-than-chrome-firefox-and-microsoft-edge?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed"/>
+<summary type="html">The Brave web browser published a new round of benchmarks claiming its desktop browser uses less system resources than Chrome, Microsoft Edge, and Firefox &amp;mdash; and also loads pages faster.
+The blog Linuxiac reports:
+
+According to Brave's testing, the browser used 44% less CPU, 28% less memory, and 10% less energy on average compared with the three competing browsers. It also completed page loads 20% faster while transferring 26% less inbound data and 39% less outbound data... 
+
+- Brave averaged about 33% CPU usage, while Chrome used 47%, Edge 53%, and Firefox 78%. 
+
+- For memory, Brave used about 1.2 GB, compared to 1.75 GB for Chrome, 1.62 GB for Edge, and 1.65 GB for Firefox. 
+By stopping ads, analytics scripts, tracking pixels, and other third-party requests from loading, the browser has less network traffic and less work to do. In page-loading tests, Brave took about 4.4 seconds to fully load a page. Chrome took 5.1 seconds, Firefox 5.3 seconds, and Edge 6 seconds. However, when measuring Largest Contentful Paint, which is when the main content appears, Brave and Chrome both averaged about 2.4 seconds, with Edge and Firefox just behind at 2.5 seconds. This means Brave's main advantage comes after the main content is visible, since there are fewer background ads, trackers, analytics requests, and delayed scripts to process.
+
+&lt;p&gt;&lt;div class="share_submission" style="position:relative;"&gt;
+&lt;a class="slashpop" href="http://twitter.com/home?status=Does+Brave+Browser+Load+Faster+Than+Chrome%2C+Firefox%2C+and+Microsoft+Edge%3F%3A+https%3A%2F%2Fnews.slashdot.org%2Fstory%2F26%2F09%2F07%2F0155210%2F%3Futm_source%3Dtwitter%26utm_medium%3Dtwitter"&gt;&lt;img src="https://a.fsdn.com/sd/twitter_icon_large.png"&gt;&lt;/a&gt;
+&lt;a class="slashpop" href="http://www.facebook.com/sharer.php?u=https%3A%2F%2Fnews.slashdot.org%2Fstory%2F26%2F09%2F07%2F0155210%2Fdoes-brave-browser-load-faster-than-chrome-firefox-and-microsoft-edge%3Futm_source%3Dslashdot%26utm_medium%3Dfacebook"&gt;&lt;img src="https://a.fsdn.com/sd/facebook_icon_large.png"&gt;&lt;/a&gt;
+
+
+
+&lt;/div&gt;&lt;/p&gt;&lt;p&gt;&lt;a href="https://news.slashdot.org/story/26/09/07/0155210/does-brave-browser-load-faster-than-chrome-firefox-and-microsoft-edge?utm_source=atom1.0moreanon&amp;amp;utm_medium=feed"&gt;Read more of this story&lt;/a&gt; at Slashdot.&lt;/p&gt;</summary>
+<updated>2026-09-08T02:34:00+00:00</updated>
+<author>
+ <name>EditorDavid</name>
+</author>
+<category term="chromium"/>
+<slash:department>browser-battles</slash:department>
+<slash:section>news</slash:section>
+<slash:comments>24</slash:comments>
+<slash:hit_parade>24,23,20,19,2,1,0</slash:hit_parade>
+</entry>
+<entry>
+<id>https://tech.slashdot.org/story/26/09/07/0653248/why-google-told-drivers-to-drive-a-longer-way-on-purpose?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed</id>
+<title> Why Google Told Drivers to Drive a Longer Way On Purpose </title>
+<link href="https://tech.slashdot.org/story/26/09/07/0653248/why-google-told-drivers-to-drive-a-longer-way-on-purpose?utm_source=atom1.0mainlinkanon&amp;utm_medium=feed"/>
+<summary type="html">"A team at Google's research arm used Google Maps to reroute a small portion of drivers in 10 U.S. cities," reports SFGate &amp;mdash; including San Francisco and Los Angeles. 
+
+"Through their experiment, which was published in the journal Nature Cities in June, the researchers sought to evenly spread traffic down more corridors as the drivers head to similar destinations, in the hopes of reducing congestion."
+The experiments nudged up vehicle speeds by 2% on average on the congested roads, and shortened travel times by a modest 0.7%. Scientists have long thought that traffic could be eased this way, and this now demonstrates how it could actually work in the real world. 
+
+The researchers collected data on weekdays in the 10 cities, which included Seattle, Salt Lake City, Chicago and Atlanta. While they studied a variety of types of roads, from city streets to highways, they found that in cities such as Los Angeles where they targeted highways, their diversions had the biggest effect, with driving speeds in those areas increasing by about 4.6%. Most cities, though, saw a smaller improvement with speeds across them increasing by just 0.5% during peak times. The Google study's findings confirm what other researchers have long suspected, said Michael Manville, a professor of urban planning at UCLA who was not involved in the study. "This is a pretty nice empirical illustration of a longstanding idea," he said. If a clogged traffic artery is on the verge of a long delay, he said, rerouting a small number of vehicles away from the bottleneck produces a "not gigantic but noticeable result...." 
+
+As with other traffic interventions, there's a risk that Google's approach to spreading traffic could backfire. This concept, known as "induced demand," also applies to efforts like adding a lane to a critical highway, which temporarily relieves congestion, until traffic rises again. "You can do this, but you cannot be too successful, because if you are too successful, then more people will start driving, and essentially you'll be back to ground zero," [said Alexandre Bayen, a co-author of the study and director of UC Berkeley's Center for Information Technology Research in the Interest of Society]. "That's why when we did the study, we only operated at the margin." The idea is to make minor improvements, enough to matter in the aggregate but not so significant that people notice and start driving more, canceling those improvements... 
+ The Google Research study also considered the potential environmental benefits of its traffic improvements. The paper highlights the carbon dioxide emission reductions resulting from the slightly smoother traffic flow and shortened travel times, which add up to a savings of about 1,000 metric tons annually. That's equivalent to the emissions of about 200 vehicles, a drop in the bucket for cities with millions of cars, the majority of which are still gas guzzlers, even in San Francisco and LA. Bayen acknowledges that while emphasizing the cumulative benefit if such efforts were sustained for a longer time. For Manville, the study is a useful proof of concept. "It is a demonstration that if we managed roads better, air would probably be cleaner," he said. 
+According to the article, "Google's study might not just be a one-off, and city officials could decide to make use of the Google research findings, Bayen said, such as by trying to improve traffic congestion on a larger scale..." 
+
+"Google declined SFGATE's requests for comment on whether the company informed city authorities or rerouted drivers about the study," the article points out.&lt;p&gt;&lt;div class="share_submission" style="position:relative;"&gt;
+&lt;a class="slashpop" href="http://twitter.com/home?status=Why+Google+Told+Drivers+to+Drive+a+Longer+Way+On+Purpose%3A+https%3A%2F%2Ftech.slashdot.org%2Fstory%2F26%2F09%2F07%2F0653248%2F%3Futm_source%3Dtwitter%26utm_medium%3Dtwitter"&gt;&lt;img src="https://a.fsdn.com/sd/twitter_icon_large.png"&gt;&lt;/a&gt;
+&lt;a class="slashpop" href="http://www.facebook.com/sharer.php?u=https%3A%2F%2Ftech.slashdot.org%2Fstory%2F26%2F09%2F07%2F0653248%2Fwhy-google-told-drivers-to-drive-a-longer-way-on-purpose%3Futm_source%3Dslashdot%26utm_medium%3Dfacebook"&gt;&lt;img src="https://a.fsdn.com/sd/facebook_icon_large.png"&gt;&lt;/a&gt;
+
+
+
+&lt;/div&gt;&lt;/p&gt;&lt;p&gt;&lt;a href="https://tech.slashdot.org/story/26/09/07/0653248/why-google-told-drivers-to-drive-a-longer-way-on-purpose?utm_source=atom1.0moreanon&amp;amp;utm_medium=feed"&gt;Read more of this story&lt;/a&gt; at Slashdot.&lt;/p&gt;</summary>
+<updated>2026-09-08T05:34:00+00:00</updated>
+<author>
+ <name>EditorDavid</name>
+</author>
+<category term="google"/>
+<slash:department>my-Waze-or-the-highways</slash:department>
+<slash:section>technology</slash:section>
+<slash:comments>6</slash:comments>
+<slash:hit_parade>6,6,6,6,3,1,0</slash:hit_parade>
+</entry>
+</feed>

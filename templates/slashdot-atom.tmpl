@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>{{.FeedTitle | xmlEscape}}</title>
+  <link href="{{.FeedLink | xmlEscape}}"/>
+  <id>{{.FeedID | xmlEscape}}</id>
+  <updated>{{.Updated}}</updated>
+  <author><name>{{.FeedAuthor | xmlEscape}}</name></author>
+  <subtitle>{{.FeedDescription | xmlEscape}}</subtitle>
+  <generator uri="https://github.com/lepinkainen/feed-forge">{{.Generator | xmlEscape}}</generator>
+{{range .Items}}
+  <entry>
+    <title>{{.Title | xmlEscape}}</title>
+    <link rel="alternate" type="text/html" href="{{.CommentsLink | xmlEscape}}"/>
+    <id>{{.ID | xmlEscape}}</id>
+    <updated>{{.Updated}}</updated>
+    <published>{{.Published}}</published>
+    <author><name>{{.Author | xmlEscape}}</name></author>
+    {{range .Categories}}<category term="{{. | xmlEscape}}"/>{{end}}
+    <content type="html"><![CDATA[<p><strong>Comments:</strong> {{.Comments}}</p>
+{{.Content | cdata}}]]></content>
+    <summary>Comments: {{.Comments}}</summary>
+  </entry>
+{{end}}
+</feed>
