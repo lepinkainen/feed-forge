@@ -1,6 +1,7 @@
 package bulletin
 
 import (
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,27 +11,30 @@ import (
 	"github.com/lepinkainen/feed-forge/pkg/testutil"
 )
 
-func TestCDATASafe(t *testing.T) {
-	// A digest containing a literal "]]>" must not be able to close the CDATA
-	// section early; the sequence is split but the visible text is unchanged.
-	in := "<p>see <code>a[i]]>b</code></p>"
-	got := cdataSafe(in)
-	// Split closes and reopens the CDATA around the ">"; wrapped and re-parsed,
-	// the visible text is unchanged, so no raw "]]>" can terminate the section.
-	if want := "<p>see <code>a[i]]]]><![CDATA[>b</code></p>"; got != want {
-		t.Errorf("cdataSafe = %q, want %q", got, want)
+func TestWriteAtomPreservesContent(t *testing.T) {
+	const content = "<p>see <code>a[i]]>b</code> &amp; text\x00\x1f</p>"
+	const want = "<p>see <code>a[i]]>b</code> &amp; text</p>"
+	out := filepath.Join(t.TempDir(), "bulletin.xml")
+	if err := writeAtom(out, "https://feeds.example/bulletin.xml", []Row{{ID: 1, Content: content}}); err != nil {
+		t.Fatal(err)
 	}
-	if recovered := strings.ReplaceAll(got, "]]><![CDATA[", ""); recovered != in {
-		t.Errorf("round-trip through CDATA changed text: %q != %q", recovered, in)
+	body, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if cdataSafe("no terminator here") != "no terminator here" {
-		t.Error("cdataSafe altered text with no ]]> sequence")
+	var parsed struct {
+		Content string `xml:"entry>content"`
+	}
+	if err := xml.Unmarshal(body, &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(parsed.Content); got != want {
+		t.Errorf("content = %q, want %q", got, want)
 	}
 }
 
 // TestWriteAtomGolden locks the Atom feed output shape, including RFC3339 stamps
-// and the CDATA "]]>" sanitisation. Regenerate with: task update-golden (or
-// go test ./internal/bulletin/ -run TestWriteAtomGolden -update).
+// and the CDATA "]]>" sanitisation. Regenerate with: task update-golden.
 func TestWriteAtomGolden(t *testing.T) {
 	bulletins := []Row{
 		{

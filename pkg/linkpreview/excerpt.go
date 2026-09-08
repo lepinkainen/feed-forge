@@ -98,10 +98,9 @@ func buildExcerpt(root *html.Node, budget int) string {
 	for _, p := range chosen {
 		_ = html.Render(&buf, p)
 	}
-	// The excerpt is dropped raw into a <content type="html"><![CDATA[ ... ]]>
-	// block. html.Render escapes ">" in text and attributes, but emits comment
-	// and raw-text (script/style) content verbatim, so a stray "]]>" there would
-	// close the CDATA early and make the whole feed malformed XML. Break the
-	// terminator; an HTML feed reader decodes "&gt;" back to ">".
-	return strings.ReplaceAll(buf.String(), "]]>", "]]&gt;")
+	// html.Render emits comment and raw-text (script/style) content verbatim,
+	// so the excerpt may contain a literal "]]>". Templates pipe the excerpt
+	// through the cdata function (pkg/feed/template_funcs.go), which splits the
+	// CDATA section around it; nothing needs rewriting here.
+	return buf.String()
 }

@@ -15,7 +15,7 @@
     <updated>{{.Updated}}</updated>
     <published>{{.Published}}</published>
     <content type="html"><![CDATA[
-{{.Content}}
+{{.Content | cdata}}
     ]]></content>
   </entry>
 {{end}}

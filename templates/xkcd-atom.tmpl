@@ -22,7 +22,7 @@
 
     <content type="html"><![CDATA[
       <div class="comic">
-        {{.Content}}
+        {{.Content | cdata}}
       </div>
       <div class="links">
         <p><a href="{{.Link | xmlEscape}}">View on xkcd</a></p>

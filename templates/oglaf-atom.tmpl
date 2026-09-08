@@ -23,7 +23,7 @@
     <content type="html"><![CDATA[
       {{if .Content}}
         <div class="comic-content">
-          {{.Content}}
+          {{.Content | cdata}}
         </div>
       {{end}}
       <div class="links">

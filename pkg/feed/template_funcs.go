@@ -10,6 +10,7 @@ import (
 // TemplateFuncs returns a map of template helper functions
 func TemplateFuncs() template.FuncMap {
 	return template.FuncMap{
+		"cdata":       cdata,
 		"xmlEscape":   xmlEscape,
 		"formatTime":  formatTime,
 		"formatDate":  formatDate,
@@ -19,6 +20,18 @@ func TemplateFuncs() template.FuncMap {
 		"hasPrefix":   strings.HasPrefix,
 		"truncate":    truncateText,
 	}
+}
+
+// cdata returns a fragment safe inside a CDATA section. It preserves HTML,
+// removes invalid XML characters, and splits embedded CDATA terminators.
+func cdata(s string) string {
+	clean := strings.Map(func(r rune) rune {
+		if !isValidXMLRune(r) {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.ReplaceAll(clean, "]]>", "]]]]><![CDATA[>")
 }
 
 // xmlEscape escapes XML special characters and strips invalid XML 1.0 code points.

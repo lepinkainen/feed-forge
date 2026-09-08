@@ -219,14 +219,6 @@ func bulletinTitle(slot string, t time.Time) string {
 	return fmt.Sprintf("%s Bulletin — %s", slot, t.Format("Mon, 2 Jan 2006"))
 }
 
-// cdataSafe neutralises the only sequence that can terminate a CDATA section, so
-// a model-authored digest containing a literal "]]>" cannot break out and
-// corrupt the surrounding Atom XML. The split closes and immediately reopens the
-// CDATA around the ">" so the rendered text is unchanged.
-func cdataSafe(s string) string {
-	return strings.ReplaceAll(s, "]]>", "]]]]><![CDATA[>")
-}
-
 // writeAtom renders the feed carrying the given bulletins (newest first) as one
 // Atom entry each.
 func writeAtom(outfile, feedBaseURL string, bulletins []Row) error {
@@ -248,7 +240,7 @@ func writeAtom(outfile, feedBaseURL string, bulletins []Row) error {
 			Link:      feedBaseURL,
 			Updated:   stamp,
 			Published: stamp,
-			Content:   cdataSafe(b.Content),
+			Content:   b.Content,
 		}
 	}
 

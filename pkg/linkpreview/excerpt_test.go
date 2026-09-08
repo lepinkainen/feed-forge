@@ -7,14 +7,11 @@ import (
 	"golang.org/x/net/html"
 )
 
-// TestBuildExcerptNeutralizesCDATATerminator guards the Atom feed against
-// corruption: the excerpt is rendered raw inside <content type="html">
-// <![CDATA[ ... ]]></content>, so an excerpt that emits the literal "]]>"
-// would close the CDATA early and make the whole feed malformed XML for every
-// subscriber. html.Render escapes ">" in text and attribute values, but it
-// emits comment and raw-text (script/style) content verbatim, so those can
-// still carry a raw terminator.
-func TestBuildExcerptNeutralizesCDATATerminator(t *testing.T) {
+// TestBuildExcerptPreservesCDATATerminator pins the contract with the feed
+// templates: the excerpt is emitted byte-for-byte, and the cdata template
+// function (pkg/feed) is the single place that keeps a literal "]]>" from
+// closing the <content> CDATA section early.
+func TestBuildExcerptPreservesCDATATerminator(t *testing.T) {
 	// Build a <body> the way go-trafilatura returns its ContentNode: a real
 	// body element whose paragraph carries visible text plus an HTML comment
 	// containing the CDATA terminator.
@@ -28,8 +25,8 @@ func TestBuildExcerptNeutralizesCDATATerminator(t *testing.T) {
 	if got == "" {
 		t.Fatalf("buildExcerpt() = empty, want the paragraph")
 	}
-	if strings.Contains(got, "]]>") {
-		t.Fatalf("buildExcerpt() emits a raw CDATA terminator, corrupting the feed: %q", got)
+	if !strings.Contains(got, "<!-- array]]>end -->") {
+		t.Fatalf("buildExcerpt() rewrote the comment; the cdata template func owns CDATA safety: %q", got)
 	}
 }
 

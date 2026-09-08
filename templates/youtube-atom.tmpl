@@ -27,7 +27,7 @@
         <p><a href="{{.Link | xmlEscape}}"><img src="{{.ImageURL | xmlEscape}}" alt="{{.Title | xmlEscape}}" style="max-width: 480px; height: auto;"/></a></p>
       {{end}}
       {{if .Content}}
-        <p>{{.Content | xmlEscape}}</p>
+        <p>{{.Content | xmlEscape | cdata}}</p>
       {{end}}
       <p><a href="{{.Link | xmlEscape}}">Watch on YouTube</a></p>
       {{if gt .Score 0}}<p><strong>Views:</strong> {{.Score}}</p>{{end}}

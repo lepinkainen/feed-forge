@@ -28,7 +28,7 @@
       </div>
       {{if .Content}}
         <div class="selftext">
-          {{.Content}}
+          {{.Content | cdata}}
         </div>
         <br/>
       {{end}}
@@ -37,7 +37,7 @@
         <div class="link-preview">
           {{if $og.Image}}<img src="{{$og.Image | xmlEscape}}" alt="Preview image" style="max-height: 200px; width: auto;"/>{{end}}
           {{if $og.Title}}<h4>{{$og.Title | xmlEscape}}</h4>{{end}}
-          {{if $og.Description}}<p>{{$og.Description | xmlEscape}}</p>{{else if $og.Excerpt}}<div class="excerpt">{{$og.Excerpt}}</div>{{end}}
+          {{if $og.Description}}<p>{{$og.Description | xmlEscape}}</p>{{else if $og.Excerpt}}<div class="excerpt">{{$og.Excerpt | cdata}}</div>{{end}}
           {{if $og.SiteName}}<p><em>Source: {{$og.SiteName | xmlEscape}}</em></p>{{end}}
         </div>
       {{end}}
