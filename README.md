@@ -219,17 +219,6 @@ expire on its own. A password change is the only way to revoke it. Keep it out o
 `config.yaml`, and out of shell history. feed-forge redacts the token from its own logs
 and from error messages, and never writes it to the generated feed.
 
-### Slashdot story bodies
-
-Slashdot publishes its Atom feed with the story body reduced to plain text. Inline
-links and markup are removed at the source, and paragraph breaks survive only as
-blank lines. feed-forge rebuilds the paragraphs from those blank lines. It cannot
-restore the links.
-
-Restoring them would need a request for every story's HTML page on every run.
-feed-forge does not scrape Slashdot pages: it makes one feed request per interval,
-which is what Slashdot asks of feed readers.
-
 ### Global flags
 
 | Flag | Effect |
