@@ -19,6 +19,34 @@ import (
 // The match tolerates other attributes on the <div> and the optional <p>.
 var footerRegex = regexp.MustCompile(`(?s)\s*(?:<p[^>]*>\s*)?<div[^>]*\bclass="share_submission".*$`)
 
+var (
+	// Slashdot strips the story body to plain text before it reaches the feed;
+	// paragraph breaks survive only as blank lines.
+	paragraphBreakRegex = regexp.MustCompile(`\n[ \t\r]*\n\s*`)
+	blockTagRegex       = regexp.MustCompile(`(?i)<(p|br|div|ul|ol|blockquote|pre|h[1-6])\b`)
+)
+
+// paragraphs wraps a tag-stripped body in <p> elements at its blank lines so
+// readers keep the paragraph structure. Bodies that already carry block-level
+// markup pass through unchanged.
+func paragraphs(body string) string {
+	if body == "" || blockTagRegex.MatchString(body) {
+		return body
+	}
+	parts := paragraphBreakRegex.Split(body, -1)
+	var sb strings.Builder
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		sb.WriteString("<p>")
+		sb.WriteString(part)
+		sb.WriteString("</p>")
+	}
+	return sb.String()
+}
+
 func fetchAtomFeed(feedURL string, store *httpcache.Store) ([]atomEntry, error) {
 	client := api.NewGenericClient()
 	// Cache the body as well as validators: preview needs items on a 304, and
@@ -57,7 +85,7 @@ func parseEntry(entry atomEntry) (atomEntry, bool) {
 	}
 	// Atom titles are plain text. encoding/xml has already decoded XML entities.
 	entry.Title = strings.TrimSpace(entry.Title)
-	entry.content = strings.TrimSpace(footerRegex.ReplaceAllString(entry.Summary.HTML(), ""))
+	entry.content = paragraphs(strings.TrimSpace(footerRegex.ReplaceAllString(entry.Summary.HTML(), "")))
 	href := atom.AlternateHref(entry.Links)
 	if href == "" {
 		href = entry.ID

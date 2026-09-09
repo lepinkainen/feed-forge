@@ -308,7 +308,7 @@ func TestSummaryTextConstructs(t *testing.T) {
 	for _, tc := range []struct{ name, summary, want string }{
 		{"html", `<summary type="html">&lt;p&gt;Body &amp;amp; more&lt;/p&gt;</summary>`, "<p>Body &amp; more</p>"},
 		{"xhtml", `<summary type="xhtml"><div xmlns="http://www.w3.org/1999/xhtml"><p>Body <a href="x">link</a></p></div></summary>`, `<p>Body <a href="x">link</a></p>`},
-		{"text", `<summary>&lt;script&gt;plain text&lt;/script&gt;</summary>`, "&lt;script&gt;plain text&lt;/script&gt;"},
+		{"text", `<summary>&lt;script&gt;plain text&lt;/script&gt;</summary>`, "<p>&lt;script&gt;plain text&lt;/script&gt;</p>"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			body := `<feed xmlns="http://www.w3.org/2005/Atom"><entry><id>https://slashdot.org/story/x</id><title>T</title><updated>2026-09-08T01:00:00Z</updated>` + tc.summary + `</entry></feed>`
@@ -354,6 +354,28 @@ func TestFooterStrippingToleratesMarkupVariants(t *testing.T) {
 	entry, _ := parseEntry(atomEntry{Updated: atom.Time{Time: time.Now()}, Summary: atomText{Type: "html", Text: story}})
 	if entry.content != story {
 		t.Errorf("footerless content = %q", entry.content)
+	}
+}
+
+// TestParagraphs guards the paragraph reconstruction for Slashdot's
+// tag-stripped bodies: blank lines become <p> boundaries, existing block
+// markup is left alone.
+func TestParagraphs(t *testing.T) {
+	for _, tc := range []struct{ name, in, want string }{
+		{"empty", "", ""},
+		{"single", "One paragraph.", "<p>One paragraph.</p>"},
+		{"blank line with space", "First.\n \nSecond.", "<p>First.</p><p>Second.</p>"},
+		{"multiple blank lines", "First.\n\n\n\nSecond.\r\n\r\nThird.", "<p>First.</p><p>Second.</p><p>Third.</p>"},
+		{"single newline kept", "Line one\nline two", "<p>Line one\nline two</p>"},
+		{"inline tags still wrapped", "See <a href=\"x\">here</a>.\n\nMore.", "<p>See <a href=\"x\">here</a>.</p><p>More.</p>"},
+		{"existing paragraphs untouched", "<p>A</p>\n\n<p>B</p>", "<p>A</p>\n\n<p>B</p>"},
+		{"existing br untouched", "A<br/>\n\nB", "A<br/>\n\nB"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := paragraphs(tc.in); got != tc.want {
+				t.Errorf("paragraphs(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
 	}
 }
 
