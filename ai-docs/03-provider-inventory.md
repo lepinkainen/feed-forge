@@ -11,6 +11,7 @@
 | `oglaf`         | `internal/oglaf`         | `oglaf-atom`         |      `oglaf.db` |          yes | yes, RSS conditional GET | none                                                   |
 | `tildes`        | `internal/tildes`        | `tildes-atom`        |              no |          yes |                base only | none; defaults `tech`                                  |
 | `youtube`       | `internal/youtube`       | `youtube-atom`       |              no |          yes |                base only | at least one `feed-url`, `feed-urls`, or `channel-ids` |
+| `slashdot`      | `internal/slashdot`      | `slashdot-atom`      |              no |           no | yes, Atom body + validators | none                                                |
 
 ## reddit
 
@@ -285,3 +286,37 @@ Fetch flow:
 Feed config:
 
 - if exactly one valid YouTube feed URL, feed ID set to that URL.
+
+## slashdot
+
+Package: `internal/slashdot`
+
+Config:
+
+```yaml
+slashdot:
+  outfile: slashdot.xml
+  interval: 30m
+```
+
+Constructor:
+
+- `NewProvider()`; fixed feed URL `https://rss.slashdot.org/Slashdot/slashdotMainatom`
+- `UseContentDB: false`
+- `BuildGenerator(..., previewInfo, nil, nil)` — no OG lookups
+
+Fetch flow:
+
+1. `httpcache.CachedGetWithStale` with body caching; 304 reuses cached body, no stale fallback
+2. `atom.Decode[atomFeed]`; `atom.Time` for `<updated>`, `slash:comments` as text
+3. `parseEntry`: skip entry with zero timestamp; parse comment count (grouped digits ok); strip `share_submission` footer; `AlternateHref` or `<id>`, `utm_*` removed
+4. `paragraphs`: wrap tag-stripped body in `<p>` at blank lines
+5. sort newest-first, apply limit
+
+Source limitation:
+
+- Slashdot strips inline links and markup from story bodies before publishing. Only
+  paragraph breaks (blank lines) survive; `paragraphs` rebuilds them. Links are not
+  recoverable from the feed.
+- Do not add story-page scraping to restore links. One feed request per interval is
+  the load Slashdot asks of feed readers; per-story page fetches are not polite.

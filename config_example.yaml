@@ -72,6 +72,8 @@ tildes:
 
 # Slashdot front-page provider configuration (canonical Atom feed)
 # Slashdot requests at least 30 minutes between feed requests.
+# The feed carries story bodies as plain text. Links are lost at the source, and
+# feed-forge does not scrape story pages to restore them.
 slashdot:
   outfile: slashdot.xml
   interval: 30m

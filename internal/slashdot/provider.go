@@ -1,4 +1,10 @@
 // Package slashdot generates feeds from Slashdot's Atom syndication feed.
+//
+// The feed's story bodies are plain text: Slashdot strips inline links and
+// markup before publishing, and paragraph breaks survive only as blank lines.
+// parseEntry rebuilds the paragraphs. The links cannot be recovered without
+// fetching every story page, and this provider does not scrape Slashdot pages.
+// One feed request per interval is the load Slashdot asks feed readers for.
 package slashdot
 
 import (
