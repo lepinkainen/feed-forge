@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"maps"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -17,6 +19,7 @@ import (
 	redditjson "github.com/lepinkainen/feed-forge/internal/reddit-json"
 	"github.com/lepinkainen/feed-forge/internal/tildes"
 	"github.com/lepinkainen/feed-forge/internal/youtube"
+	apipkg "github.com/lepinkainen/feed-forge/pkg/api"
 	"github.com/lepinkainen/feed-forge/pkg/providers"
 )
 
@@ -382,5 +385,56 @@ func TestPreviewHelpListsEveryProvider(t *testing.T) {
 		if !strings.Contains(help, name) {
 			t.Errorf("preview help %q does not list registered provider %q", help, name)
 		}
+	}
+}
+
+// TestShouldNotifyFailures asserts that the Discord webhook fires only for
+// hard failures, not for transient upstream blips (e.g. a 503) that a later
+// run is expected to clear.
+func TestShouldNotifyFailures(t *testing.T) {
+	tests := []struct {
+		name     string
+		results  []feedResult
+		expected bool
+	}{
+		{
+			name: "all generated",
+			results: []feedResult{
+				{Provider: "reddit", Status: "generated"},
+				{Provider: "hackernews", Status: "skipped"},
+			},
+			expected: false,
+		},
+		{
+			name: "transient failure only",
+			results: []feedResult{
+				{Provider: "slashdot", Status: "failed", Err: &apipkg.HTTPError{StatusCode: http.StatusServiceUnavailable}},
+				{Provider: "reddit", Status: "generated"},
+			},
+			expected: false,
+		},
+		{
+			name: "hard failure",
+			results: []feedResult{
+				{Provider: "slashdot", Status: "failed", Err: &apipkg.HTTPError{StatusCode: http.StatusServiceUnavailable}},
+				{Provider: "reddit", Status: "failed", Err: errors.New("boom")},
+			},
+			expected: true,
+		},
+		{
+			name: "failed result with nil Err is a hard failure",
+			results: []feedResult{
+				{Provider: "ghost", Status: "failed", Err: nil},
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := shouldNotifyFailures(tt.results); got != tt.expected {
+				t.Errorf("shouldNotifyFailures() = %v, want %v", got, tt.expected)
+			}
+		})
 	}
 }

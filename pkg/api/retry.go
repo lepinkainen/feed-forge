@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
 	"slices"
+	"syscall"
 	"time"
 )
 
@@ -90,11 +93,37 @@ func (rp *RetryPolicy) IsRetryableError(err error) bool {
 	return false
 }
 
-// IsTransientUpstreamError reports whether the error is an HTTP 4xx/5xx from
-// an upstream service. Callers can demote these in logs and exit cleanly.
+// IsTransientUpstreamError reports whether err is the kind of failure a later
+// run is likely to clear on its own: an HTTP 4xx/5xx from an upstream
+// service, an empty response body, or a network-level hiccup (timeout,
+// connection reset/refused, unreachable host, DNS failure, or unexpected
+// EOF). Callers demote these in logs and skip alerting on them, since a
+// retry or the next scheduled run will probably succeed.
 func IsTransientUpstreamError(err error) bool {
-	code, ok := UpstreamStatusCode(err)
-	return ok && code >= 400 && code < 600
+	if err == nil {
+		return false
+	}
+	if code, ok := UpstreamStatusCode(err); ok && code >= 400 && code < 600 {
+		return true
+	}
+	if errors.Is(err, ErrEmptyBody) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, syscall.EHOSTUNREACH) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	var dnsErr *net.DNSError
+	return errors.As(err, &dnsErr)
 }
 
 // UpstreamStatusCode returns the HTTP status code from a wrapped HTTPError.

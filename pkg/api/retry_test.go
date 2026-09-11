@@ -3,11 +3,53 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"slices"
+	"syscall"
 	"testing"
 	"time"
 )
+
+type fakeTimeoutErr struct{}
+
+func (fakeTimeoutErr) Error() string   { return "timeout" }
+func (fakeTimeoutErr) Timeout() bool   { return true }
+func (fakeTimeoutErr) Temporary() bool { return true }
+
+func TestIsTransientUpstreamError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"plain error", errors.New("boom"), false},
+		{"empty body", ErrEmptyBody, true},
+		{"wrapped empty body", fmt.Errorf("fetch: %w", ErrEmptyBody), true},
+		{"timeout net.Error", fakeTimeoutErr{}, true},
+		{"wrapped timeout net.Error", fmt.Errorf("dial: %w", error(fakeTimeoutErr{})), true},
+		{"connection reset", syscall.ECONNRESET, true},
+		{"connection refused", syscall.ECONNREFUSED, true},
+		{"host unreachable", syscall.EHOSTUNREACH, true},
+		{"deadline exceeded", context.DeadlineExceeded, true},
+		{"unexpected EOF", io.ErrUnexpectedEOF, true},
+		{"dns error", &net.DNSError{Err: "no such host", Name: "example.invalid"}, true},
+		{"HTTP 503 error", &HTTPError{StatusCode: http.StatusServiceUnavailable, Message: "Service Unavailable"}, true},
+		{"HTTP 404 error", &HTTPError{StatusCode: http.StatusNotFound, Message: "Not Found"}, true},
+		{"HTTP 200-ish non-HTTPError", errors.New("some other failure"), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := IsTransientUpstreamError(tt.err); got != tt.expected {
+				t.Errorf("IsTransientUpstreamError(%v) = %v, want %v", tt.err, got, tt.expected)
+			}
+		})
+	}
+}
 
 func TestRetryPolicy_CalculateBackoff(t *testing.T) {
 	policy := DefaultRetryPolicy()

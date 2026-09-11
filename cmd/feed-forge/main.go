@@ -482,24 +482,19 @@ func generateAll(cfg *appConfig) error {
 		slog.Debug("Skipping feed index generation: no feeds regenerated")
 	}
 
-	var (
-		transient []string
-		hardCount int
-	)
+	var hardCount int
 	for _, r := range results {
 		if r.Status != "failed" {
 			continue
 		}
-		if code, ok := apipkg.UpstreamStatusCode(r.Err); ok && code >= 400 && code < 600 {
-			transient = append(transient, fmt.Sprintf("%s=%d", r.Provider, code))
-		} else {
+		if !apipkg.IsTransientUpstreamError(r.Err) {
 			hardCount++
 		}
 	}
 
-	// When the Discord webhook is enabled it already reports failures, so skip
-	// the stderr warning to avoid a duplicate notification.
-	if len(transient) > 0 && cfg.DiscordWebhookURL == "" {
+	// Transient failures no longer reach Discord (see notifyFailures), so this
+	// stderr/journal warning is now the only record of them.
+	if transient := transientFailureProviders(results); len(transient) > 0 {
 		slog.Warn("Transient upstream failures", "providers", strings.Join(transient, ","))
 	}
 
@@ -511,12 +506,21 @@ func generateAll(cfg *appConfig) error {
 }
 
 // notifyFailures sends a Discord webhook summary when a webhook URL is
-// configured and at least one provider failed.
+// configured and at least one provider has a hard (non-transient) failure.
+// A failure whose error is transient (e.g. a 503 or an empty-body blip) is
+// expected to clear on the next scheduled run, so it does not page Discord.
+//
+// ponytail: this only looks at the current run, so a sustained outage stays
+// silent forever if every attempt happens to fail with a transient-shaped
+// error. Add a consecutive-failure threshold if that becomes a problem.
 func notifyFailures(cfg *appConfig, results []feedResult, runStart time.Time) {
 	if cfg.DiscordWebhookURL == "" {
 		return
 	}
-	if !slices.ContainsFunc(results, func(r feedResult) bool { return r.Status == "failed" }) {
+	if !shouldNotifyFailures(results) {
+		if transient := transientFailureProviders(results); len(transient) > 0 {
+			slog.Info("Skipping Discord notification: only transient failures", "providers", strings.Join(transient, ","))
+		}
 		return
 	}
 
@@ -536,6 +540,35 @@ func notifyFailures(cfg *appConfig, results []feedResult, runStart time.Time) {
 	}); err != nil {
 		slog.Warn("Failed to send Discord notification", "error", err)
 	}
+}
+
+// shouldNotifyFailures reports whether at least one failed result is a hard
+// failure, i.e. its error is nil (a setup problem such as "provider not
+// found") or not transient. A result whose Err is transient is expected to
+// clear on its own and must not trigger a notification.
+func shouldNotifyFailures(results []feedResult) bool {
+	return slices.ContainsFunc(results, func(r feedResult) bool {
+		return r.Status == "failed" && !apipkg.IsTransientUpstreamError(r.Err)
+	})
+}
+
+// transientFailureProviders returns a "provider" or "provider=code" label for
+// every failed result whose error is transient.
+func transientFailureProviders(results []feedResult) []string {
+	var transient []string
+	for _, r := range results {
+		if r.Status == "failed" && apipkg.IsTransientUpstreamError(r.Err) {
+			transient = append(transient, transientFailureLabel(r))
+		}
+	}
+	return transient
+}
+
+func transientFailureLabel(r feedResult) string {
+	if code, ok := apipkg.UpstreamStatusCode(r.Err); ok {
+		return fmt.Sprintf("%s=%d", r.Provider, code)
+	}
+	return r.Provider
 }
 
 func generateProvider(cfg *appConfig, name string) feedResult {
