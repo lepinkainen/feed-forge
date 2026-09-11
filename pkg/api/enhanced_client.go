@@ -219,6 +219,11 @@ func (ec *EnhancedClient) GetConditional(ctx context.Context, url string, prev C
 				ec.logAPICall(url, duration, false, err)
 				return fmt.Errorf("failed to read response body: %w", err)
 			}
+			if len(body) == 0 {
+				err := fmt.Errorf("GET %s: %w", SanitizeURLForLog(url), ErrEmptyBody)
+				ec.logAPICall(url, duration, false, err)
+				return err
+			}
 			conditional.Body = body
 		}
 

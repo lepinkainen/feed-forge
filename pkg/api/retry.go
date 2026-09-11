@@ -67,6 +67,10 @@ func (rp *RetryPolicy) CalculateBackoff(attempt int) time.Duration {
 	return time.Duration(backoff)
 }
 
+// ErrEmptyBody reports a successful HTTP status carrying no body. It is
+// transient, so it is retryable.
+var ErrEmptyBody = errors.New("empty response body")
+
 func asHTTPError(err error) (*HTTPError, bool) {
 	var httpErr *HTTPError
 	if !errors.As(err, &httpErr) {
@@ -77,6 +81,9 @@ func asHTTPError(err error) (*HTTPError, bool) {
 
 // IsRetryableError checks if an error should trigger a retry
 func (rp *RetryPolicy) IsRetryableError(err error) bool {
+	if errors.Is(err, ErrEmptyBody) {
+		return true
+	}
 	if httpErr, ok := asHTTPError(err); ok {
 		return rp.isRetryableStatusCode(httpErr.StatusCode)
 	}

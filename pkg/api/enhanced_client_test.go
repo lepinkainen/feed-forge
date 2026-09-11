@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -350,6 +351,46 @@ func TestEnhancedClient_GetConditional(t *testing.T) {
 	}
 	if got := hits.Load() - beforeFail; got != 2 {
 		t.Fatalf("retry hits = %d, want 2", got)
+	}
+}
+
+func TestGetConditionalRetriesEmptyBody(t *testing.T) {
+	var hits atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if hits.Load() == 1 {
+			w.WriteHeader(http.StatusOK) // empty body
+			return
+		}
+		_, _ = w.Write([]byte("body"))
+	}))
+	defer server.Close()
+
+	client := NewEnhancedClient(&EnhancedClientConfig{
+		RetryPolicy: &RetryPolicy{MaxAttempts: 2, InitialBackoff: time.Millisecond},
+		RateLimiter: NewNoOpRateLimiter(),
+	})
+
+	res, err := client.GetConditional(t.Context(), server.URL, CacheValidators{}, nil)
+	if err != nil {
+		t.Fatalf("GetConditional() error = %v", err)
+	}
+	if string(res.Body) != "body" {
+		t.Fatalf("Body = %q, want %q", res.Body, "body")
+	}
+	if got := hits.Load(); got != 2 {
+		t.Fatalf("hits = %d, want 2", got)
+	}
+
+	// Always-empty responses exhaust retries and surface ErrEmptyBody.
+	alwaysEmpty := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer alwaysEmpty.Close()
+
+	_, err = client.GetConditional(t.Context(), alwaysEmpty.URL, CacheValidators{}, nil)
+	if !errors.Is(err, ErrEmptyBody) {
+		t.Fatalf("err = %v, want ErrEmptyBody", err)
 	}
 }
 
