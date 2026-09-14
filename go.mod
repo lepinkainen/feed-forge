@@ -12,7 +12,7 @@ require (
 	github.com/markusmobius/go-trafilatura v1.12.2
 	github.com/mmcdole/gofeed v1.4.2
 	golang.org/x/net v0.58.0
-	golang.org/x/sync v0.22.0
+	golang.org/x/sync v0.23.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.58.0
 )
