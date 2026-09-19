@@ -7,16 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/lepinkainen/feed-forge/pkg/database"
 	"github.com/lepinkainen/feed-forge/pkg/dbinterfaces"
 )
 
-// Database wraps database operations with thread safety
+// Database caches link-preview data. The shared database handle manages
+// concurrent access and reference-counted connection lifetime.
 type Database struct {
 	handle *database.Handle
-	mu     sync.RWMutex
 	dbPath string
 }
 
@@ -83,9 +82,6 @@ func (db *Database) createSchema() error {
 // Close releases this database's reference to the shared handle. The underlying
 // connection is closed only when the last holder releases it.
 func (db *Database) Close() error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	if db.handle != nil {
 		return db.handle.Release()
 	}
@@ -94,9 +90,6 @@ func (db *Database) Close() error {
 
 // GetCachedData retrieves cached OpenGraph data for a URL
 func (db *Database) GetCachedData(url string) (*Data, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
 	query := `
 	SELECT url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at, fetch_success
 	FROM linkpreview_cache
@@ -136,9 +129,6 @@ func (db *Database) GetCachedData(url string) (*Data, error) {
 
 // SaveCachedData saves OpenGraph data to the cache
 func (db *Database) SaveCachedData(data *Data, fetchSuccess bool) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	query := `
 	INSERT OR REPLACE INTO linkpreview_cache
 	(url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at, fetch_success)
@@ -177,9 +167,6 @@ func (db *Database) GetExpiredValidators(url string) (etag, lastModified string,
 
 // GetExpiredData retrieves expired successful cached OpenGraph data for conditional refresh.
 func (db *Database) GetExpiredData(url string) (*Data, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
 	query := `
 	SELECT url, title, description, image, site_name, excerpt, etag, last_modified, fetched_at, expires_at
 	FROM linkpreview_cache
@@ -210,9 +197,6 @@ func (db *Database) GetExpiredData(url string) (*Data, error) {
 
 // CleanupExpired removes expired cache entries without reusable validators.
 func (db *Database) CleanupExpired() error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
 	query := `DELETE FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP AND etag = '' AND last_modified = ''`
 	result, err := db.handle.Exec(query)
 	if err != nil {
@@ -227,45 +211,27 @@ func (db *Database) CleanupExpired() error {
 	return nil
 }
 
-// GetStats returns statistics about the cache
+// GetStats returns statistics from a single snapshot of the cache.
 func (db *Database) GetStats() (map[string]any, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
-	stats := make(map[string]any)
-
-	// Total entries
-	var totalEntries int
-	err := db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache").Scan(&totalEntries)
+	var totalEntries, successfulEntries, expiredEntries int
+	err := db.handle.QueryRow(`
+		SELECT COUNT(*),
+			COUNT(CASE WHEN fetch_success = 1 THEN 1 END),
+			COUNT(CASE WHEN expires_at < CURRENT_TIMESTAMP THEN 1 END)
+		FROM linkpreview_cache
+	`).Scan(&totalEntries, &successfulEntries, &expiredEntries)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get total entries: %w", err)
+		return nil, fmt.Errorf("failed to get cache statistics: %w", err)
 	}
-	stats["total_entries"] = totalEntries
-
-	// Successful entries
-	var successfulEntries int
-	err = db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE fetch_success = 1").Scan(&successfulEntries)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get successful entries: %w", err)
-	}
-	stats["successful_entries"] = successfulEntries
-
-	// Expired entries
-	var expiredEntries int
-	err = db.handle.QueryRow("SELECT COUNT(*) FROM linkpreview_cache WHERE expires_at < CURRENT_TIMESTAMP").Scan(&expiredEntries)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get expired entries: %w", err)
-	}
-	stats["expired_entries"] = expiredEntries
-
-	return stats, nil
+	return map[string]any{
+		"total_entries":      totalEntries,
+		"successful_entries": successfulEntries,
+		"expired_entries":    expiredEntries,
+	}, nil
 }
 
 // HasRecentFailure checks if there was a recent failed fetch attempt
 func (db *Database) HasRecentFailure(url string) (bool, error) {
-	db.mu.RLock()
-	defer db.mu.RUnlock()
-
 	query := `
 	SELECT COUNT(*) FROM linkpreview_cache 
 	WHERE url = ? AND fetch_success = 0 AND fetched_at > datetime('now', '-1 hour')

@@ -501,3 +501,83 @@ func TestNewStoreCapsPoolToOne(t *testing.T) {
 		t.Fatalf("handle.Stats().MaxOpenConnections = %d, want 1", got)
 	}
 }
+
+func TestStoreConcurrentBodyAccess(t *testing.T) {
+	for _, instances := range []int{1, 2} {
+		t.Run(fmt.Sprintf("instances=%d", instances), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "http_cache.db")
+			stores := make([]*Store, instances)
+			for i := range stores {
+				store, err := NewStore(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = store.Close() })
+				stores[i] = store
+			}
+			for worker := range 8 {
+				t.Run(fmt.Sprintf("worker=%d", worker), func(t *testing.T) {
+					t.Parallel()
+					writer := stores[worker%instances]
+					reader := stores[(worker+1)%instances]
+					url := fmt.Sprintf("https://example.com/%d", worker)
+					for iteration := range 10 {
+						body := fmt.Sprintf("body-%d-%d", worker, iteration)
+						validators := api.CacheValidators{ETag: body}
+						if err := writer.SaveBodyContext(t.Context(), url, validators, []byte(body)); err != nil {
+							t.Fatal(err)
+						}
+						if got, ok := reader.GetContext(t.Context(), url); !ok || got != validators {
+							t.Fatalf("GetContext() = (%v, %v), want %v", got, ok, validators)
+						}
+						beforeTouch := time.Now().UTC()
+						if err := writer.TouchContext(t.Context(), url); err != nil {
+							t.Fatal(err)
+						}
+						got, fetchedAt, ok := reader.GetBodyContext(t.Context(), url)
+						if !ok || string(got) != body || fetchedAt.Before(beforeTouch) {
+							t.Fatalf("GetBodyContext() = (%q, %v, %v), want refreshed %q", got, fetchedAt, ok, body)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestStoreConcurrentCloseKeepsOtherStoreUsable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "http_cache.db")
+	closing, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closing.Close() })
+	active, err := NewStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = active.Close() })
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range 8 {
+		wg.Go(func() {
+			<-start
+			if err := closing.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		})
+	}
+	close(start)
+	url := "https://example.com/still-open"
+	validators := api.CacheValidators{ETag: "active"}
+	for range 10 {
+		if err := active.Save(url, validators); err != nil {
+			t.Errorf("Save() error = %v", err)
+		}
+	}
+	wg.Wait()
+	if got, ok := active.Get(url); !ok || got != validators {
+		t.Fatalf("Get() after closes = (%v, %v), want %v", got, ok, validators)
+	}
+}

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/lepinkainen/feed-forge/pkg/api"
@@ -105,10 +104,10 @@ func CachedGetWithStale(ctx context.Context, client *api.EnhancedClient, store *
 	return resp.Body, false, nil
 }
 
-// Store persists HTTP validators by URL.
+// Store persists HTTP validators by URL. The shared database handle manages
+// concurrent access and reference-counted connection lifetime.
 type Store struct {
 	handle *database.Handle
-	mu     sync.RWMutex
 	dbPath string
 }
 
@@ -209,8 +208,6 @@ func (s *Store) Close() error {
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	return s.handle.Release()
 }
 
@@ -224,9 +221,6 @@ func (s *Store) GetContext(ctx context.Context, url string) (api.CacheValidators
 	if s == nil || s.handle == nil || url == "" {
 		return api.CacheValidators{}, false
 	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 
 	var v api.CacheValidators
 	err := s.handle.QueryRowContext(ctx, `SELECT etag, last_modified FROM http_validators WHERE url = ?`, url).Scan(&v.ETag, &v.LastModified)
@@ -264,9 +258,6 @@ func (s *Store) getResponseContext(ctx context.Context, url string) (cachedRespo
 		return cachedResponse{}, false
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
 	var cached cachedResponse
 	var fetchedAt sql.NullTime
 	err := s.handle.QueryRowContext(ctx, `SELECT etag, last_modified, body, updated_at FROM http_validators WHERE url = ?`, url).
@@ -292,9 +283,6 @@ func (s *Store) TouchContext(ctx context.Context, url string) error {
 		return nil
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	_, err := s.handle.ExecContext(ctx, `UPDATE http_validators SET updated_at = ? WHERE url = ?`, time.Now().UTC(), url)
 	if err != nil {
 		return fmt.Errorf("touch HTTP cache entry: %w", err)
@@ -307,9 +295,6 @@ func (s *Store) SaveBodyContext(ctx context.Context, url string, v api.CacheVali
 	if s == nil || s.handle == nil || url == "" {
 		return nil
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	_, err := s.handle.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, body, updated_at)
@@ -337,9 +322,6 @@ func (s *Store) SaveContext(ctx context.Context, url string, v api.CacheValidato
 	if s == nil || s.handle == nil || url == "" {
 		return nil
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	_, err := s.handle.ExecContext(ctx, `
 	INSERT INTO http_validators (url, etag, last_modified, updated_at)

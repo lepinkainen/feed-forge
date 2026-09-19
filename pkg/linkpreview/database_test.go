@@ -1,8 +1,10 @@
 package linkpreview
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -80,6 +82,16 @@ func TestDatabaseCleanupExpiredAndStats(t *testing.T) {
 			t.Fatalf("Close() error = %v", err)
 		}
 	}()
+
+	emptyStats, err := db.GetStats()
+	if err != nil {
+		t.Fatalf("GetStats(empty) error = %v", err)
+	}
+	for _, key := range []string{"total_entries", "successful_entries", "expired_entries"} {
+		if emptyStats[key] != 0 {
+			t.Fatalf("GetStats(empty)[%s] = %v, want int(0)", key, emptyStats[key])
+		}
+	}
 
 	now := time.Now().UTC().Truncate(time.Second)
 	entries := []struct {
@@ -289,5 +301,89 @@ func TestNewDatabaseSharesHandlePerPath(t *testing.T) {
 	}
 	if _, err := b.GetStats(); err != nil {
 		t.Fatalf("shared handle closed while b still held it: %v", err)
+	}
+}
+
+func TestDatabaseConcurrentAccess(t *testing.T) {
+	for _, instances := range []int{1, 2} {
+		t.Run(fmt.Sprintf("instances=%d", instances), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "linkpreview.db")
+			dbs := make([]*Database, instances)
+			for i := range dbs {
+				db, err := NewDatabase(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				t.Cleanup(func() { _ = db.Close() })
+				dbs[i] = db
+			}
+			for worker := range 8 {
+				t.Run(fmt.Sprintf("worker=%d", worker), func(t *testing.T) {
+					t.Parallel()
+					writer := dbs[worker%instances]
+					reader := dbs[(worker+1)%instances]
+					for iteration := range 10 {
+						now := time.Now().UTC()
+						data := &Data{
+							URL:       fmt.Sprintf("https://example.com/%d/%d", worker, iteration),
+							Title:     fmt.Sprintf("Article %d/%d", worker, iteration),
+							FetchedAt: now,
+							ExpiresAt: now.Add(24 * time.Hour),
+						}
+						if err := writer.SaveCachedData(data, true); err != nil {
+							t.Fatal(err)
+						}
+						got, err := reader.GetCachedData(data.URL)
+						if err != nil || got == nil || got.Title != data.Title {
+							t.Fatalf("GetCachedData() = (%v, %v), want %v", got, err, data)
+						}
+						stats, err := reader.GetStats()
+						if err != nil {
+							t.Fatal(err)
+						}
+						// Every inserted row is successful and unexpired, even while
+						// other workers are adding rows to the shared database.
+						if stats["total_entries"] != stats["successful_entries"] || stats["expired_entries"] != 0 {
+							t.Fatalf("inconsistent cache statistics: %v", stats)
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestDatabaseConcurrentCloseKeepsOtherDatabaseUsable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "linkpreview.db")
+	closing, err := NewDatabase(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closing.Close() })
+	active, err := NewDatabase(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = active.Close() })
+
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	for range 8 {
+		wg.Go(func() {
+			<-start
+			if err := closing.Close(); err != nil {
+				t.Errorf("Close() error = %v", err)
+			}
+		})
+	}
+	close(start)
+	for range 10 {
+		if _, err := active.GetStats(); err != nil {
+			t.Errorf("GetStats() error = %v", err)
+		}
+	}
+	wg.Wait()
+	if _, err := active.GetStats(); err != nil {
+		t.Fatalf("GetStats() after closes error = %v", err)
 	}
 }
