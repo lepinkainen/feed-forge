@@ -24,7 +24,7 @@
 
     <content type="html"><![CDATA[
       {{if .ImageURL}}
-        <p><a href="{{.Link | xmlEscape}}"><img src="{{.ImageURL | xmlEscape}}" alt="{{.Title | xmlEscape}}" style="max-width: 480px; height: auto;"/></a></p>
+        <p><a href="{{.Link | xmlEscape}}"><img src="{{.ImageURL | xmlEscape}}" alt="{{.Title | xmlEscape}}"/></a></p>
       {{end}}
       {{if .Content}}
         <p>{{.Content | xmlEscape | cdata}}</p>
