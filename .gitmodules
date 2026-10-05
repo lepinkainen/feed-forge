@@ -1,3 +1,0 @@
-[submodule "llm-shared"]
-	path = llm-shared
-	url = https://github.com/lepinkainen/llm-shared.git

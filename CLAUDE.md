@@ -69,7 +69,7 @@ Global flags: `--config`, `--debug`, `--output-dir`, `--feed-base-url`,
 validates the file: a valid file applies from the next scheduled run, an invalid
 file is rejected and the previous configuration stays active.
 
-CAUTION: `serve` reads its global settings (output-dir, feed-base-url, cache-dir,
+CAUTION: `serve` reads its global configuration (output-dir, feed-base-url, cache-dir,
 discord-webhook-url) from `config.yaml` at startup and on every reload. Global CLI
 flags do not apply to it. A changed `cache-dir` needs a restart, because
 `filesystem.SetCacheDir` is process-global.
@@ -107,14 +107,14 @@ install it with `BaseProvider.SetGenerateFeedFunc`. Each provider self-registers
 `init()` function with `providers.MustRegister`. The registry is the source of truth
 for which providers exist; at present the set is `reddit`, `hackernews`, `fingerpori`,
 `feissarimokat`, `oglaf`, `xkcd`, `tildes`, `lobsters`, `lemmy`, `youtube`, and
-`slashdot`, but check the `MustRegister` calls rather than trusting this list. The
+`slashdot`, but make sure that you read the `MustRegister` calls rather than trust this list. The
 code is in `internal/<name>/`.
 The Reddit package directory is `internal/reddit-json/`.
 
 For the full architecture — provider contract, registry, package roles, feed
 templates, and preview — read `ai-docs/01-runtime-architecture.md`,
 `ai-docs/02-provider-contract.md`, and `ai-docs/04-feeds-templates-preview.md`.
-Confirm a fact in the source before you act on it.
+Make sure that a fact is true in the source before you act on it.
 
 To add a provider, use the `add-provider` skill in
 `.claude/skills/add-provider/SKILL.md`. The long form is `docs/adding-a-provider.md`.
@@ -216,7 +216,7 @@ Every feature needs unit tests.
 
 ## Code Style
 
-- Go 1.26.1. Read `llm-shared/versions.md` for current version guidance.
+- Go 1.26.1. Use the playbook MCP (`list_guidelines`) for current version guidance.
 - After any Go change, run `goimports -w .`. Use `goimports`, not `gofmt`, because it
   also fixes imports.
 - Write `any`, not `interface{}`.
@@ -249,7 +249,6 @@ Every feature needs unit tests.
 - `testdata/` — shared fixtures. Golden files sit beside their code.
 - `configs/` — sample configurations. `proxy/` — Reddit proxy helper.
 - `docs/` — human documentation. `ai-docs/` — agent-only repository map.
-  `llm-shared/` — shared conventions submodule.
 
 Read `ai-docs/00-index.md` and `ai-docs/01-runtime-architecture.md` for the full tree
 and the package roles.
@@ -259,18 +258,15 @@ and the package roles.
 - `README.md` — installation and usage, for people.
 - `docs/adding-a-provider.md` — long form provider guide.
 - `ai-docs/` — dense agent-only repository map. `ai-docs/00-index.md` is the index.
-  Faster to read than the source, but it can be stale. Confirm a fact in the source
-  before you act on it.
-- `llm-shared/project_tech_stack.md` — shared technology preferences.
-- `llm-shared/utils/validate-docs/` — documentation and code consistency checker.
-- Function inventory: `go run llm-shared/utils/gofuncs/gofuncs.go -dir .`
+  Faster to read than the source, but it can be stale. Make sure that a fact is true
+  in the source before you act on it.
+- Shared conventions and technology preferences: the playbook MCP.
 
 `AGENTS.md`, `GEMINI.md`, `CRUSH.md`, and `.github/copilot-instructions.md` are
 symlinks to this file. Edit this file only.
 
-# important-instruction-reminders
+## Scope of changes
 
-Do what has been asked; nothing more, nothing less.
-NEVER create files unless they're absolutely necessary for achieving your goal.
-ALWAYS prefer editing an existing file to creating a new one.
-NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.
+Do what has been asked; nothing more, nothing less. Create only the files the task
+needs, and edit an existing file when one fits. Write documentation files only when
+the user asks for them.
