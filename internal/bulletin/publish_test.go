@@ -78,7 +78,7 @@ func TestWriteHTMLPages(t *testing.T) {
 		Content:     digest,
 	}
 
-	if err := writeDatedHTML(dir, row); err != nil {
+	if err := writeDatedHTML(dir, row, 1); err != nil {
 		t.Fatalf("writeDatedHTML: %v", err)
 	}
 	if err := writeLatestHTML(dir, row); err != nil {
