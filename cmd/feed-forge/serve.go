@@ -192,16 +192,22 @@ func (d *daemon) runFetch(ctx context.Context, cfg *appConfig) {
 // slotLoop fires the bulletin digest at the configured time-of-day slots. It
 // wakes at least every slotRecheckInterval so a reloaded slot list applies
 // promptly, and recomputes the next slot after each firing — a slot can never
-// overlap itself.
+// overlap itself. A slot occurrence fires at most once, even when the wall
+// clock is stepped back after it fired.
 func (d *daemon) slotLoop(ctx context.Context) {
+	var lastFired time.Time
 	for {
 		cfg := d.cfg.Load()
 		now := d.now()
 
 		wait := slotRecheckInterval
 		fire := false
+		var target time.Time
 		if len(cfg.Serve.BulletinSlots) > 0 {
-			target := nextSlotFire(now, cfg.Serve.BulletinSlots)
+			target = nextSlotFire(now, cfg.Serve.BulletinSlots)
+			if !target.After(lastFired) {
+				target = nextSlotFire(lastFired, cfg.Serve.BulletinSlots)
+			}
 			if until := target.Sub(now); until <= slotRecheckInterval {
 				wait = until
 				fire = true
@@ -214,6 +220,7 @@ func (d *daemon) slotLoop(ctx context.Context) {
 		case <-time.After(wait):
 		}
 		if fire {
+			lastFired = target
 			d.runDigest(ctx, d.cfg.Load())
 		}
 	}
