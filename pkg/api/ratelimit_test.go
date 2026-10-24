@@ -330,3 +330,25 @@ func BenchmarkNoOpRateLimiter(b *testing.B) {
 		rl.Wait()
 	}
 }
+
+// A caller whose context is cancelled while it waits never makes its call, so
+// it must not push back the schedule of the callers after it.
+func TestSimpleRateLimiterCancelledWaitDoesNotDelayLaterCalls(t *testing.T) {
+	const minDelay = 50 * time.Millisecond
+	rl := NewSimpleRateLimiter(minDelay)
+	rl.Wait()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	for range 10 {
+		if err := rl.WaitContext(ctx); !errors.Is(err, context.Canceled) {
+			t.Fatalf("WaitContext(cancelled) = %v, want context.Canceled", err)
+		}
+	}
+
+	start := time.Now()
+	rl.Wait()
+	if elapsed := time.Since(start); elapsed > 4*minDelay {
+		t.Errorf("Wait after 10 cancelled waiters took %v, want about %v", elapsed, minDelay)
+	}
+}
