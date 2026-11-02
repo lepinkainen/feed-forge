@@ -11,7 +11,7 @@ require (
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
 	github.com/markusmobius/go-trafilatura v1.12.2
 	github.com/mmcdole/gofeed v1.5.0
-	golang.org/x/net v0.61.0
+	golang.org/x/net v0.62.0
 	golang.org/x/sync v0.24.0
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0
