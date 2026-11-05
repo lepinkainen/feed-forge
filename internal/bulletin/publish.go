@@ -95,7 +95,8 @@ func Generate(ctx context.Context, opts GenerateOptions) error {
 		return err
 	}
 
-	now := time.Now().UTC()
+	// Slots are local wall-clock times, so label and title in local time.
+	now := time.Now()
 	slot := opts.Slot
 	if slot == "" {
 		slot = slotFor(now)
@@ -106,7 +107,7 @@ func Generate(ctx context.Context, opts GenerateOptions) error {
 	}
 
 	row := Row{
-		PublishedAt: now,
+		PublishedAt: now.UTC(),
 		Slot:        slot,
 		Title:       bulletinTitle(slot, now),
 		Content:     digest,
@@ -175,12 +176,18 @@ func Publish(ctx context.Context, opts PublishOptions) error {
 
 // renderAllHTML writes every bulletin's dated archive page plus the stable
 // bulletin-latest.html from the newest. Pure template render; safe to re-run.
+// bulletins is newest first. Pages are numbered oldest first, so a bulletin keeps
+// its page name when newer ones with the same date and slot are added.
 func renderAllHTML(htmlDir string, bulletins []Row) error {
 	if err := writeFonts(htmlDir); err != nil {
 		return err
 	}
-	for _, b := range bulletins {
-		if err := writeDatedHTML(htmlDir, b); err != nil {
+	seen := make(map[string]int)
+	for i := len(bulletins) - 1; i >= 0; i-- {
+		b := bulletins[i]
+		base := datedPageBase(b)
+		seen[base]++
+		if err := writeDatedHTML(htmlDir, b, seen[base]); err != nil {
 			return err
 		}
 	}
@@ -320,10 +327,20 @@ func writeHTMLFile(path string, b Row) error {
 	return nil
 }
 
-// writeDatedHTML writes a bulletin's dated archive page (written once, when the
-// bulletin is first created).
-func writeDatedHTML(htmlDir string, b Row) error {
-	name := fmt.Sprintf("bulletin-%s-%s.html", b.PublishedAt.Format("2006-01-02"), strings.ToLower(b.Slot))
+// datedPageBase is the archive page name stem shared by bulletins with the same
+// date and slot.
+func datedPageBase(b Row) string {
+	return fmt.Sprintf("bulletin-%s-%s", b.PublishedAt.Format("2006-01-02"), strings.ToLower(b.Slot))
+}
+
+// writeDatedHTML writes a bulletin's dated archive page. seq is the bulletin's
+// position (from 1, oldest first) among bulletins with the same date and slot;
+// the first keeps the plain name, later ones get a "-<seq>" suffix.
+func writeDatedHTML(htmlDir string, b Row, seq int) error {
+	name := datedPageBase(b) + ".html"
+	if seq > 1 {
+		name = fmt.Sprintf("%s-%d.html", datedPageBase(b), seq)
+	}
 	path := filepath.Join(htmlDir, name)
 	if err := writeHTMLFile(path, b); err != nil {
 		return err

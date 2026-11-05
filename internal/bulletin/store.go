@@ -3,6 +3,7 @@ package bulletin
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -131,6 +132,10 @@ func (s *Store) UnpublishedItems(ctx context.Context) ([]Item, error) {
 	return items, rows.Err()
 }
 
+// ErrItemAlreadyPublished reports that an item passed to CreateBulletin already
+// belongs to a bulletin, because another Generate run committed it first.
+var ErrItemAlreadyPublished = errors.New("item already published")
+
 // Row is a stored, rendered bulletin.
 type Row struct {
 	ID          int64
@@ -142,7 +147,9 @@ type Row struct {
 
 // CreateBulletin records a published bulletin (including its rendered digest) and
 // marks the given item IDs as belonging to it, in a single transaction. Returns
-// the new bulletin ID.
+// the new bulletin ID. If any item already belongs to a bulletin, nothing is
+// stored and the error wraps ErrItemAlreadyPublished: two overlapping Generate
+// runs (from separate processes) must not publish the same item twice.
 func (s *Store) CreateBulletin(ctx context.Context, b Row, itemIDs []int64) (int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -161,14 +168,20 @@ func (s *Store) CreateBulletin(ctx context.Context, b Row, itemIDs []int64) (int
 		return 0, fmt.Errorf("bulletin id: %w", err)
 	}
 
-	stmt, err := tx.PrepareContext(ctx, `UPDATE items SET bulletin_id = ? WHERE id = ?`)
+	stmt, err := tx.PrepareContext(ctx, `UPDATE items SET bulletin_id = ? WHERE id = ? AND bulletin_id IS NULL`)
 	if err != nil {
 		return 0, fmt.Errorf("prepare mark: %w", err)
 	}
 	defer func() { _ = stmt.Close() }()
 	for _, id := range itemIDs {
-		if _, err := stmt.ExecContext(ctx, bulletinID, id); err != nil {
+		res, err := stmt.ExecContext(ctx, bulletinID, id)
+		if err != nil {
 			return 0, fmt.Errorf("mark item %d: %w", id, err)
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return 0, fmt.Errorf("mark item %d: %w", id, err)
+		} else if n == 0 {
+			return 0, fmt.Errorf("mark item %d: %w", id, ErrItemAlreadyPublished)
 		}
 	}
 

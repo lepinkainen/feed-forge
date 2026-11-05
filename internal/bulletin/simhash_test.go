@@ -57,6 +57,7 @@ func TestTokenize(t *testing.T) {
 		{name: "plain english", text: "hello world", want: 2},
 		{name: "stopwords dropped", text: "the quick brown fox", want: 3},
 		{name: "single chars dropped", text: "a b cd e f", want: 1}, // only "cd"
+		{name: "single non-ASCII chars dropped", text: "ä ö é 中", want: 0},
 		{name: "numbers kept", text: "report 2024", want: 2},
 		{name: "mixed unicode", text: "Suomi 2024 åäö", want: 3},
 		{name: "all stopwords", text: "the a an of in", want: 0},
