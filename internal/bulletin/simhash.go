@@ -9,6 +9,7 @@ import (
 	"math/bits"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 // simhashBits is the fingerprint width. 64 bits gives a good balance between
@@ -36,7 +37,7 @@ func tokenize(text string) []string {
 	})
 	tokens := make([]string, 0, len(fields))
 	for _, f := range fields {
-		if len(f) < 2 {
+		if utf8.RuneCountInString(f) < 2 {
 			continue
 		}
 		if _, skip := stopwords[f]; skip {

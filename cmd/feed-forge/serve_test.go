@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -199,5 +200,46 @@ func TestGenerateLoop_RunsImmediatelyAndStopsOnCancel(t *testing.T) {
 	case <-done:
 	case <-time.After(time.Second):
 		t.Fatal("generateLoop did not stop on cancel")
+	}
+}
+
+// An NTP step that sets the wall clock back after a digest must not fire the
+// same slot again. Counterexample: formal/tla/SlotLoop.tla with SlotClockStep.cfg.
+func TestSlotLoop_FiresOnceWhenWallClockStepsBack(t *testing.T) {
+	d := testDaemon(t, testServeConfig) // one slot: 07:45
+
+	slot := time.Date(2026, 8, 27, 7, 45, 0, 0, time.Local)
+	nows := []time.Time{
+		slot.Add(-50 * time.Millisecond), // wait 50ms, then fire the 07:45 digest
+		slot.Add(-30 * time.Millisecond), // the wall clock was stepped back during the digest
+	}
+	var nowCalls atomic.Int32
+	d.now = func() time.Time {
+		i := int(nowCalls.Add(1)) - 1
+		if i < len(nows) {
+			return nows[i]
+		}
+		return slot.Add(time.Hour)
+	}
+	var digests atomic.Int32
+	d.digestFn = func(context.Context, *appConfig) error { digests.Add(1); return nil }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.slotLoop(ctx)
+	}()
+
+	// The third now() call means the loop is past both possible firings.
+	deadline := time.Now().Add(2 * time.Second)
+	for nowCalls.Load() < 3 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+
+	if got := digests.Load(); got != 1 {
+		t.Errorf("07:45 slot fired %d digests, want 1", got)
 	}
 }

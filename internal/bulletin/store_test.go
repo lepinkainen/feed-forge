@@ -111,3 +111,50 @@ func TestSimHashRoundTrip(t *testing.T) {
 		t.Errorf("simhash round-trip: got %d, want %d", items[0].SimHash, want)
 	}
 }
+
+// Two Generate runs that both read the backlog before either commits (cron
+// overlap, or a manual bulletin-generate while serve runs) must not publish
+// the same item twice. Counterexample: formal/tla/BulletinGenerate.tla with
+// CrossProcess.cfg.
+func TestCreateBulletinRejectsAlreadyPublishedItems(t *testing.T) {
+	s := newTestStore(t)
+	if _, err := s.InsertItem(testCtx, sampleItem("https://x/1")); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Both runs read the same backlog, then each calls the model.
+	first, err := s.UnpublishedItems(testCtx)
+	if err != nil {
+		t.Fatalf("UnpublishedItems: %v", err)
+	}
+	second, err := s.UnpublishedItems(testCtx)
+	if err != nil {
+		t.Fatalf("UnpublishedItems: %v", err)
+	}
+	itemID := first[0].ID
+
+	firstID, err := s.CreateBulletin(testCtx, Row{PublishedAt: time.Now().UTC(), Slot: "Morning", Content: "<p>A</p>"}, []int64{itemID})
+	if err != nil {
+		t.Fatalf("first CreateBulletin: %v", err)
+	}
+	secondID, err := s.CreateBulletin(testCtx, Row{PublishedAt: time.Now().UTC(), Slot: "Morning", Content: "<p>B</p>"}, []int64{second[0].ID})
+	if err == nil {
+		t.Errorf("second CreateBulletin over an already-published backlog succeeded (bulletin %d)", secondID)
+	}
+
+	var owner int64
+	if err := s.db.QueryRowContext(testCtx, `SELECT bulletin_id FROM items WHERE id = ?`, itemID).Scan(&owner); err != nil {
+		t.Fatalf("query owner: %v", err)
+	}
+	if owner != firstID {
+		t.Errorf("item %d moved from bulletin %d to bulletin %d; bulletin %d still summarises it", itemID, firstID, owner, firstID)
+	}
+
+	all, err := s.AllBulletins(testCtx)
+	if err != nil {
+		t.Fatalf("AllBulletins: %v", err)
+	}
+	if len(all) != 1 {
+		t.Errorf("stored %d bulletins for one item, want 1", len(all))
+	}
+}

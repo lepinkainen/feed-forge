@@ -36,12 +36,23 @@ func (rl *SimpleRateLimiter) Wait() {
 // WaitContext blocks until it's safe to make another API call or the context is cancelled.
 func (rl *SimpleRateLimiter) WaitContext(ctx context.Context) error {
 	rl.mu.Lock()
+	prevCall := rl.lastCall
 	waitFor := max(rl.minDelay-time.Since(rl.lastCall), 0)
 	nextCall := time.Now().Add(waitFor)
 	rl.lastCall = nextCall
 	rl.mu.Unlock()
 
-	return waitWithContext(ctx, waitFor)
+	if err := waitWithContext(ctx, waitFor); err != nil {
+		// The call will not happen: give the reservation back unless a later
+		// caller has already reserved the slot after it.
+		rl.mu.Lock()
+		if rl.lastCall.Equal(nextCall) {
+			rl.lastCall = prevCall
+		}
+		rl.mu.Unlock()
+		return err
+	}
+	return nil
 }
 
 // CanProceed returns true if a request can be made without waiting.
